@@ -14,6 +14,9 @@ members = [
     "render/webgl",
 
     "tests",
+
+    "codecs/h263",
+    "codecs/yuv",
 ]
 resolver = "2"
 
@@ -26,3 +29,9 @@ panic = "abort"
 
 [profile.release]
 panic = "abort"
+
+[profile.dev.package.ruffle_codec_h263]
+opt-level = 3
+
+[profile.dev.package.ruffle_codec_yuv]
+opt-level = 3

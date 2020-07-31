@@ -3070,6 +3070,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ruffle_codec_h263"
+version = "0.1.0"
+dependencies = [
+ "bitflags",
+ "lazy_static",
+ "num-traits",
+ "thiserror",
+]
+
+[[package]]
+name = "ruffle_codec_yuv"
+version = "0.1.0"
+
+[[package]]
 name = "ruffle_core"
 version = "0.1.0"
 dependencies = [
@@ -3102,6 +3116,8 @@ dependencies = [
  "quick-xml",
  "rand 0.8.3",
  "regress",
+ "ruffle_codec_h263",
+ "ruffle_codec_yuv",
  "ruffle_macros",
  "serde",
  "smallvec",

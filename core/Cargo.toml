@@ -38,6 +38,8 @@ nellymoser-rs = { git = "https://github.com/ruffle-rs/nellymoser", branch = "mai
 regress = "0.3"
 flash-lso = { git = "https://github.com/ruffle-rs/rust-flash-lso", rev = "e39a8abc897289696672858e30bbc9e43b1c98ac" }
 json = "0.12.4"
+ruffle_codec_h263 = { path = "../codecs/h263" }
+ruffle_codec_yuv = { path = "../codecs/yuv" }
 
 [dependencies.jpeg-decoder]
 version = "0.1.22"
