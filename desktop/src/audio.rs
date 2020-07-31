@@ -1,3 +1,4 @@
+use ::swf::AudioCompression;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use generational_arena::Arena;
 use ruffle_core::backend::audio::decoders::{
@@ -9,7 +10,6 @@ use ruffle_core::backend::audio::{
 use ruffle_core::tag_utils::SwfSlice;
 use std::io::Cursor;
 use std::sync::{Arc, Mutex};
-use swf::AudioCompression;
 
 #[allow(dead_code)]
 pub struct CpalAudioBackend {

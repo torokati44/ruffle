@@ -33,6 +33,7 @@ use url::Url;
 
 use crate::storage::DiskStorageBackend;
 use ruffle_core::backend::log::NullLogBackend;
+use ruffle_core::backend::video;
 use ruffle_core::tag_utils::SwfMovie;
 use ruffle_render_wgpu::clap::{GraphicsBackend, PowerPreference};
 use std::io::Read;
@@ -250,6 +251,7 @@ fn run_player(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     let storage = Box::new(DiskStorageBackend::new());
     let user_interface = Box::new(ui::DesktopUiBackend::new(window.clone()));
     let locale = Box::new(locale::DesktopLocaleBackend::new());
+    let video = Box::new(video::SoftwareVideoBackend::new());
     let player = Player::new(
         renderer,
         audio,
@@ -257,6 +259,7 @@ fn run_player(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
         input,
         storage,
         locale,
+        video,
         Box::new(NullLogBackend::new()),
         user_interface,
     )?;
@@ -479,6 +482,7 @@ fn run_timedemo(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     let storage = Box::new(ruffle_core::backend::storage::MemoryStorageBackend::default());
     let user_interface = Box::new(ruffle_core::backend::ui::NullUiBackend::new());
     let locale = Box::new(locale::DesktopLocaleBackend::new());
+    let video = Box::new(ruffle_core::backend::video::SoftwareVideoBackend::default());
     let log = Box::new(NullLogBackend::new());
     let player = Player::new(
         renderer,
@@ -487,6 +491,7 @@ fn run_timedemo(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
         input,
         storage,
         locale,
+        video,
         log,
         user_interface,
     )?;

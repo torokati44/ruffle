@@ -25,6 +25,7 @@ clipboard = "0.5.0"
 dirs = "3.0"
 isahc = "1.0.3"
 tinyfiledialogs = {git ="https://github.com/jdm/tinyfiledialogs-rs", rev="1a235d1"}
+swf = { path = "../swf" }
 
 [target.'cfg(windows)'.dependencies]
 winapi = "0.3.9"

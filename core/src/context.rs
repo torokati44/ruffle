@@ -11,6 +11,7 @@ use crate::backend::{
     audio::{AudioBackend, AudioManager, SoundHandle, SoundInstanceHandle},
     navigator::NavigatorBackend,
     render::RenderBackend,
+    video::VideoBackend,
 };
 use crate::display_object::{EditText, MovieClip, SoundTransform};
 use crate::external::ExternalInterface;
@@ -84,6 +85,9 @@ pub struct UpdateContext<'a, 'gc, 'gc_context> {
 
     /// The logging backend, used for trace output capturing
     pub log: &'a mut dyn LogBackend,
+
+    /// The video backend, used for video decoding
+    pub video: &'a mut dyn VideoBackend,
 
     /// The RNG, used by the AVM `RandomNumber` opcode,  `Math.random(),` and `random()`.
     pub rng: &'a mut SmallRng,
@@ -289,6 +293,7 @@ impl<'a, 'gc, 'gc_context> UpdateContext<'a, 'gc, 'gc_context> {
             renderer: self.renderer,
             locale: self.locale,
             log: self.log,
+            video: self.video,
             input: self.input,
             storage: self.storage,
             rng: self.rng,
