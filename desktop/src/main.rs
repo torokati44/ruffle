@@ -18,9 +18,7 @@ use crate::custom_event::RuffleEvent;
 use crate::executor::GlutinAsyncExecutor;
 use clap::Clap;
 use isahc::{config::RedirectPolicy, prelude::*, HttpClient};
-use ruffle_core::{
-    backend::audio::AudioBackend, backend::video::NullVideoBackend, config::Letterbox, Player,
-};
+use ruffle_core::{backend::audio::AudioBackend, config::Letterbox, Player};
 use ruffle_render_wgpu::WgpuRenderBackend;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -466,7 +464,7 @@ fn run_timedemo(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     let navigator = Box::new(ruffle_core::backend::navigator::NullNavigatorBackend::new());
     let storage = Box::new(ruffle_core::backend::storage::MemoryStorageBackend::default());
     let locale = Box::new(locale::DesktopLocaleBackend::new());
-    let video = Box::new(NullVideoBackend::new());
+    let video = Box::new(ruffle_core::backend::video::SoftwareVideoBackend::new());
     let log = Box::new(ruffle_core::backend::log::NullLogBackend::new());
     let ui = Box::new(ruffle_core::backend::ui::NullUiBackend::new());
     let player = Player::new(renderer, audio, navigator, storage, locale, video, log, ui)?;
