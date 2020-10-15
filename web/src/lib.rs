@@ -21,6 +21,7 @@ use ruffle_core::backend::input::InputBackend;
 use ruffle_core::backend::render::RenderBackend;
 use ruffle_core::backend::storage::MemoryStorageBackend;
 use ruffle_core::backend::storage::StorageBackend;
+use ruffle_core::backend::video::NullVideoBackend;
 use ruffle_core::config::Letterbox;
 use ruffle_core::context::UpdateContext;
 use ruffle_core::events::{KeyCode, MouseWheelDelta};
@@ -440,6 +441,8 @@ impl Ruffle {
         let trace_observer = Arc::new(RefCell::new(JsValue::UNDEFINED));
         let log = Box::new(WebLogBackend::new(trace_observer.clone()));
         let user_interface = Box::new(ui::WebUiBackend::new(js_player.clone()));
+        let video = Box::new(NullVideoBackend::new());
+
         let core = ruffle_core::Player::new(
             renderer,
             audio,
@@ -447,6 +450,7 @@ impl Ruffle {
             input,
             local_storage,
             locale,
+            video,
             log,
             user_interface,
         )?;
