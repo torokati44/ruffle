@@ -8,7 +8,9 @@ use crate::backend::input::{InputBackend, MouseCursor};
 use crate::backend::locale::LocaleBackend;
 use crate::backend::navigator::{NavigatorBackend, RequestOptions};
 use crate::backend::storage::StorageBackend;
-use crate::backend::{audio::AudioBackend, log::LogBackend, render::RenderBackend, ui::UiBackend};
+use crate::backend::{
+    audio::AudioBackend, log::LogBackend, render::RenderBackend, ui::UiBackend, video::VideoBackend,
+};
 use crate::config::Letterbox;
 use crate::context::{ActionQueue, ActionType, RenderContext, UpdateContext};
 use crate::display_object::{EditText, MorphShape, MovieClip};
@@ -134,6 +136,7 @@ type Storage = Box<dyn StorageBackend>;
 type Locale = Box<dyn LocaleBackend>;
 type Log = Box<dyn LogBackend>;
 type UI = Box<dyn UiBackend>;
+type Video = Box<dyn VideoBackend>;
 
 pub struct Player {
     /// The version of the player we're emulating.
@@ -162,6 +165,7 @@ pub struct Player {
     locale: Locale,
     log: Log,
     pub user_interface: UI,
+    video: Video,
     transform_stack: TransformStack,
     view_matrix: Matrix,
     inverse_view_matrix: Matrix,
@@ -223,6 +227,7 @@ pub struct Player {
 
 #[allow(clippy::too_many_arguments)]
 impl Player {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         renderer: Renderer,
         audio: Audio,
@@ -230,6 +235,7 @@ impl Player {
         input: Input,
         storage: Storage,
         locale: Locale,
+        video: Video,
         log: Log,
         user_interface: UI,
     ) -> Result<Arc<Mutex<Self>>, Error> {
@@ -298,6 +304,7 @@ impl Player {
             locale,
             log,
             user_interface,
+            video,
             self_reference: None,
             system: SystemProperties::default(),
             instance_counter: 0,
@@ -1173,6 +1180,7 @@ impl Player {
             storage,
             locale,
             logging,
+            video,
             needs_render,
             max_execution_duration,
             current_frame,
@@ -1195,6 +1203,7 @@ impl Player {
             self.storage.deref_mut(),
             self.locale.deref_mut(),
             self.log.deref_mut(),
+            self.video.deref_mut(),
             &mut self.needs_render,
             self.max_execution_duration,
             &mut self.current_frame,
@@ -1243,6 +1252,7 @@ impl Player {
                 storage,
                 locale,
                 log: logging,
+                video,
                 shared_objects,
                 unbound_text_fields,
                 timers,
