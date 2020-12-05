@@ -9,6 +9,7 @@ mod navigator;
 mod storage;
 mod task;
 mod ui;
+mod video;
 
 use crate::custom_event::RuffleEvent;
 use crate::executor::GlutinAsyncExecutor;
@@ -230,7 +231,7 @@ fn run_player(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     let storage = Box::new(DiskStorageBackend::new());
     let user_interface = Box::new(ui::DesktopUiBackend::new(window.clone()));
     let locale = Box::new(locale::DesktopLocaleBackend::new());
-    let video = Box::new(NullVideoBackend::new());
+    let video = Box::new(video::DesktopVideoBackend::new());
     let player = Player::new(
         renderer,
         audio,
