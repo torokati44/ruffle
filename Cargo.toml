@@ -12,6 +12,8 @@ members = [
     "render/wgpu",
     "render/common_tess",
     "render/webgl",
+
+    "codecs/nellymoser",
 ]
 
 # Don't optimize build scripts and macros.
