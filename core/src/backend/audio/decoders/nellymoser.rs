@@ -164,7 +164,7 @@ const NELLY_DELTA_TABLE: [i16; 32] = [
 pub struct NellymoserDecoder<R: Read> {
     inner: R,
     sample_rate: u16,
-    samples: [f32; NELLY_SAMPLES],
+    samples: [i16; NELLY_SAMPLES],
     cur_sample: usize,
 }
 
@@ -173,7 +173,7 @@ impl<R: Read> NellymoserDecoder<R> {
         NellymoserDecoder {
             inner,
             sample_rate,
-            samples: [0.0; NELLY_SAMPLES],
+            samples: [0; NELLY_SAMPLES],
             cur_sample: 0,
         }
     }
@@ -208,6 +208,186 @@ fn headroom(la: &mut i32) -> i32 {
     return l;
 }
 
+fn decode_block(block: &[u8; NELLY_BLOCK_LEN], samples: &mut [i16; NELLY_SAMPLES]) {
+    let mut buf = [0f32; NELLY_FILL_LEN];
+    let mut pows = [0f32; NELLY_FILL_LEN];
+    {
+        let mut reader = BitReader::endian(Cursor::new(&block), LittleEndian);
+        let mut val = NELLY_INIT_TABLE[reader.read::<u8>(6).unwrap() as usize] as f32;
+        let mut ptr: usize = 0;
+        for i in 0..NELLY_BANDS {
+            if i > 0 {
+                val += NELLY_DELTA_TABLE[reader.read::<u8>(5).unwrap() as usize] as f32;
+            }
+
+            let scale_bias: f32 = 1.0 / (32768.0 * 8.0);
+            let pval = -((val / 2048.0).exp2()) * scale_bias;
+            for _ in 0..NELLY_BAND_SIZES_TABLE[i] {
+                buf[ptr] = val;
+                pows[ptr] = pval;
+                ptr += 1;
+            }
+        }
+    }
+
+    let bits = {
+        let mut max = buf.iter().fold(0, |a, &b| a.max(b as i32));
+        let mut shift = headroom(&mut max) as i16 - 16;
+
+        let mut sbuf = [0i16; NELLY_FILL_LEN];
+        for i in 0..NELLY_FILL_LEN {
+            sbuf[i] = signed_shift(buf[i] as i32, shift as i32) as i16;
+            sbuf[i] = (3 * sbuf[i]) >> 2;
+        }
+        let mut sum: i32 = sbuf.iter().map(|&s| s as i32).sum();
+
+        shift += 11;
+        let shift_saved = shift;
+        sum -= NELLY_DETAIL_BITS << shift;
+        shift += headroom(&mut sum) as i16;
+        let mut small_off = (NELLY_BASE_OFF * (sum >> 16)) >> 15;
+        shift = shift_saved - (NELLY_BASE_SHIFT + shift - 31);
+
+        small_off = signed_shift(small_off, shift as i32);
+
+        let mut bitsum = sum_bits(sbuf, shift_saved, small_off as i16);
+        if bitsum != NELLY_DETAIL_BITS {
+            let mut off = bitsum - NELLY_DETAIL_BITS;
+            shift = 0;
+            while off.abs() <= 16383 {
+                off *= 2;
+                shift += 1;
+            }
+
+            off = (off * NELLY_BASE_OFF) >> 15;
+            shift = shift_saved - (NELLY_BASE_SHIFT + shift - 15);
+
+            off = signed_shift(off, shift as i32);
+
+            let mut last_off = small_off;
+            let mut last_bitsum = bitsum;
+            let mut last_j = 0;
+            for j in 1..20 {
+                last_off = small_off;
+                small_off += off;
+                last_bitsum = bitsum;
+                last_j = j;
+
+                bitsum = sum_bits(sbuf, shift_saved, small_off as i16);
+
+                if (bitsum - NELLY_DETAIL_BITS) * (last_bitsum - NELLY_DETAIL_BITS) <= 0 {
+                    break;
+                }
+            }
+
+            let mut big_off;
+            let mut big_bitsum;
+            let mut small_bitsum;
+            if bitsum > NELLY_DETAIL_BITS {
+                big_off = small_off;
+                small_off = last_off;
+                big_bitsum = bitsum;
+                small_bitsum = last_bitsum;
+            } else {
+                big_off = last_off;
+                big_bitsum = last_bitsum;
+                small_bitsum = bitsum;
+            }
+
+            while bitsum != NELLY_DETAIL_BITS && last_j <= 19 {
+                off = (big_off + small_off) >> 1;
+                bitsum = sum_bits(sbuf, shift_saved, off as i16);
+                if bitsum > NELLY_DETAIL_BITS {
+                    big_off = off;
+                    big_bitsum = bitsum;
+                } else {
+                    small_off = off;
+                    small_bitsum = bitsum;
+                }
+                last_j += 1;
+            }
+
+            if (big_bitsum - NELLY_DETAIL_BITS).abs()
+                >= (small_bitsum - NELLY_DETAIL_BITS).abs()
+            {
+                bitsum = small_bitsum;
+            } else {
+                small_off = big_off;
+                bitsum = big_bitsum;
+            }
+        }
+
+        let mut bits = [0i32; NELLY_BUF_LEN];
+        for i in 0..NELLY_FILL_LEN {
+            let mut tmp = sbuf[i] as i32 - small_off;
+            tmp = ((tmp >> (shift_saved - 1)) + 1) >> 1;
+            bits[i] = if tmp < 0 {
+                0
+            } else if tmp > NELLY_BIT_CAP as i32 {
+                NELLY_BIT_CAP as i32
+            } else {
+                tmp
+            };
+        }
+
+        if bitsum > NELLY_DETAIL_BITS {
+            let mut i = 0;
+            let mut tmp = 0;
+            while tmp < NELLY_DETAIL_BITS {
+                tmp += bits[i];
+                i += 1;
+            }
+
+            bits[i - 1] -= tmp - NELLY_DETAIL_BITS;
+
+            while i < NELLY_FILL_LEN {
+                bits[i] = 0;
+                i += 1;
+            }
+        }
+
+        bits
+    };
+
+    use rand::{Rng, rngs::SmallRng, SeedableRng};
+    let mut rng = SmallRng::from_seed([0u8; 16]);
+    for i in 0..2 {
+        let mut reader = BitReader::endian(Cursor::new(&block), LittleEndian);
+        reader
+            .skip(NELLY_HEADER_BITS + i * NELLY_DETAIL_BITS as u32)
+            .unwrap();
+
+        let mut input = [0f32; NELLY_BUF_LEN];
+        for j in 0..NELLY_FILL_LEN {
+            if bits[j] <= 0 {
+                input[j] =
+                    std::f32::consts::FRAC_1_SQRT_2
+                        * pows[j]
+                        * if rng.gen_bool(0.5) { 1.0 } else { -1.0 };
+            } else {
+                let v = reader.read::<u8>(bits[j] as u32).unwrap();
+                input[j] = NELLY_DEQUANTIZATION_TABLE
+                    [((1 << bits[j]) - 1 + v) as usize]
+                    * pows[j];
+            }
+        }
+
+        // TODO
+        use num_complex::Complex32;
+        use rustfft::FFTplanner;
+        let mut planner = FFTplanner::new(true);
+        let fft = planner.plan_fft(NELLY_BUF_LEN);
+        let mut input_complex: Vec<Complex32> = input.iter().map(|x| Complex32::new(*x, 0.0)).collect();
+        let mut output_complex: Vec<Complex32> = input.iter().map(|_| Complex32::new(0.0, 0.0)).collect();
+        fft.process(&mut input_complex, &mut output_complex);
+        let mut index = i as usize * NELLY_BUF_LEN;
+        for x in output_complex.iter() {
+            samples[index] = (x.re * 32767.0) as i16;
+            index += 1;
+        }
+    }
+}
+
 impl<R: Read> Iterator for NellymoserDecoder<R> {
     type Item = [i16; 2];
 
@@ -215,190 +395,11 @@ impl<R: Read> Iterator for NellymoserDecoder<R> {
         if self.cur_sample >= NELLY_SAMPLES {
             let mut block = [0u8; NELLY_BLOCK_LEN];
             self.inner.read_exact(&mut block).ok()?;
-
-            let mut buf = [0f32; NELLY_FILL_LEN];
-            let mut pows = [0f32; NELLY_FILL_LEN];
-            {
-                let mut reader = BitReader::endian(Cursor::new(&block), LittleEndian);
-                let mut val = NELLY_INIT_TABLE[reader.read::<u8>(6).unwrap() as usize] as f32;
-                let mut ptr: usize = 0;
-                for i in 0..NELLY_BANDS {
-                    if i > 0 {
-                        val += NELLY_DELTA_TABLE[reader.read::<u8>(5).unwrap() as usize] as f32;
-                    }
-
-                    let scale_bias: f32 = 1.0 / (32768.0 * 8.0);
-                    let pval = -((val / 2048.0).exp2()) * scale_bias;
-                    for _ in 0..NELLY_BAND_SIZES_TABLE[i] {
-                        buf[ptr] = val;
-                        pows[ptr] = pval;
-                        ptr += 1;
-                    }
-                }
-            }
-
-            let bits = {
-                let mut max = buf.iter().fold(0, |a, &b| a.max(b as i32));
-                let mut shift = headroom(&mut max) as i16 - 16;
-
-                let mut sbuf = [0i16; NELLY_FILL_LEN];
-                for i in 0..NELLY_FILL_LEN {
-                    sbuf[i] = signed_shift(buf[i] as i32, shift as i32) as i16;
-                    sbuf[i] = (3 * sbuf[i]) >> 2;
-                }
-                let mut sum: i32 = sbuf.iter().map(|&s| s as i32).sum();
-
-                shift += 11;
-                let shift_saved = shift;
-                sum -= NELLY_DETAIL_BITS << shift;
-                shift += headroom(&mut sum) as i16;
-                let mut small_off = (NELLY_BASE_OFF * (sum >> 16)) >> 15;
-                shift = shift_saved - (NELLY_BASE_SHIFT + shift - 31);
-
-                small_off = signed_shift(small_off, shift as i32);
-
-                let mut bitsum = sum_bits(sbuf, shift_saved, small_off as i16);
-
-                if bitsum != NELLY_DETAIL_BITS {
-                    let mut off = bitsum - NELLY_DETAIL_BITS;
-                    shift = 0;
-                    while off.abs() <= 16383 {
-                        off *= 2;
-                        shift += 1;
-                    }
-
-                    off = (off * NELLY_BASE_OFF) >> 15;
-                    shift = shift_saved - (NELLY_BASE_SHIFT + shift - 15);
-
-                    off = signed_shift(off, shift as i32);
-
-                    let mut last_off = small_off;
-                    let mut last_bitsum = bitsum;
-                    let mut last_j = 0;
-                    for j in 1..20 {
-                        last_off = small_off;
-                        small_off += off;
-                        last_bitsum = bitsum;
-                        last_j = j;
-
-                        bitsum = sum_bits(sbuf, shift_saved, small_off as i16);
-
-                        if (bitsum - NELLY_DETAIL_BITS) * (last_bitsum - NELLY_DETAIL_BITS) <= 0 {
-                            break;
-                        }
-                    }
-
-                    let mut big_off;
-                    let mut big_bitsum;
-                    let mut small_bitsum;
-                    if bitsum > NELLY_DETAIL_BITS {
-                        big_off = small_off;
-                        small_off = last_off;
-                        big_bitsum = bitsum;
-                        small_bitsum = last_bitsum;
-                    } else {
-                        big_off = last_off;
-                        big_bitsum = last_bitsum;
-                        small_bitsum = bitsum;
-                    }
-
-                    while bitsum != NELLY_DETAIL_BITS && last_j <= 19 {
-                        off = (big_off + small_off) >> 1;
-                        bitsum = sum_bits(sbuf, shift_saved, off as i16);
-                        if bitsum > NELLY_DETAIL_BITS {
-                            big_off = off;
-                            big_bitsum = bitsum;
-                        } else {
-                            small_off = off;
-                            small_bitsum = bitsum;
-                        }
-                        last_j += 1;
-                    }
-
-                    if (big_bitsum - NELLY_DETAIL_BITS).abs()
-                        >= (small_bitsum - NELLY_DETAIL_BITS).abs()
-                    {
-                        bitsum = small_bitsum;
-                    } else {
-                        small_off = big_off;
-                        bitsum = big_bitsum;
-                    }
-                }
-
-                let mut bits = [0i32; NELLY_BUF_LEN];
-                for i in 0..NELLY_FILL_LEN {
-                    let mut tmp = sbuf[i] as i32 - small_off;
-                    tmp = ((tmp >> (shift_saved - 1)) + 1) >> 1;
-                    bits[i] = if tmp < 0 {
-                        0
-                    } else if tmp > NELLY_BIT_CAP as i32 {
-                        NELLY_BIT_CAP as i32
-                    } else {
-                        tmp
-                    };
-                }
-
-                if bitsum > NELLY_DETAIL_BITS {
-                    let mut i = 0;
-                    let mut tmp = 0;
-                    while tmp < NELLY_DETAIL_BITS {
-                        tmp += bits[i];
-                        i += 1;
-                    }
-
-                    bits[i - 1] -= tmp - NELLY_DETAIL_BITS;
-
-                    while i < NELLY_FILL_LEN {
-                        bits[i] = 0;
-                        i += 1;
-                    }
-                }
-
-                bits
-            };
-
-            use rand::{Rng, rngs::SmallRng, SeedableRng};
-            let mut rng = SmallRng::from_seed([0u8; 16]);
-            for i in 0..2 {
-                let mut reader = BitReader::endian(Cursor::new(&block), LittleEndian);
-                reader
-                    .skip(NELLY_HEADER_BITS + i * NELLY_DETAIL_BITS as u32)
-                    .unwrap();
-
-                let mut input = [0f32; NELLY_BUF_LEN];
-                for j in 0..NELLY_FILL_LEN {
-                    if bits[j] <= 0 {
-                        input[j] =
-                            std::f32::consts::FRAC_1_SQRT_2
-                                * pows[j]
-                                * if rng.gen_bool(0.5) { 1.0 } else { -1.0 };
-                    } else {
-                        let v = reader.read::<u8>(bits[j] as u32).unwrap();
-                        input[j] = NELLY_DEQUANTIZATION_TABLE
-                            [((1 << bits[j]) - 1 + v) as usize]
-                            * pows[j];
-                    }
-                }
-
-                // TODO
-                use num_complex::Complex32;
-                use rustfft::FFTplanner;
-                let mut planner = FFTplanner::new(true);
-                let fft = planner.plan_fft(NELLY_BUF_LEN);
-                let mut input_complex: Vec<Complex32> = input.iter().map(|x| Complex32::new(*x, 0.0)).collect();
-                let mut output_complex: Vec<Complex32> = input.iter().map(|_| Complex32::new(0.0, 0.0)).collect();
-                fft.process(&mut input_complex, &mut output_complex);
-                let mut index = i as usize * NELLY_BUF_LEN;
-                for x in output_complex.iter() {
-                    self.samples[index] = x.re;
-                    index += 1;
-                }
-            }
-
+            decode_block(&block, &mut self.samples);
             self.cur_sample = 0;
         }
 
-        let sample = (self.samples[self.cur_sample] * 32767.0) as i16;
+        let sample = self.samples[self.cur_sample];
         self.cur_sample += 1;
         Some([sample, sample])
     }
