@@ -373,19 +373,25 @@ fn decode_block(block: &[u8; NELLY_BLOCK_LEN], samples: &mut [i16; NELLY_SAMPLES
         }
 
         // TODO
-        use num_complex::Complex32;
-        use rustfft::FFTplanner;
-        let mut planner = FFTplanner::new(true);
-        let fft = planner.plan_fft(NELLY_BUF_LEN);
-        let mut input_complex: Vec<Complex32> = input.iter().map(|x| Complex32::new(*x, 0.0)).collect();
-        let mut output_complex: Vec<Complex32> = input.iter().map(|_| Complex32::new(0.0, 0.0)).collect();
-        fft.process(&mut input_complex, &mut output_complex);
-        let mut index = i as usize * NELLY_BUF_LEN;
-        for x in output_complex.iter() {
-            samples[index] = (x.re * 32767.0) as i16;
-            index += 1;
+        use rustdct::{DCTplanner, mdct};
+        let mut output = [0f32; NELLY_SAMPLES];
+        let mut planner: DCTplanner<f32> = DCTplanner::new();
+        let dct = planner.plan_mdct(NELLY_BUF_LEN, mdct::window_fn::invertible /*ff_sine_window_init*/);
+        dct.process_imdct(&mut input, &mut output);
+        for (i, x) in output.iter().enumerate() {
+            samples[i] = (x * 32767.0) as i16;
         }
     }
+}
+
+fn ff_sine_window_init(n: usize) -> Vec<f32> {
+    let mut window = Vec::with_capacity(n);
+    for i in 0..(n / 2) {
+        window.push(((i as f32 + 0.5) * (std::f32::consts::PI / (2.0 * n as f32))).sin());
+        // window.push(((i as f32 + 0.5) * (std::f32::consts::PI / (2.0 * 128.0))).sin());
+        // window.push(0.0);
+    }
+    window
 }
 
 impl<R: Read> Iterator for NellymoserDecoder<R> {
