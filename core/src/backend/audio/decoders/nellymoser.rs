@@ -1,5 +1,6 @@
 use super::{Decoder, SeekableDecoder};
 use bitstream_io::{BitReader, LittleEndian};
+use rustfft::num_complex::Complex32;
 use std::io::{Cursor, Read};
 
 const NELLY_BANDS: usize = 23;
@@ -681,7 +682,7 @@ fn headroom(la: &mut i32) -> i32 {
 
     let l = la.abs().leading_zeros() as i32 - 1;
     *la *= 1 << l;
-    return l;
+    l
 }
 
 fn unpack_coeffs(buf: [f32; NELLY_BUF_LEN], audio: &mut [f32; NELLY_SAMPLES], offset: usize) {
@@ -724,88 +725,71 @@ fn center(audio: &mut [f32; NELLY_SAMPLES], offset: usize) {
     }
 }
 
-fn inverse_dft(audio: &mut [f32; NELLY_SAMPLES], start: usize) {
-    let mut offset = start;
-
+fn inverse_dft(audio: &mut Vec<Complex32>) {
+    let mut offset = 0;
     for _ in 0..NELLY_BUF_LEN / 4 {
         let a = audio[offset + 0];
-        let b = audio[offset + 2];
-        let c = audio[offset + 1];
-        let d = audio[offset + 3];
+        let b = audio[offset + 1];
 
-        audio[offset + 2] = a - b;
         audio[offset + 0] = a + b;
-        audio[offset + 3] = c - d;
-        audio[offset + 1] = c + d;
-
-        offset += 4;
-    }
-
-    offset = start;
-    for _ in 0..NELLY_BUF_LEN / 8 {
-        let a = audio[offset + 0];
-        let b = audio[offset + 4];
-        let c = audio[offset + 1];
-        let d = audio[offset + 5];
-
-        audio[offset + 4] = a - b;
-        audio[offset + 5] = c - d;
-        audio[offset + 0] = a + b;
-        audio[offset + 1] = c + d;
+        audio[offset + 1] = a - b;
 
         offset += 2;
+    }
+
+    offset = 0;
+    for _ in 0..NELLY_BUF_LEN / 8 {
+        let a = audio[offset + 0];
+        let b = audio[offset + 2];
+
+        audio[offset + 0] = a + b;
+        audio[offset + 2] = a - b;
+
+        offset += 1;
 
         let a = audio[offset + 0];
-        let b = audio[offset + 5];
-        let c = audio[offset + 1];
-        let d = audio[offset + 4];
+        let b = audio[offset + 2];
 
-        audio[offset + 4] = a - b;
-        audio[offset + 0] = a + b;
-        audio[offset + 5] = c + d;
-        audio[offset + 1] = c - d;
+        audio[offset + 0] = Complex32::new(a.re + b.im, a.im - b.re);
+        audio[offset + 2] = Complex32::new(a.re - b.im, a.im + b.re);
 
-        offset += 6;
+        offset += 3;
     }
 
     let mut i = 0;
-    let mut advance = 8;
-    while advance < NELLY_BUF_LEN {
-        offset = start;
+    let mut advance = 4;
+    while advance < NELLY_BUF_LEN / 2 {
+        offset = 0;
 
-        for _ in 0..NELLY_BUF_LEN / (advance * 2) {
-            for _ in 0..advance / 4 {
+        for _ in 0..NELLY_BUF_LEN / (advance * 4) {
+            for _ in 0..advance / 2 {
                 let a = NELLY_INV_DFT_TABLE[128 - i];
-                let b = audio[offset + advance + 0];
+                let b = audio[offset + advance].re;
                 let c = NELLY_INV_DFT_TABLE[i];
-                let d = audio[offset + advance + 1];
-                let e = audio[offset + 0];
-                let f = audio[offset + 1];
+                let d = audio[offset + advance].im;
+                let e = audio[offset].re;
+                let f = audio[offset].im;
 
-                audio[offset + advance + 0] = e - (a * b + c * d);
-                audio[offset + 0] = e + (a * b + c * d);
-                audio[offset + advance + 1] = f + (b * c - a * d);
-                audio[offset + 1] = f - (b * c - a * d);
+                audio[offset] = Complex32::new(e + (a * b + c * d), f - (b * c - a * d));
+                audio[offset + advance] = Complex32::new(e - (a * b + c * d), f + (b * c - a * d));
 
-                i += 512 / advance;
-                offset += 2;
+                i += 256 / advance;
+                offset += 1;
             }
 
-            for _ in 0..advance / 4 {
+            for _ in 0..advance / 2 {
                 let a = NELLY_INV_DFT_TABLE[128 - i];
-                let b = audio[offset + advance + 0];
+                let b = audio[offset + advance].re;
                 let c = NELLY_INV_DFT_TABLE[i];
-                let d = audio[offset + advance + 1];
-                let e = audio[offset + 0];
-                let f = audio[offset + 1];
+                let d = audio[offset + advance].im;
+                let e = audio[offset].re;
+                let f = audio[offset].im;
 
-                audio[offset + advance + 0] = e + (a * b - c * d);
-                audio[offset + 0] = e - (a * b - c * d);
-                audio[offset + advance + 1] = f + (a * d + b * c);
-                audio[offset + 1] = f - (a * d + b * c);
+                audio[offset] = Complex32::new(e - (a * b - c * d), f - (a * d + b * c));
+                audio[offset + advance] = Complex32::new(e + (a * b - c * d), f + (a * d + b * c));
 
-                i -= 512 / advance;
-                offset += 2;
+                i -= 256 / advance;
+                offset += 1;
             }
 
             offset += advance;
@@ -815,50 +799,50 @@ fn inverse_dft(audio: &mut [f32; NELLY_SAMPLES], start: usize) {
     }
 }
 
-fn complex_to_signal(audio: &mut [f32; NELLY_SAMPLES], start: usize) {
+fn complex_to_signal(audio: &mut [f32]) {
     let end = NELLY_BUF_LEN - 1;
     let mid_hi = NELLY_BUF_LEN / 2;
     let mid_lo = mid_hi - 1;
 
-    let a = audio[start + end];
-    let b = audio[start + end - 1];
-    let c = audio[start + 1];
+    let a = audio[end];
+    let b = audio[end - 1];
+    let c = audio[1];
     let d = NELLY_SIGNAL_TABLE[0];
-    let e = audio[start + 0];
+    let e = audio[0];
     let f = NELLY_SIGNAL_TABLE[mid_lo];
     let g = NELLY_SIGNAL_TABLE[1];
 
-    audio[start + 0] = d * e;
-    audio[start + 1] = b * g - a * f;
-    audio[start + end - 1] = a * g + b * f;
-    audio[start + end] = c * (-d);
+    audio[0] = d * e;
+    audio[1] = b * g - a * f;
+    audio[end - 1] = a * g + b * f;
+    audio[end] = c * (-d);
 
-    let mut offset = start + end - 2;
+    let mut offset = end - 2;
     let mut sig = mid_hi - 1;
 
     for i in (3..NELLY_BUF_LEN / 2).step_by(2) {
-        let a = audio[start + i - 1];
-        let b = audio[start + i + 0];
+        let a = audio[i - 1];
+        let b = audio[i + 0];
         let c = NELLY_SIGNAL_TABLE[i / 2];
         let d = NELLY_SIGNAL_TABLE[sig];
         let e = audio[offset - 1];
         let f = audio[offset + 0];
 
-        audio[start + i - 1] = a * c + b * d;
+        audio[i - 1] = a * c + b * d;
         audio[offset + 0] = a * d - b * c;
 
         let a = NELLY_SIGNAL_TABLE[(i / 2) + 1];
         let b = NELLY_SIGNAL_TABLE[sig - 1];
 
         audio[offset - 1] = b * e + a * f;
-        audio[start + i] = a * e - b * f;
+        audio[i] = a * e - b * f;
 
         sig -= 1;
         offset -= 2;
     }
 }
 
-fn apply_state(state: &mut [f32; 64], audio: &mut [f32; NELLY_SAMPLES], start: usize) {
+fn apply_state(state: &mut [f32; 64], audio: &mut [f32]) {
     let mut bot = 0;
     let mut top = NELLY_BUF_LEN - 1;
     let mut mid_up = NELLY_BUF_LEN / 2;
@@ -867,18 +851,16 @@ fn apply_state(state: &mut [f32; 64], audio: &mut [f32; NELLY_SAMPLES], start: u
     let mut s_bot: f32;
     let mut s_top: f32;
     while bot < NELLY_BUF_LEN / 4 {
-        s_bot = audio[start + bot];
-        s_top = audio[start + top];
+        s_bot = audio[bot];
+        s_top = audio[top];
 
-        audio[start + bot] =
-            audio[start + mid_up] * NELLY_STATE_TABLE[bot] + state[bot] * NELLY_STATE_TABLE[top];
-        audio[start + top] =
-            state[bot] * NELLY_STATE_TABLE[bot] - audio[start + mid_up] * NELLY_STATE_TABLE[top];
-        state[bot] = -audio[start + mid_down];
+        audio[bot] = audio[mid_up] * NELLY_STATE_TABLE[bot] + state[bot] * NELLY_STATE_TABLE[top];
+        audio[top] = state[bot] * NELLY_STATE_TABLE[bot] - audio[mid_up] * NELLY_STATE_TABLE[top];
+        state[bot] = -audio[mid_down];
 
-        audio[start + mid_down] =
+        audio[mid_down] =
             s_top * NELLY_STATE_TABLE[mid_down] + state[mid_down] * NELLY_STATE_TABLE[mid_up];
-        audio[start + mid_up] =
+        audio[mid_up] =
             state[mid_down] * NELLY_STATE_TABLE[mid_down] - s_top * NELLY_STATE_TABLE[mid_up];
         state[mid_down] = -s_bot;
 
@@ -1055,32 +1037,20 @@ fn decode_block(
         let offset = i as usize * NELLY_BUF_LEN;
         unpack_coeffs(input, samples, offset);
         center(samples, offset);
-        inverse_dft(samples, offset);
-        complex_to_signal(samples, offset);
-        apply_state(state, samples, offset);
-
-        // TODO
-        // use rustdct::{mdct, DCTplanner};
-        // let mut output = [0f32; NELLY_SAMPLES];
-        // let mut planner: DCTplanner<f32> = DCTplanner::new();
-        // let dct = planner.plan_mdct(
-        //     NELLY_BUF_LEN,
-        //     mdct::window_fn::invertible, /*ff_sine_window_init*/
-        // );
-        // dct.process_imdct(&mut input, &mut output);
-        // for (i, x) in output.iter().enumerate() {
-        //     samples[i] = (x * 32767.0) as i16;
-        // }
+        let mut input_complex: Vec<Complex32> = samples[offset..offset + NELLY_BUF_LEN]
+            .chunks(2)
+            .map(|x| Complex32::new(x[0], x[1]))
+            .collect();
+        inverse_dft(&mut input_complex);
+        for (i, x) in input_complex.iter().enumerate() {
+            samples[offset + i * 2 + 0] = x.re;
+            samples[offset + i * 2 + 1] = x.im;
+        }
+        let slice = &mut samples[offset..offset + NELLY_BUF_LEN];
+        complex_to_signal(slice);
+        apply_state(state, slice);
     }
 }
-
-// fn ff_sine_window_init(n: usize) -> Vec<f32> {
-//     let mut window = Vec::with_capacity(n);
-//     for i in 0..(n / 2) {
-//         window.push(((i as f32 + 0.5) * (std::f32::consts::PI / (2.0 * n as f32))).sin());
-//     }
-//     window
-// }
 
 fn float_to_short(sample: f32) -> i16 {
     if sample >= 32767.0 {
