@@ -148,7 +148,7 @@ const NELLY_BAND_SIZES_TABLE: [u8; NELLY_BANDS] = [
     2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 4, 4, 5, 6, 6, 7, 8, 9, 10, 12, 14, 15,
 ];
 
-const NELLY_SIGNAL_TABLE: [f32; 64] = [
+const NELLY_SIGNAL_TABLE: [f32; 65] = [
     0.1250000000,
     0.1249623969,
     0.1248494014,
@@ -213,6 +213,7 @@ const NELLY_SIGNAL_TABLE: [f32; 64] = [
     0.0091955997,
     0.0061335000,
     0.0030677000,
+    0.0000000000,
 ];
 
 const NELLY_INIT_TABLE: [u16; 64] = [
@@ -567,41 +568,45 @@ fn unpack_coeffs(buf: [f32; NELLY_BUF_LEN], audio: &mut Vec<Complex32>) {
     }
 }
 
-fn complex_to_signal(audio: &Vec<Complex32>, output: &mut [f32]) {
-    let end = NELLY_BUF_LEN - 1;
-    let end2 = NELLY_BUF_LEN / 2 - 1;
-    let mid_hi = NELLY_BUF_LEN / 2;
-    let mid_lo = mid_hi - 1;
-
-    let (b, a) = (audio[end2].re, audio[end2].im);
-    let (e, c) = (audio[0].re, audio[0].im);
-    let d = NELLY_SIGNAL_TABLE[0];
-    let g = NELLY_SIGNAL_TABLE[1];
-    let f = NELLY_SIGNAL_TABLE[mid_lo];
-
-    output[0] = d * e;
-    output[1] = b * g - a * f;
-    output[end - 1] = a * g + b * f;
-    output[end] = c * -d;
-
-    let mut offset = end2 - 1;
-    let mut sig = mid_hi - 1;
-    for i in 1..NELLY_BUF_LEN / 4 {
-        let (a, b) = (audio[i].re, audio[i].im);
-        let c = NELLY_SIGNAL_TABLE[i];
-        let d = NELLY_SIGNAL_TABLE[sig];
-        let (e, f) = (audio[offset].re, audio[offset].im);
-        let a2 = NELLY_SIGNAL_TABLE[i + 1];
-        let b2 = NELLY_SIGNAL_TABLE[sig - 1];
-
-        output[i * 2 + 0] = a * c + b * d;
-        output[i * 2 + 1] = a2 * e - b2 * f;
-        output[offset * 2 + 0] = b2 * e + a2 * f;
-        output[offset * 2 + 1] = a * d - b * c;
-
-        sig -= 1;
-        offset -= 1;
+fn table_to_complex_vec(table: &[f32; 65]) -> Vec<Complex32> {
+    let mut result = Vec::with_capacity(33);
+    let end = table.len() - 1;
+    for i in 0..=end / 2 {
+        result.push(Complex32::new(table[i], table[end - i]));
     }
+    result
+}
+
+fn complex_vec_to_table(vec: &Vec<Complex32>, output: &mut [f32]) {
+    for (i, x) in vec.iter().enumerate() {
+        output[i] = x.re;
+        output[output.len() - i - 1] = x.im;
+    }
+}
+
+fn hadamard_product(vec1: &Vec<Complex32>, vec2: &Vec<Complex32>) -> Vec<Complex32> {
+    vec1.iter().zip(vec2.iter()).map(|(x, y)| x * y).collect()
+}
+
+fn alternate(vec1: &Vec<Complex32>, vec2: &Vec<Complex32>) -> Vec<Complex32> {
+    vec1.iter()
+        .zip(vec2.iter())
+        .flat_map(|(x, y)| vec![*x, *y])
+        .collect()
+}
+
+fn complex_to_signal(audio: &Vec<Complex32>, output: &mut [f32]) {
+    let a = audio[0..NELLY_BUF_LEN / 4]
+        .iter()
+        .map(|x| x.conj())
+        .collect();
+    let mut b = audio[NELLY_BUF_LEN / 4..NELLY_BUF_LEN / 2].to_vec();
+    b.reverse();
+    let e = table_to_complex_vec(&NELLY_SIGNAL_TABLE);
+
+    let a = hadamard_product(&a, &e[0..32].to_vec());
+    let b = hadamard_product(&b, &e[1..33].to_vec());
+    complex_vec_to_table(&alternate(&a, &b), output);
 }
 
 fn apply_state(state: &mut [f32; 64], audio: &mut [f32]) {
@@ -788,9 +793,9 @@ fn decode_block(
 
         let mut input_complex: Vec<Complex32> = vec![Zero::zero(); NELLY_BUF_LEN / 2];
         unpack_coeffs(input, &mut input_complex);
-        let mut output_complex: Vec<Complex32> = vec![Zero::zero(); NELLY_BUF_LEN / 2];
         let mut planner = FFTplanner::new(false);
         let fft = planner.plan_fft(NELLY_BUF_LEN / 2);
+        let mut output_complex: Vec<Complex32> = vec![Zero::zero(); NELLY_BUF_LEN / 2];
         fft.process(&mut input_complex, &mut output_complex);
         let slice = &mut samples[i as usize * NELLY_BUF_LEN..(i as usize + 1) * NELLY_BUF_LEN];
         complex_to_signal(&output_complex, slice);
