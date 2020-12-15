@@ -14,10 +14,6 @@ const NELLY_BASE_OFF: i32 = 4228;
 const NELLY_BASE_SHIFT: i16 = 19;
 const NELLY_SAMPLES: usize = NELLY_BUF_LEN * 2;
 
-const TABLE: [usize; 64] = [
-    0, 63, 31, 47, 15, 55, 23, 39, 7, 59, 27, 43, 11, 51, 19, 35, 3, 61, 29, 45, 13, 53, 21, 37, 5, 57, 25, 41, 9, 49, 17, 33, 1, 62, 30, 46, 14, 54, 22, 38, 6, 58, 26, 42, 10, 50, 18, 34, 2, 60, 28, 44, 12, 52, 20, 36, 4, 56, 24, 40, 8, 48, 16, 32,
-];
-
 const NELLY_DEQUANTIZATION_TABLE: [f32; 127] = [
     0.0000000000,
     -0.8472560048,
@@ -498,144 +494,6 @@ const NELLY_NEG_UNPACK_TABLE: [f32; 64] = [
     -0.9998306036,
 ];
 
-const NELLY_INV_DFT_TABLE: [f32; 129] = [
-    0.0000000000,
-    0.0122715384,
-    0.0245412290,
-    0.0368072242,
-    0.0490676723,
-    0.0613207370,
-    0.0735645667,
-    0.0857973099,
-    0.0980171412,
-    0.1102222130,
-    0.1224106774,
-    0.1345807165,
-    0.1467304677,
-    0.1588581353,
-    0.1709618866,
-    0.1830398887,
-    0.1950903237,
-    0.2071113735,
-    0.2191012353,
-    0.2310581058,
-    0.2429801822,
-    0.2548656464,
-    0.2667127550,
-    0.2785196900,
-    0.2902846932,
-    0.3020059466,
-    0.3136817515,
-    0.3253102899,
-    0.3368898630,
-    0.3484186828,
-    0.3598950505,
-    0.3713171780,
-    0.3826834261,
-    0.3939920366,
-    0.4052413106,
-    0.4164295495,
-    0.4275550842,
-    0.4386162460,
-    0.4496113360,
-    0.4605387151,
-    0.4713967443,
-    0.4821837842,
-    0.4928981960,
-    0.5035383701,
-    0.5141027570,
-    0.5245896578,
-    0.5349976420,
-    0.5453249812,
-    0.5555702448,
-    0.5657318234,
-    0.5758081675,
-    0.5857978463,
-    0.5956993103,
-    0.6055110693,
-    0.6152315736,
-    0.6248595119,
-    0.6343932748,
-    0.6438315511,
-    0.6531728506,
-    0.6624158025,
-    0.6715589762,
-    0.6806010008,
-    0.6895405650,
-    0.6983762383,
-    0.7071067691,
-    0.7157308459,
-    0.7242470980,
-    0.7326542735,
-    0.7409511209,
-    0.7491363883,
-    0.7572088242,
-    0.7651672959,
-    0.7730104327,
-    0.7807372212,
-    0.7883464098,
-    0.7958369255,
-    0.8032075167,
-    0.8104572296,
-    0.8175848126,
-    0.8245893121,
-    0.8314695954,
-    0.8382247090,
-    0.8448535800,
-    0.8513551950,
-    0.8577286005,
-    0.8639728427,
-    0.8700869679,
-    0.8760700822,
-    0.8819212317,
-    0.8876396418,
-    0.8932242990,
-    0.8986744881,
-    0.9039893150,
-    0.9091680050,
-    0.9142097831,
-    0.9191138744,
-    0.9238795042,
-    0.9285060763,
-    0.9329928160,
-    0.9373390079,
-    0.9415440559,
-    0.9456073046,
-    0.9495281577,
-    0.9533060193,
-    0.9569403529,
-    0.9604305029,
-    0.9637760520,
-    0.9669764638,
-    0.9700312614,
-    0.9729399681,
-    0.9757021070,
-    0.9783173800,
-    0.9807852507,
-    0.9831054807,
-    0.9852776527,
-    0.9873014092,
-    0.9891765118,
-    0.9909026623,
-    0.9924795032,
-    0.9939069748,
-    0.9951847196,
-    0.9963126183,
-    0.9972904325,
-    0.9981181026,
-    0.9987954497,
-    0.9993223548,
-    0.9996988177,
-    0.9999247193,
-    1.0000000000,
-];
-
-const NELLY_CENTER_TABLE: [usize; 64] = [
-    0, 32, 16, 48, 8, 40, 24, 56, 4, 36, 20, 52, 12, 44, 28, 60, 2, 34, 18, 50, 10, 42, 26, 58, 6,
-    38, 22, 54, 14, 46, 30, 62, 1, 33, 17, 49, 9, 41, 25, 57, 5, 37, 21, 53, 13, 45, 29, 61, 3, 35,
-    19, 51, 11, 43, 27, 59, 7, 39, 23, 55, 15, 47, 31, 63,
-];
-
 pub struct NellymoserDecoder<R: Read> {
     inner: R,
     sample_rate: u16,
@@ -706,85 +564,6 @@ fn unpack_coeffs(buf: [f32; NELLY_BUF_LEN], audio: &mut Vec<Complex32>) {
         let a = NELLY_NEG_UNPACK_TABLE[mid_lo - i];
         let b = NELLY_POS_UNPACK_TABLE[mid_lo - i];
         audio[end - i] = Complex32::new(b * d - a * c, b * c + a * d);
-    }
-}
-
-fn center(audio: &mut Vec<Complex32>) {
-    for i in 0..NELLY_BUF_LEN / 2 {
-        let j = NELLY_CENTER_TABLE[i];
-        if j > i {
-            audio.swap(i, j);
-        }
-    }
-}
-
-fn inverse_dft(audio: &mut Vec<Complex32>) {
-    let mut offset = 0;
-    for _ in 0..NELLY_BUF_LEN / 4 {
-        let a = audio[offset + 0];
-        let b = audio[offset + 1];
-
-        audio[offset + 0] = a + b;
-        audio[offset + 1] = a - b;
-
-        offset += 2;
-    }
-
-    offset = 0;
-    for _ in 0..NELLY_BUF_LEN / 8 {
-        let a = audio[offset + 0];
-        let b = audio[offset + 2];
-
-        audio[offset + 0] = a + b;
-        audio[offset + 2] = a - b;
-
-        offset += 1;
-
-        let a = audio[offset + 0];
-        let b = audio[offset + 2];
-
-        audio[offset + 0] = Complex32::new(a.re + b.im, a.im - b.re);
-        audio[offset + 2] = Complex32::new(a.re - b.im, a.im + b.re);
-
-        offset += 3;
-    }
-
-    let mut i = 0;
-    let mut advance = 4;
-    while advance < NELLY_BUF_LEN / 2 {
-        offset = 0;
-
-        for _ in 0..NELLY_BUF_LEN / (advance * 4) {
-            for _ in 0..advance / 2 {
-                let a = NELLY_INV_DFT_TABLE[128 - i];
-                let c = NELLY_INV_DFT_TABLE[i];
-                let (b, d) = (audio[offset + advance].re, audio[offset + advance].im);
-                let (e, f) = (audio[offset].re, audio[offset].im);
-
-                audio[offset] = Complex32::new(e + (a * b + c * d), f - (b * c - a * d));
-                audio[offset + advance] = Complex32::new(e - (a * b + c * d), f + (b * c - a * d));
-
-                i += 256 / advance;
-                offset += 1;
-            }
-
-            for _ in 0..advance / 2 {
-                let a = NELLY_INV_DFT_TABLE[128 - i];
-                let c = NELLY_INV_DFT_TABLE[i];
-                let (b, d) = (audio[offset + advance].re, audio[offset + advance].im);
-                let (e, f) = (audio[offset].re, audio[offset].im);
-
-                audio[offset] = Complex32::new(e - (a * b - c * d), f - (a * d + b * c));
-                audio[offset + advance] = Complex32::new(e + (a * b - c * d), f + (a * d + b * c));
-
-                i -= 256 / advance;
-                offset += 1;
-            }
-
-            offset += advance;
-        }
-
-        advance *= 2;
     }
 }
 
@@ -1008,19 +787,11 @@ fn decode_block(
         use rustfft::FFTplanner;
 
         let mut input_complex: Vec<Complex32> = vec![Zero::zero(); NELLY_BUF_LEN / 2];
-
         unpack_coeffs(input, &mut input_complex);
-        center(&mut input_complex);
-
-        let mut new_input: Vec<Complex32> = Vec::new();
-        for i in 0..64 {
-            new_input.push(input_complex[TABLE[i]]);
-        }
         let mut output_complex: Vec<Complex32> = vec![Zero::zero(); NELLY_BUF_LEN / 2];
-        let mut planner = FFTplanner::new(true);
+        let mut planner = FFTplanner::new(false);
         let fft = planner.plan_fft(NELLY_BUF_LEN / 2);
-        fft.process(&mut new_input, &mut output_complex);
-        // inverse_dft(&mut new_input);
+        fft.process(&mut input_complex, &mut output_complex);
         let slice = &mut samples[i as usize * NELLY_BUF_LEN..(i as usize + 1) * NELLY_BUF_LEN];
         complex_to_signal(&output_complex, slice);
         apply_state(state, slice);
