@@ -14,6 +14,10 @@ const NELLY_BASE_OFF: i32 = 4228;
 const NELLY_BASE_SHIFT: i16 = 19;
 const NELLY_SAMPLES: usize = NELLY_BUF_LEN * 2;
 
+const TABLE: [usize; 64] = [
+    0, 63, 31, 47, 15, 55, 23, 39, 7, 59, 27, 43, 11, 51, 19, 35, 3, 61, 29, 45, 13, 53, 21, 37, 5, 57, 25, 41, 9, 49, 17, 33, 1, 62, 30, 46, 14, 54, 22, 38, 6, 58, 26, 42, 10, 50, 18, 34, 2, 60, 28, 44, 12, 52, 20, 36, 4, 56, 24, 40, 8, 48, 16, 32,
+];
+
 const NELLY_DEQUANTIZATION_TABLE: [f32; 127] = [
     0.0000000000,
     -0.8472560048,
@@ -1001,13 +1005,24 @@ fn decode_block(
         }
 
         use rustfft::num_traits::Zero;
+        use rustfft::FFTplanner;
+
         let mut input_complex: Vec<Complex32> = vec![Zero::zero(); NELLY_BUF_LEN / 2];
 
         unpack_coeffs(input, &mut input_complex);
         center(&mut input_complex);
-        inverse_dft(&mut input_complex);
+
+        let mut new_input: Vec<Complex32> = Vec::new();
+        for i in 0..64 {
+            new_input.push(input_complex[TABLE[i]]);
+        }
+        let mut output_complex: Vec<Complex32> = vec![Zero::zero(); NELLY_BUF_LEN / 2];
+        let mut planner = FFTplanner::new(true);
+        let fft = planner.plan_fft(NELLY_BUF_LEN / 2);
+        fft.process(&mut new_input, &mut output_complex);
+        // inverse_dft(&mut new_input);
         let slice = &mut samples[i as usize * NELLY_BUF_LEN..(i as usize + 1) * NELLY_BUF_LEN];
-        complex_to_signal(&input_complex, slice);
+        complex_to_signal(&output_complex, slice);
         apply_state(state, slice);
     }
 }
