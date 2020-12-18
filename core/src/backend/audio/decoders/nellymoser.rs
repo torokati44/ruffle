@@ -1,6 +1,6 @@
 use super::{Decoder, SeekableDecoder};
 use bitstream_io::{BitReader, LittleEndian};
-use rustfft::num_complex::Complex32;
+use rustfft::{num_complex::Complex32, num_traits::Zero, FFTplanner};
 use std::io::{Cursor, Read};
 
 const NELLY_BANDS: usize = 23;
@@ -148,74 +148,6 @@ const NELLY_BAND_SIZES_TABLE: [u8; NELLY_BANDS] = [
     2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 4, 4, 5, 6, 6, 7, 8, 9, 10, 12, 14, 15,
 ];
 
-const NELLY_SIGNAL_TABLE: [f32; 65] = [
-    0.1250000000,
-    0.1249623969,
-    0.1248494014,
-    0.1246612966,
-    0.1243980974,
-    0.1240599006,
-    0.1236471012,
-    0.1231596991,
-    0.1225982010,
-    0.1219628006,
-    0.1212539002,
-    0.1204719990,
-    0.1196174994,
-    0.1186909974,
-    0.1176929995,
-    0.1166241020,
-    0.1154849008,
-    0.1142762005,
-    0.1129987016,
-    0.1116530001,
-    0.1102401987,
-    0.1087609008,
-    0.1072160974,
-    0.1056066975,
-    0.1039336994,
-    0.1021981016,
-    0.1004009023,
-    0.0985433012,
-    0.0966262966,
-    0.0946511030,
-    0.0926188976,
-    0.0905309021,
-    0.0883883014,
-    0.0861926004,
-    0.0839449018,
-    0.0816465989,
-    0.0792991966,
-    0.0769039020,
-    0.0744623989,
-    0.0719759986,
-    0.0694463030,
-    0.0668746978,
-    0.0642627999,
-    0.0616123006,
-    0.0589246005,
-    0.0562013984,
-    0.0534444004,
-    0.0506552011,
-    0.0478353985,
-    0.0449868999,
-    0.0421111993,
-    0.0392102003,
-    0.0362856016,
-    0.0333391018,
-    0.0303725004,
-    0.0273876991,
-    0.0243862998,
-    0.0213702004,
-    0.0183412991,
-    0.0153013002,
-    0.0122520998,
-    0.0091955997,
-    0.0061335000,
-    0.0030677000,
-    0.0000000000,
-];
-
 const NELLY_INIT_TABLE: [u16; 64] = [
     3134, 5342, 6870, 7792, 8569, 9185, 9744, 10191, 10631, 11061, 11434, 11770, 12116, 12513,
     12925, 13300, 13674, 14027, 14352, 14716, 15117, 15477, 15824, 16157, 16513, 16804, 17090,
@@ -361,140 +293,6 @@ const NELLY_DELTA_TABLE: [i16; 32] = [
     8154, 10076, 12975,
 ];
 
-const NELLY_POS_UNPACK_TABLE: [f32; 64] = [
-    0.9999812245,
-    0.9995294213,
-    0.9984756112,
-    0.9968202710,
-    0.9945645928,
-    0.9917098284,
-    0.9882575870,
-    0.9842100739,
-    0.9795697927,
-    0.9743394256,
-    0.9685220718,
-    0.9621214271,
-    0.9551411867,
-    0.9475855827,
-    0.9394592047,
-    0.9307669997,
-    0.9215139747,
-    0.9117059708,
-    0.9013488293,
-    0.8904486895,
-    0.8790122271,
-    0.8670461774,
-    0.8545579910,
-    0.8415549994,
-    0.8280450106,
-    0.8140363097,
-    0.7995373011,
-    0.7845566273,
-    0.7691032887,
-    0.7531868219,
-    0.7368165851,
-    0.7200024724,
-    0.7027546763,
-    0.6850836873,
-    0.6669998765,
-    0.6485143900,
-    0.6296381950,
-    0.6103827953,
-    0.5907596946,
-    0.5707806945,
-    0.5504580140,
-    0.5298035741,
-    0.5088300705,
-    0.4875501990,
-    0.4659765065,
-    0.4441221058,
-    0.4220002890,
-    0.3996241987,
-    0.3770073950,
-    0.3541634977,
-    0.3311063051,
-    0.3078495860,
-    0.2844074965,
-    0.2607941031,
-    0.2370236069,
-    0.2131102979,
-    0.1890687048,
-    0.1649131030,
-    0.1406581998,
-    0.1163185984,
-    0.0919089988,
-    0.0674438998,
-    0.0429382995,
-    0.0184067003,
-];
-
-const NELLY_NEG_UNPACK_TABLE: [f32; 64] = [
-    -0.0061359000,
-    -0.0306748003,
-    -0.0551952012,
-    -0.0796824023,
-    -0.1041216031,
-    -0.1284981072,
-    -0.1527972072,
-    -0.1770042032,
-    -0.2011045963,
-    -0.2250839025,
-    -0.2489275932,
-    -0.2726213932,
-    -0.2961508930,
-    -0.3195019960,
-    -0.3426606953,
-    -0.3656130135,
-    -0.3883450031,
-    -0.4108431935,
-    -0.4330937862,
-    -0.4550836086,
-    -0.4767991900,
-    -0.4982276857,
-    -0.5193560123,
-    -0.5401715040,
-    -0.5606616139,
-    -0.5808140039,
-    -0.6006165147,
-    -0.6200572252,
-    -0.6391243935,
-    -0.6578066945,
-    -0.6760926843,
-    -0.6939715147,
-    -0.7114322186,
-    -0.7284644246,
-    -0.7450578213,
-    -0.7612023950,
-    -0.7768884897,
-    -0.7921066284,
-    -0.8068475723,
-    -0.8211025000,
-    -0.8348628879,
-    -0.8481202722,
-    -0.8608669043,
-    -0.8730949759,
-    -0.8847970963,
-    -0.8959661722,
-    -0.9065957069,
-    -0.9166790843,
-    -0.9262102246,
-    -0.9351835251,
-    -0.9435935020,
-    -0.9514350295,
-    -0.9587035179,
-    -0.9653943777,
-    -0.9715039134,
-    -0.9770280719,
-    -0.9819638729,
-    -0.9863080978,
-    -0.9900581837,
-    -0.9932119250,
-    -0.9957674146,
-    -0.9977231026,
-    -0.9990776777,
-    -0.9998306036,
-];
-
 pub struct NellymoserDecoder<R: Read> {
     inner: R,
     sample_rate: u16,
@@ -548,65 +346,49 @@ fn headroom(la: &mut i32) -> i32 {
     l
 }
 
-fn unpack_coeffs(buf: [f32; NELLY_BUF_LEN], audio: &mut Vec<Complex32>) {
-    let end = NELLY_BUF_LEN / 2 - 1;
-    let mid_hi = NELLY_BUF_LEN / 2;
-    let mid_lo = mid_hi - 1;
-
+fn unpack_coeffs(buf: &Vec<f32>) -> Vec<Complex32> {
+    let mut result = vec![Zero::zero(); NELLY_BUF_LEN / 2];
+    let end = result.len() - 1;
     for i in 0..NELLY_BUF_LEN / 4 {
-        let b = buf[i * 2];
-        let c = buf[i * 2 + 1];
-        let d = buf[end * 2 - i * 2 - 1];
-        let a = buf[end * 2 - i * 2];
-        let e = NELLY_POS_UNPACK_TABLE[i];
-        let f = NELLY_NEG_UNPACK_TABLE[i];
-        audio[i] = Complex32::new(b * e - a * f, a * e + b * f);
+        // TODO: avoid duplication
+        let x = Complex32::new(buf[i * 2], buf[(end - i) * 2]);
+        let y = Complex32::from_polar(1.0, -(i as f32 + 0.25) / 64.0 * std::f32::consts::FRAC_PI_2);
+        result[i] = x * y;
 
-        let a = NELLY_NEG_UNPACK_TABLE[mid_lo - i];
-        let b = NELLY_POS_UNPACK_TABLE[mid_lo - i];
-        audio[end - i] = Complex32::new(b * d - a * c, b * c + a * d);
-    }
-}
-
-fn table_to_complex_vec(table: &[f32; 65]) -> Vec<Complex32> {
-    let mut result = Vec::with_capacity(33);
-    let end = table.len() - 1;
-    for i in 0..=end / 2 {
-        result.push(Complex32::new(table[i], table[end - i]));
+        let x = Complex32::new(buf[(end - i) * 2 - 1], buf[i * 2 + 1]);
+        let y = Complex32::from_polar(
+            1.0,
+            -((end - i) as f32 + 0.25) / 64.0 * std::f32::consts::FRAC_PI_2,
+        );
+        result[end - i] = x * y;
     }
     result
 }
 
-fn complex_vec_to_table(vec: &Vec<Complex32>, output: &mut [f32]) {
-    for (i, x) in vec.iter().enumerate() {
+fn complex_to_signal(audio: &Vec<Complex32>, output: &mut [f32]) {
+    let a = audio[..audio.len() / 2].iter().map(|x| x.conj()).collect();
+    let b = audio[audio.len() / 2..].iter().map(|&x| x).rev().collect();
+    let table = |i| (i as f32 / 64.0 * std::f32::consts::FRAC_PI_2).cos() / 8.0;
+    let e: Vec<Complex32> = (0..=32)
+        .map(|i| Complex32::new(table(i), table(64 - i)))
+        .collect();
+
+    let hadamard_product = |a: &Vec<Complex32>, b: &Vec<Complex32>| -> Vec<Complex32> {
+        a.iter().zip(b.iter()).map(|(x, y)| x * y).collect()
+    };
+    let a = hadamard_product(&a, &e[..32].to_vec());
+    let b = hadamard_product(&b, &e[1..].to_vec());
+
+    let alternate = |a: &Vec<Complex32>, b: &Vec<Complex32>| -> Vec<Complex32> {
+        a.iter()
+            .zip(b.iter())
+            .flat_map(|(x, y)| vec![*x, *y])
+            .collect()
+    };
+    for (i, x) in alternate(&a, &b).iter().enumerate() {
         output[i] = x.re;
         output[output.len() - i - 1] = x.im;
     }
-}
-
-fn hadamard_product(vec1: &Vec<Complex32>, vec2: &Vec<Complex32>) -> Vec<Complex32> {
-    vec1.iter().zip(vec2.iter()).map(|(x, y)| x * y).collect()
-}
-
-fn alternate(vec1: &Vec<Complex32>, vec2: &Vec<Complex32>) -> Vec<Complex32> {
-    vec1.iter()
-        .zip(vec2.iter())
-        .flat_map(|(x, y)| vec![*x, *y])
-        .collect()
-}
-
-fn complex_to_signal(audio: &Vec<Complex32>, output: &mut [f32]) {
-    let a = audio[0..NELLY_BUF_LEN / 4]
-        .iter()
-        .map(|x| x.conj())
-        .collect();
-    let mut b = audio[NELLY_BUF_LEN / 4..NELLY_BUF_LEN / 2].to_vec();
-    b.reverse();
-    let e = table_to_complex_vec(&NELLY_SIGNAL_TABLE);
-
-    let a = hadamard_product(&a, &e[0..32].to_vec());
-    let b = hadamard_product(&b, &e[1..33].to_vec());
-    complex_vec_to_table(&alternate(&a, &b), output);
 }
 
 fn apply_state(state: &mut [f32; 64], audio: &mut [f32]) {
@@ -778,25 +560,21 @@ fn decode_block(
             .skip(NELLY_HEADER_BITS + i * NELLY_DETAIL_BITS as u32)
             .unwrap();
 
-        let mut input = [0f32; NELLY_BUF_LEN];
-        for j in 0..NELLY_FILL_LEN {
-            input[j] = if bits[j] <= 0 {
-                std::f32::consts::FRAC_1_SQRT_2
-            } else {
-                let v = reader.read::<u8>(bits[j] as u32).unwrap();
-                NELLY_DEQUANTIZATION_TABLE[((1 << bits[j]) - 1 + v) as usize]
-            } * pows[j];
-        }
+        let input = (0..NELLY_BUF_LEN).map(|j| if j >= NELLY_FILL_LEN {
+            0.0
+        } else if bits[j] <= 0 {
+            std::f32::consts::FRAC_1_SQRT_2
+        } else {
+            let v = reader.read::<u8>(bits[j] as u32).unwrap();
+            NELLY_DEQUANTIZATION_TABLE[((1 << bits[j]) - 1 + v) as usize]
+        } * pows[j]).collect();
+        let mut input_complex = unpack_coeffs(&input);
 
-        use rustfft::num_traits::Zero;
-        use rustfft::FFTplanner;
-
-        let mut input_complex: Vec<Complex32> = vec![Zero::zero(); NELLY_BUF_LEN / 2];
-        unpack_coeffs(input, &mut input_complex);
+        let mut output_complex: Vec<Complex32> = vec![Zero::zero(); NELLY_BUF_LEN / 2];
         let mut planner = FFTplanner::new(false);
         let fft = planner.plan_fft(NELLY_BUF_LEN / 2);
-        let mut output_complex: Vec<Complex32> = vec![Zero::zero(); NELLY_BUF_LEN / 2];
         fft.process(&mut input_complex, &mut output_complex);
+
         let slice = &mut samples[i as usize * NELLY_BUF_LEN..(i as usize + 1) * NELLY_BUF_LEN];
         complex_to_signal(&output_complex, slice);
         apply_state(state, slice);
@@ -836,5 +614,8 @@ impl<R: AsRef<[u8]>> SeekableDecoder for NellymoserDecoder<Cursor<R>> {
     #[inline]
     fn reset(&mut self) {
         self.inner.set_position(0);
+        for x in self.state.iter_mut() {
+            *x = 0.0;
+        }
     }
 }
