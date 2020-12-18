@@ -216,22 +216,14 @@ fn headroom(la: &mut i32) -> i32 {
 }
 
 fn unpack_coeffs(buf: &Vec<f32>) -> Vec<Complex32> {
-    let mut result = vec![Zero::zero(); NELLY_BUF_LEN / 2];
-    let end = result.len() - 1;
-    for i in 0..NELLY_BUF_LEN / 4 {
-        // TODO: avoid duplication
-        let x = Complex32::new(buf[i * 2], buf[(end - i) * 2]);
-        let y = Complex32::from_polar(1.0, -(i as f32 + 0.25) / 64.0 * std::f32::consts::FRAC_PI_2);
-        result[i] = x * y;
-
-        let x = Complex32::new(buf[(end - i) * 2 - 1], buf[i * 2 + 1]);
-        let y = Complex32::from_polar(
-            1.0,
-            -((end - i) as f32 + 0.25) / 64.0 * std::f32::consts::FRAC_PI_2,
-        );
-        result[end - i] = x * y;
-    }
-    result
+    (0..NELLY_BUF_LEN / 2)
+        .map(|i| {
+            let a = Complex32::new(buf[i * 2], buf[NELLY_BUF_LEN - i * 2 - 1]);
+            let b =
+                Complex32::from_polar(1.0, -(i as f32 + 0.25) / 64.0 * std::f32::consts::FRAC_PI_2);
+            a * b
+        })
+        .collect()
 }
 
 fn complex_to_signal(audio: &Vec<Complex32>, output: &mut [f32]) {
