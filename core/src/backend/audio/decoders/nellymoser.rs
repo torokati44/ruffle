@@ -3,7 +3,6 @@ use bitstream_io::{BitReader, LittleEndian};
 use rustfft::{num_complex::Complex32, num_traits::Zero, FFTplanner};
 use std::io::{Cursor, Read};
 
-const NELLY_BANDS: usize = 23;
 const NELLY_BLOCK_LEN: usize = 64;
 const NELLY_HEADER_BITS: u32 = 116;
 const NELLY_DETAIL_BITS: i32 = 198;
@@ -144,7 +143,7 @@ const NELLY_DEQUANTIZATION_TABLE: [f32; 127] = [
     2.2903931141,
 ];
 
-const NELLY_BAND_SIZES_TABLE: [u8; NELLY_BANDS] = [
+const NELLY_BAND_SIZES_TABLE: [u8; 23] = [
     2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 4, 4, 5, 6, 6, 7, 8, 9, 10, 12, 14, 15,
 ];
 
@@ -164,14 +163,14 @@ const NELLY_DELTA_TABLE: [i16; 32] = [
 
 pub struct NellymoserDecoder<R: Read> {
     inner: R,
-    sample_rate: u16,
+    sample_rate: u32,
     state: [f32; 64],
     samples: [f32; NELLY_SAMPLES],
     cur_sample: usize,
 }
 
 impl<R: Read> NellymoserDecoder<R> {
-    pub fn new(inner: R, sample_rate: u16) -> Self {
+    pub fn new(inner: R, sample_rate: u32) -> Self {
         NellymoserDecoder {
             inner,
             sample_rate,
@@ -215,7 +214,7 @@ fn headroom(la: &mut i32) -> i32 {
     l
 }
 
-fn unpack_coeffs(buf: &Vec<f32>) -> Vec<Complex32> {
+fn unpack_coeffs(buf: &[f32]) -> Vec<Complex32> {
     (0..NELLY_BUF_LEN / 2)
         .map(|i| {
             let a = Complex32::new(buf[i * 2], buf[NELLY_BUF_LEN - i * 2 - 1]);
@@ -226,9 +225,9 @@ fn unpack_coeffs(buf: &Vec<f32>) -> Vec<Complex32> {
         .collect()
 }
 
-fn complex_to_signal(audio: &Vec<Complex32>, output: &mut [f32]) {
+fn complex_to_signal(audio: &[Complex32], output: &mut [f32]) {
     let a = audio[..audio.len() / 2].iter().map(|x| x.conj()).collect();
-    let b = audio[audio.len() / 2..].iter().map(|&x| x).rev().collect();
+    let b = audio[audio.len() / 2..].iter().copied().rev().collect();
     let table = |i| (i as f32 / 64.0 * std::f32::consts::FRAC_PI_2).cos() / 8.0;
     let e: Vec<Complex32> = (0..=32)
         .map(|i| Complex32::new(table(i), table(64 - i)))
@@ -282,13 +281,13 @@ fn decode_block(
         let mut reader = BitReader::endian(Cursor::new(&block), LittleEndian);
         let mut val = NELLY_INIT_TABLE[reader.read::<u8>(6).unwrap() as usize] as f32;
         let mut ptr: usize = 0;
-        for i in 0..NELLY_BANDS {
+        for (i, x) in NELLY_BAND_SIZES_TABLE.iter().enumerate() {
             if i > 0 {
                 val += NELLY_DELTA_TABLE[reader.read::<u8>(5).unwrap() as usize] as f32;
             }
 
-            let pval = 2f32.powf(val / 2048.0);
-            for _ in 0..NELLY_BAND_SIZES_TABLE[i] {
+            let pval = (val / 2048.0).exp2();
+            for _ in 0..*x {
                 buf[ptr] = val;
                 pows[ptr] = pval;
                 ptr += 1;
@@ -420,7 +419,7 @@ fn decode_block(
             .skip(NELLY_HEADER_BITS + i * NELLY_DETAIL_BITS as u32)
             .unwrap();
 
-        let input = (0..NELLY_BUF_LEN).map(|j| if j >= NELLY_FILL_LEN {
+        let input: Vec<f32> = (0..NELLY_BUF_LEN).map(|j| if j >= NELLY_FILL_LEN {
             0.0
         } else if bits[j] <= 0 {
             std::f32::consts::FRAC_1_SQRT_2
@@ -466,7 +465,7 @@ impl<R: Read> Decoder for NellymoserDecoder<R> {
 
     #[inline]
     fn sample_rate(&self) -> u16 {
-        self.sample_rate
+        self.sample_rate as u16
     }
 }
 
