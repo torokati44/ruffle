@@ -226,28 +226,10 @@ fn unpack_coeffs(buf: &[f32]) -> Vec<Complex32> {
 }
 
 fn complex_to_signal(audio: &[Complex32], output: &mut [f32]) {
-    let a = audio[..audio.len() / 2].iter().map(|x| x.conj()).collect();
-    let b = audio[audio.len() / 2..].iter().copied().rev().collect();
-    let table = |i| (i as f32 / 64.0 * std::f32::consts::FRAC_PI_2).cos() / 8.0;
-    let e: Vec<Complex32> = (0..=32)
-        .map(|i| Complex32::new(table(i), table(64 - i)))
-        .collect();
-
-    let hadamard_product = |a: &Vec<Complex32>, b: &Vec<Complex32>| -> Vec<Complex32> {
-        a.iter().zip(b.iter()).map(|(x, y)| x * y).collect()
-    };
-    let a = hadamard_product(&a, &e[..32].to_vec());
-    let b = hadamard_product(&b, &e[1..].to_vec());
-
-    let alternate = |a: &Vec<Complex32>, b: &Vec<Complex32>| -> Vec<Complex32> {
-        a.iter()
-            .zip(b.iter())
-            .flat_map(|(x, y)| vec![*x, *y])
-            .collect()
-    };
-    for (i, x) in alternate(&a, &b).iter().enumerate() {
-        output[i] = x.re;
-        output[output.len() - i - 1] = x.im;
+    for i in 0..NELLY_BUF_LEN / 2 {
+        let mul = audio[i].conj() * Complex32::from_polar(1.0 / 8.0, i as f32 / 64.0 * std::f32::consts::FRAC_PI_2);
+        output[i * 2] = mul.re;
+        output[NELLY_BUF_LEN - i * 2 - 1] = mul.im;
     }
 }
 
