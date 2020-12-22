@@ -3030,6 +3030,7 @@ dependencies = [
  "rand",
  "regress",
  "ruffle_codec_h263",
+ "ruffle_codec_yuv",
  "ruffle_macros",
  "serde",
  "smallvec",

@@ -37,6 +37,7 @@ rand = { version = "0.8.4", features = ["std", "small_rng"], default-features = 
 serde = { version = "1.0.127", features = ["derive"], optional = true }
 nellymoser-rs = { git = "https://github.com/ruffle-rs/nellymoser" }
 ruffle_codec_h263 = { path = "../codecs/h263" }
+ruffle_codec_yuv = { path = "../codecs/yuv" }
 regress = "0.4"
 flash-lso = { git = "https://github.com/ruffle-rs/rust-flash-lso", rev = "19fecd07b9888c4bdaa66771c468095783b52bed" }
 json = "0.12.4"
