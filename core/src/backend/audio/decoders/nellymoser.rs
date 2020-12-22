@@ -234,21 +234,14 @@ fn complex_to_signal(audio: &[Complex32], output: &mut [f32]) {
 }
 
 fn apply_state(state: &mut [f32; 64], audio: &mut [f32]) {
-    let table = |i| ((i as f32 + 0.5) / 128.0 * std::f32::consts::FRAC_PI_2).sin();
-    for i in 0..NELLY_BUF_LEN / 4 {
-        let top = NELLY_BUF_LEN - i - 1;
-        let mid_up = NELLY_BUF_LEN / 2 + i;
-        let mid_down = NELLY_BUF_LEN / 2 - i - 1;
-        let s_bot = audio[i];
-        let s_top = audio[top];
-
-        audio[i] = audio[mid_up] * table(i) + state[i] * table(top);
-        audio[top] = state[i] * table(i) - audio[mid_up] * table(top);
-        state[i] = -audio[mid_down];
-
-        audio[mid_down] = s_top * table(mid_down) + state[mid_down] * table(mid_up);
-        audio[mid_up] = state[mid_down] * table(mid_down) - s_top * table(mid_up);
-        state[mid_down] = -s_bot;
+    let mid = NELLY_BUF_LEN / 2;
+    let mut copy = [0f32; NELLY_BUF_LEN];
+    copy.copy_from_slice(&audio);
+    for i in 0..mid {
+        let mul = Complex32::new(state[i], -copy[mid + i]) * Complex32::from_polar(1.0, (i as f32 + 0.5) / 128.0 * std::f32::consts::FRAC_PI_2);
+        audio[i] = mul.re;
+        audio[NELLY_BUF_LEN - i - 1] = mul.im;
+        state[i] = -copy[mid - i - 1];
     }
 }
 
