@@ -39,7 +39,7 @@ serde = { version = "1.0.118", features = ["derive"], optional = true }
 ruffle_codec_h263 = { path = "../codecs/h263" }
 ruffle_codec_yuv = { path = "../codecs/yuv" }
 num-complex = "0.3.1"
-rustfft = "4.0.0"
+rustdct = "0.5.0"
 
 [dependencies.jpeg-decoder]
 version = "0.1.20"

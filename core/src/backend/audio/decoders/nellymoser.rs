@@ -1,6 +1,6 @@
 use super::{Decoder, SeekableDecoder};
 use bitstream_io::{BitReader, LittleEndian};
-use rustfft::{num_complex::Complex32, num_traits::Zero, FFTplanner};
+use rustdct::DCTplanner;
 use std::io::{Cursor, Read};
 
 const NELLY_BLOCK_LEN: usize = 64;
@@ -13,7 +13,7 @@ const NELLY_BASE_OFF: i32 = 4228;
 const NELLY_BASE_SHIFT: i16 = 19;
 const NELLY_SAMPLES: usize = NELLY_BUF_LEN * 2;
 
-const NELLY_DEQUANTIZATION_TABLE: [f32; 127] = [
+const NELLY_DEQUANTIZATION_TABLE: [f64; 127] = [
     0.0000000000,
     -0.8472560048,
     0.7224709988,
@@ -214,22 +214,14 @@ fn headroom(la: &mut i32) -> i32 {
     l
 }
 
-fn unpack_coeffs(buf: &[f32]) -> Vec<Complex32> {
-    (0..NELLY_BUF_LEN / 2)
-        .map(|i| {
-            let a = Complex32::new(buf[i * 2], buf[NELLY_BUF_LEN - i * 2 - 1]);
-            let b =
-                Complex32::from_polar(1.0, -(i as f32 + 0.25) / 64.0 * std::f32::consts::FRAC_PI_2);
-            a * b
-        })
-        .collect()
-}
-
-fn complex_to_signal(audio: &[Complex32], output: &mut [f32]) {
-    for i in 0..NELLY_BUF_LEN / 2 {
-        let mul = audio[i].conj() * Complex32::from_polar(1.0 / 8.0, i as f32 / 64.0 * std::f32::consts::FRAC_PI_2);
-        output[i * 2] = mul.re;
-        output[NELLY_BUF_LEN - i * 2 - 1] = mul.im;
+fn imdct_middle_half(input: Vec<f32>, output: &mut [f32]) {
+    let mut temp = [0f32; NELLY_SAMPLES];
+    // let window = |len| (0..len).map(|i| ((i as f32 + 0.5) / 128.0 * std::f32::consts::FRAC_PI_2).sin()).collect();
+    let mut planner = DCTplanner::new();
+    let mdct = planner.plan_mdct(NELLY_BUF_LEN, rustdct::mdct::window_fn::one);
+    mdct.process_imdct(&input, &mut temp);
+    for i in 0..NELLY_BUF_LEN {
+        output[NELLY_BUF_LEN - i - 1] = temp[NELLY_BUF_LEN / 2 + i] / 8.0;
     }
 }
 
@@ -238,10 +230,10 @@ fn apply_state(state: &mut [f32; 64], audio: &mut [f32]) {
     let mut copy = [0f32; NELLY_BUF_LEN];
     copy.copy_from_slice(&audio);
     for i in 0..mid {
-        let mul = Complex32::new(state[i], -copy[mid + i]) * Complex32::from_polar(1.0, (i as f32 + 0.5) / 128.0 * std::f32::consts::FRAC_PI_2);
-        audio[i] = mul.re;
-        audio[NELLY_BUF_LEN - i - 1] = mul.im;
-        state[i] = -copy[mid - i - 1];
+        let x = (i as f32 + 0.5) / 128.0 * std::f32::consts::FRAC_PI_2;
+        audio[i] = state[i] * x.cos() - copy[mid + i] * x.sin();
+        audio[NELLY_BUF_LEN - i - 1] = state[i] * x.sin() + copy[mid + i] * x.cos();
+        state[i] = copy[mid - i - 1];
     }
 }
 
@@ -400,17 +392,11 @@ fn decode_block(
             std::f32::consts::FRAC_1_SQRT_2
         } else {
             let v = reader.read::<u8>(bits[j] as u32).unwrap();
-            NELLY_DEQUANTIZATION_TABLE[((1 << bits[j]) - 1 + v) as usize]
+            NELLY_DEQUANTIZATION_TABLE[((1 << bits[j]) - 1 + v) as usize] as f32
         } * pows[j]).collect();
-        let mut input_complex = unpack_coeffs(&input);
-
-        let mut output_complex: Vec<Complex32> = vec![Zero::zero(); NELLY_BUF_LEN / 2];
-        let mut planner = FFTplanner::new(false);
-        let fft = planner.plan_fft(NELLY_BUF_LEN / 2);
-        fft.process(&mut input_complex, &mut output_complex);
 
         let slice = &mut samples[i as usize * NELLY_BUF_LEN..(i as usize + 1) * NELLY_BUF_LEN];
-        complex_to_signal(&output_complex, slice);
+        imdct_middle_half(input, slice);
         apply_state(state, slice);
     }
 }

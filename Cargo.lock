@@ -3014,7 +3014,7 @@ dependencies = [
  "ruffle_codec_h263",
  "ruffle_codec_yuv",
  "ruffle_macros",
- "rustfft",
+ "rustdct",
  "serde",
  "smallvec",
  "swf",
@@ -3200,6 +3200,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "138e3e0acb6c9fb258b19b67cb8abd63c00679d2851805ea151465464fe9030a"
 dependencies = [
  "semver",
+]
+
+[[package]]
+name = "rustdct"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fab3823a7f17c547b77a22b71489feb02478bb0fc5f2f600f6bc0acd24768518"
+dependencies = [
+ "rustfft",
 ]
 
 [[package]]
