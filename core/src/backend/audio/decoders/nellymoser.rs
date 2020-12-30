@@ -399,7 +399,12 @@ impl<R: Read> Iterator for NellymoserDecoder<R> {
         if self.cur_sample >= NELLY_SAMPLES {
             let mut block = [0u8; NELLY_BLOCK_LEN];
             self.inner.read_exact(&mut block).ok()?;
-            decode_block(&mut self.state, &block, &mut self.samples, &mut self.planner);
+            decode_block(
+                &mut self.state,
+                &block,
+                &mut self.samples,
+                &mut self.planner,
+            );
             self.cur_sample = 0;
         }
 
