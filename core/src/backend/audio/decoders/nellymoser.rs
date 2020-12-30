@@ -164,9 +164,10 @@ const NELLY_DELTA_TABLE: [i16; 32] = [
 pub struct NellymoserDecoder<R: Read> {
     inner: R,
     sample_rate: u32,
-    state: [f32; 64],
+    state: [f32; NELLY_BUF_LEN],
     samples: [f32; NELLY_SAMPLES],
     cur_sample: usize,
+    planner: DCTplanner<f32>,
 }
 
 impl<R: Read> NellymoserDecoder<R> {
@@ -174,9 +175,10 @@ impl<R: Read> NellymoserDecoder<R> {
         NellymoserDecoder {
             inner,
             sample_rate,
-            state: [0.0; 64],
+            state: [0.0; NELLY_BUF_LEN],
             samples: [0.0; NELLY_SAMPLES],
             cur_sample: 0,
+            planner: DCTplanner::new(),
         }
     }
 }
@@ -214,33 +216,17 @@ fn headroom(la: &mut i32) -> i32 {
     l
 }
 
-fn imdct_middle_half(input: Vec<f32>, output: &mut [f32]) {
-    let mut temp = [0f32; NELLY_SAMPLES];
-    // let window = |len| (0..len).map(|i| ((i as f32 + 0.5) / 128.0 * std::f32::consts::FRAC_PI_2).sin()).collect();
-    let mut planner = DCTplanner::new();
-    let mdct = planner.plan_mdct(NELLY_BUF_LEN, rustdct::mdct::window_fn::one);
-    mdct.process_imdct(&input, &mut temp);
-    for i in 0..NELLY_BUF_LEN {
-        output[NELLY_BUF_LEN - i - 1] = temp[NELLY_BUF_LEN / 2 + i] / 8.0;
-    }
-}
-
-fn apply_state(state: &mut [f32; 64], audio: &mut [f32]) {
-    let mid = NELLY_BUF_LEN / 2;
-    let mut copy = [0f32; NELLY_BUF_LEN];
-    copy.copy_from_slice(&audio);
-    for i in 0..mid {
-        let x = (i as f32 + 0.5) / 128.0 * std::f32::consts::FRAC_PI_2;
-        audio[i] = state[i] * x.cos() - copy[mid + i] * x.sin();
-        audio[NELLY_BUF_LEN - i - 1] = state[i] * x.sin() + copy[mid + i] * x.cos();
-        state[i] = copy[mid - i - 1];
-    }
+fn window(len: usize) -> Vec<f32> {
+    (0..len)
+        .map(|i| ((i as f32 + 0.5) / 128.0 * std::f32::consts::FRAC_PI_2).sin() / 8.0)
+        .collect()
 }
 
 fn decode_block(
-    state: &mut [f32; 64],
+    state: &mut [f32; NELLY_BUF_LEN],
     block: &[u8; NELLY_BLOCK_LEN],
     samples: &mut [f32; NELLY_SAMPLES],
+    planner: &mut DCTplanner<f32>,
 ) {
     let mut buf = [0f32; NELLY_BUF_LEN];
     let mut pows = [0f32; NELLY_BUF_LEN];
@@ -396,8 +382,13 @@ fn decode_block(
         } * pows[j]).collect();
 
         let slice = &mut samples[i as usize * NELLY_BUF_LEN..(i as usize + 1) * NELLY_BUF_LEN];
-        imdct_middle_half(input, slice);
-        apply_state(state, slice);
+        for i in 0..NELLY_BUF_LEN {
+            slice[i] = state[i];
+            state[i] = 0.0;
+        }
+
+        let mdct = planner.plan_mdct(NELLY_BUF_LEN, window);
+        mdct.process_imdct_split(&input, slice, state);
     }
 }
 
@@ -408,7 +399,7 @@ impl<R: Read> Iterator for NellymoserDecoder<R> {
         if self.cur_sample >= NELLY_SAMPLES {
             let mut block = [0u8; NELLY_BLOCK_LEN];
             self.inner.read_exact(&mut block).ok()?;
-            decode_block(&mut self.state, &block, &mut self.samples);
+            decode_block(&mut self.state, &block, &mut self.samples, &mut self.planner);
             self.cur_sample = 0;
         }
 
