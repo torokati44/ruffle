@@ -453,8 +453,8 @@ impl WebAudioBackend {
                 }
             }
             AudioCompression::Nellymoser => {
-                let mut decoder = NellymoserDecoder::new(audio_data, format.sample_rate.into());
-                while let Some(frame) = decoder.next() {
+                let decoder = NellymoserDecoder::new(audio_data, format.sample_rate.into());
+                for frame in decoder {
                     let (l, r) = (frame[0], frame[1]);
                     self.left_samples.push(f32::from(l) / 32767.0);
                     self.right_samples.push(f32::from(r) / 32767.0);

@@ -2272,6 +2272,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c44922cb3dbb1c70b5e5f443d63b64363a898564d739ba5198e3a9138442868d"
 
 [[package]]
+name = "nelly2pcm_rs"
+version = "0.1.0"
+dependencies = [
+ "bitstream-io 1.0.0",
+ "rustdct",
+]
+
+[[package]]
 name = "net2"
 version = "0.2.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3003,6 +3011,7 @@ dependencies = [
  "json",
  "log",
  "minimp3",
+ "nelly2pcm_rs",
  "num-traits",
  "num_enum 0.5.1",
  "percent-encoding",
@@ -3014,7 +3023,6 @@ dependencies = [
  "ruffle_codec_h263",
  "ruffle_codec_yuv",
  "ruffle_macros",
- "rustdct",
  "serde",
  "smallvec",
  "swf",
@@ -3590,9 +3598,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "1.0.58"
+version = "1.0.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc60a3d73ea6594cd712d830cc1f0390fd71542d8c8cd24e70cc54cdfd5e05d5"
+checksum = "4211ce9909eb971f111059df92c45640aad50a619cf55cd76476be803c4c68e6"
 dependencies = [
  "proc-macro2",
  "quote",
