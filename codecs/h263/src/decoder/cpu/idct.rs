@@ -1,9 +1,15 @@
 //! Inverse discrete cosine transform
 
 use lazy_static::lazy_static;
-use std::cmp::{max, min};
 use std::f32::consts::PI;
+use std::{
+    cmp::{max, min},
+    vec,
+};
 
+extern crate rayon;
+
+use rayon::prelude::*;
 /// The 1D basis function of the H.263 IDCT.
 ///
 /// `spatial` is the spatial-domain position of the basis function, while
@@ -52,31 +58,43 @@ pub fn idct_channel(
 ) {
     let output_height = output.len() / output_samples_per_line;
 
-    for y in 0..output_height {
-        for x in 0..output_samples_per_line {
-            let mut sum = 0.0;
-            let x_base = x & !0x7;
-            let y_base = y & !0x7;
+    let lines: Vec<_> = (0..output_height).collect();
+    let ls: Vec<_> = lines
+        .par_iter()
+        .map(|y| {
+            let mut out = vec![0; output_samples_per_line];
 
-            for v in 0..8 {
-                for u in 0..8 {
-                    let coeff = block_levels[x_base + u + ((y_base + v) * samples_per_line)];
+            for x in 0..output_samples_per_line {
+                let mut sum = 0.0;
+                let x_base = x & !0x7;
+                let y_base = y & !0x7;
 
-                    let cu = if u == 0 { 1.0 / f32::sqrt(2.0) } else { 1.0 };
-                    let cv = if v == 0 { 1.0 / f32::sqrt(2.0) } else { 1.0 };
+                for v in 0..8 {
+                    for u in 0..8 {
+                        let coeff = block_levels[x_base + u + ((y_base + v) * samples_per_line)];
 
-                    let cosx = BASIS_TABLE[x - x_base][u];
-                    let cosy = BASIS_TABLE[y - y_base][v];
+                        let cu = if u == 0 { 1.0 / f32::sqrt(2.0) } else { 1.0 };
+                        let cv = if v == 0 { 1.0 / f32::sqrt(2.0) } else { 1.0 };
 
-                    sum += cu * cv * coeff as f32 * cosx * cosy;
+                        let cosx = BASIS_TABLE[x - x_base][u];
+                        let cosy = BASIS_TABLE[y - y_base][v];
+
+                        sum += cu * cv * coeff as f32 * cosx * cosy;
+                    }
                 }
+
+                let clipped_sum = min(255, max(-256, (sum / 4.0) as i16));
+                let mocomp_pixel = output[x + (y * output_samples_per_line)] as u16 as i16;
+
+                out[x] = min(255, max(0, clipped_sum + mocomp_pixel)) as u8;
             }
+            out
+        })
+        .collect();
 
-            let clipped_sum = min(255, max(-256, (sum / 4.0) as i16));
-            let mocomp_pixel = output[x + (y * output_samples_per_line)] as u16 as i16;
-
-            output[x + (y * output_samples_per_line)] =
-                min(255, max(0, clipped_sum + mocomp_pixel)) as u8;
-        }
+    let mut i = 0;
+    for v in ls.into_iter().flatten() {
+        output[i] = v;
+        i += 1;
     }
 }
