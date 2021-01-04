@@ -201,7 +201,6 @@ impl WgpuRenderBackend<SwapChainTarget> {
                 label: None,
                 features: Default::default(),
                 limits: wgpu::Limits::default(),
-                shader_validation: false,
             },
             trace_path,
         ))?;
@@ -900,6 +899,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
                 frame_output.view()
             };
             encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: None,
                 color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                     attachment: color_attachment,
                     ops: wgpu::Operations {
@@ -1040,6 +1040,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
                 frame_output.view()
             };
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: None,
                 color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                     attachment: color_attachment,
                     resolve_target: None,
@@ -1079,7 +1080,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
                 &[],
             );
             render_pass.set_vertex_buffer(0, self.quad_vbo.slice(..));
-            render_pass.set_index_buffer(self.quad_ibo.slice(..));
+            render_pass.set_index_buffer(self.quad_ibo.slice(..), wgpu::IndexFormat::Uint32);
 
             match self.mask_state {
                 MaskState::NoMask => (),
@@ -1159,6 +1160,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
             frame_output.view()
         };
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: None,
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                 attachment: color_attachment,
                 resolve_target: None,
@@ -1229,7 +1231,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
             }
 
             render_pass.set_vertex_buffer(0, draw.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(draw.index_buffer.slice(..));
+            render_pass.set_index_buffer(draw.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
 
             match self.mask_state {
                 MaskState::NoMask => (),
@@ -1328,6 +1330,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
             frame_output.view()
         };
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: None,
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                 attachment: color_attachment,
                 resolve_target: None,
@@ -1359,7 +1362,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
         render_pass.set_bind_group(0, self.descriptors.globals.bind_group(), &[]);
         render_pass.set_bind_group(1, &bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.quad_vbo.slice(..));
-        render_pass.set_index_buffer(self.quad_ibo.slice(..));
+        render_pass.set_index_buffer(self.quad_ibo.slice(..), wgpu::IndexFormat::Uint32);
 
         match self.mask_state {
             MaskState::NoMask => (),
@@ -1381,6 +1384,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
             // Resolve MSAA.
             if self.descriptors.msaa_sample_count >= 2 {
                 encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: None,
                     color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                         attachment: &self.frame_buffer_view,
                         ops: wgpu::Operations {
