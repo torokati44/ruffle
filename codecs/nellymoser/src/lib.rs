@@ -1,3 +1,13 @@
+//! A decoder for the Nellymoser Asao audio format.
+//!
+//! Copyright (c) 2021 relrelb
+//! Based on code from the nelly2pcm and FFmpeg projects:
+//! Copyright (c) 2007 a840bda5870ba11f19698ff6eb9581dfb0f95fa5,
+//!                    539459aeb7d425140b62a3ec7dbf6dc8e408a306, and
+//!                    520e17cd55896441042b14df2566a6eb610ed444
+//! Copyright (c) 2007 Loic Minier <lool at dooz.org>
+//!                    Benjamin Larsson
+
 mod tables;
 
 use bitstream_io::{read::BitRead, BitReader, LittleEndian};
