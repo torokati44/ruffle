@@ -15,7 +15,6 @@ use isahc::{config::RedirectPolicy, prelude::*, HttpClient};
 use ruffle_core::{
     backend::audio::{AudioBackend, NullAudioBackend},
     config::Letterbox,
-    backend::video::NullVideoBackend,
     Player,
 };
 use ruffle_render_wgpu::WgpuRenderBackend;
