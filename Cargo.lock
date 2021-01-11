@@ -1448,6 +1448,15 @@ dependencies = [
 [[package]]
 name = "gfx-auxil"
 version = "0.5.0"
+dependencies = [
+ "fxhash",
+ "gfx-hal",
+ "spirv_cross",
+]
+
+[[package]]
+name = "gfx-auxil"
+version = "0.5.0"
 source = "git+https://github.com/gfx-rs/gfx?rev=0244e3401e9f127617cb8636397048584e7bfe8a#0244e3401e9f127617cb8636397048584e7bfe8a"
 dependencies = [
  "fxhash",
@@ -1462,7 +1471,7 @@ source = "git+https://github.com/gfx-rs/gfx?rev=0244e3401e9f127617cb863639704858
 dependencies = [
  "arrayvec",
  "bitflags",
- "gfx-auxil",
+ "gfx-auxil 0.5.0 (git+https://github.com/gfx-rs/gfx?rev=0244e3401e9f127617cb8636397048584e7bfe8a)",
  "gfx-hal",
  "libloading",
  "log",
@@ -1485,7 +1494,7 @@ dependencies = [
  "bit-set",
  "bitflags",
  "d3d12",
- "gfx-auxil",
+ "gfx-auxil 0.5.0 (git+https://github.com/gfx-rs/gfx?rev=0244e3401e9f127617cb8636397048584e7bfe8a)",
  "gfx-hal",
  "log",
  "parking_lot",
@@ -1509,11 +1518,10 @@ dependencies = [
 [[package]]
 name = "gfx-backend-gl"
 version = "0.6.0"
-source = "git+https://github.com/gfx-rs/gfx?rev=0244e3401e9f127617cb8636397048584e7bfe8a#0244e3401e9f127617cb8636397048584e7bfe8a"
 dependencies = [
  "arrayvec",
  "bitflags",
- "gfx-auxil",
+ "gfx-auxil 0.5.0",
  "gfx-hal",
  "glow",
  "js-sys",
@@ -1540,7 +1548,7 @@ dependencies = [
  "cocoa-foundation",
  "copyless",
  "foreign-types",
- "gfx-auxil",
+ "gfx-auxil 0.5.0 (git+https://github.com/gfx-rs/gfx?rev=0244e3401e9f127617cb8636397048584e7bfe8a)",
  "gfx-hal",
  "lazy_static",
  "log",
@@ -1577,7 +1585,6 @@ dependencies = [
 [[package]]
 name = "gfx-hal"
 version = "0.6.0"
-source = "git+https://github.com/gfx-rs/gfx?rev=0244e3401e9f127617cb8636397048584e7bfe8a#0244e3401e9f127617cb8636397048584e7bfe8a"
 dependencies = [
  "bitflags",
  "naga",
@@ -3403,9 +3410,9 @@ dependencies = [
 
 [[package]]
 name = "spirv_cross"
-version = "0.22.1"
+version = "0.22.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea964c42ce40326fe96111918abe71fa45076da1ea85769f3f1ab1cda9a1d496"
+checksum = "0ebd49af36be83ecd6290b57147e2a0e26145b832634b17146d934b197ca3713"
 dependencies = [
  "cc",
  "js-sys",
@@ -4288,3 +4295,7 @@ name = "xml-rs"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b07db065a5cf61a7e4ba64f29e67db906fb1787316516c4e6e5ff0fea1efcd8a"
+
+[[patch.unused]]
+name = "spirv_cross"
+version = "0.22.2"

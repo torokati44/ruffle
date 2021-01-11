@@ -17,6 +17,16 @@ members = [
     "codecs/yuv",
 ]
 
+
+[patch.'https://github.com/gfx-rs/gfx']
+gfx-backend-gl = { path = "../gfx/src/backend/gl" }
+gfx-hal = { path = "../gfx/src/hal" }
+
+
+[patch.'https://github.com/grovesNL/spirv_cross']
+spirv_cross = { path = "../spirv_cross/spirv_cross" }
+
+
 # Don't optimize build scripts and macros.
 [profile.release.build-override]
 opt-level = 0

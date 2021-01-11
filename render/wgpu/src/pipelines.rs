@@ -233,7 +233,7 @@ fn create_color_pipelines(
                     stencil,
                 }),
                 &[wgpu::ColorStateDescriptor {
-                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
                     color_blend: wgpu::BlendDescriptor {
                         src_factor: wgpu::BlendFactor::SrcAlpha,
                         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
@@ -265,7 +265,7 @@ fn create_color_pipelines(
                     stencil,
                 }),
                 &[wgpu::ColorStateDescriptor {
-                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
                     color_blend: wgpu::BlendDescriptor {
                         src_factor: wgpu::BlendFactor::SrcAlpha,
                         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
@@ -297,7 +297,7 @@ fn create_color_pipelines(
                     stencil,
                 }),
                 &[wgpu::ColorStateDescriptor {
-                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
                     color_blend: wgpu::BlendDescriptor {
                         src_factor: wgpu::BlendFactor::SrcAlpha,
                         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
@@ -329,7 +329,7 @@ fn create_color_pipelines(
                     stencil,
                 }),
                 &[wgpu::ColorStateDescriptor {
-                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
                     color_blend: wgpu::BlendDescriptor {
                         src_factor: wgpu::BlendFactor::SrcAlpha,
                         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
@@ -393,7 +393,7 @@ fn create_bitmap_pipeline(
                     stencil,
                 }),
                 &[wgpu::ColorStateDescriptor {
-                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
                     color_blend: wgpu::BlendDescriptor {
                         src_factor: wgpu::BlendFactor::One,
                         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
@@ -425,7 +425,7 @@ fn create_bitmap_pipeline(
                     stencil,
                 }),
                 &[wgpu::ColorStateDescriptor {
-                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
                     color_blend: wgpu::BlendDescriptor {
                         src_factor: wgpu::BlendFactor::SrcAlpha,
                         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
@@ -457,7 +457,7 @@ fn create_bitmap_pipeline(
                     stencil,
                 }),
                 &[wgpu::ColorStateDescriptor {
-                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
                     color_blend: wgpu::BlendDescriptor {
                         src_factor: wgpu::BlendFactor::One,
                         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
@@ -489,7 +489,7 @@ fn create_bitmap_pipeline(
                     stencil,
                 }),
                 &[wgpu::ColorStateDescriptor {
-                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
                     color_blend: wgpu::BlendDescriptor {
                         src_factor: wgpu::BlendFactor::SrcAlpha,
                         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
@@ -552,7 +552,7 @@ fn create_gradient_pipeline(
                     stencil,
                 }),
                 &[wgpu::ColorStateDescriptor {
-                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
                     color_blend: wgpu::BlendDescriptor {
                         src_factor: wgpu::BlendFactor::SrcAlpha,
                         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
@@ -584,7 +584,7 @@ fn create_gradient_pipeline(
                     stencil,
                 }),
                 &[wgpu::ColorStateDescriptor {
-                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
                     color_blend: wgpu::BlendDescriptor {
                         src_factor: wgpu::BlendFactor::SrcAlpha,
                         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
@@ -617,7 +617,7 @@ fn create_gradient_pipeline(
                     stencil,
                 }),
                 &[wgpu::ColorStateDescriptor {
-                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
                     color_blend: wgpu::BlendDescriptor {
                         src_factor: wgpu::BlendFactor::SrcAlpha,
                         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
@@ -649,7 +649,7 @@ fn create_gradient_pipeline(
                     stencil,
                 }),
                 &[wgpu::ColorStateDescriptor {
-                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
                     color_blend: wgpu::BlendDescriptor {
                         src_factor: wgpu::BlendFactor::SrcAlpha,
                         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
