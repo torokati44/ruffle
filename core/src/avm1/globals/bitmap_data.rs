@@ -466,11 +466,107 @@ pub fn noise<'gc>(
 }
 
 pub fn apply_filter<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
+    activation: &mut Activation<'_, 'gc, '_>,
+    this: Object<'gc>,
+    args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    log::warn!("BitmapData.applyFilter - not yet implemented");
+    if let Some(bitmap_data) = this.as_bitmap_data_object() {
+        if !bitmap_data.disposed() {
+            //public applyFilter(sourceBitmap:BitmapData, sourceRect:Rectangle,   destPoint:Point, filter:BitmapFilter) : Number
+
+            let source_bitmap = args
+                .get(0)
+                .unwrap_or(&Value::Undefined)
+                .coerce_to_object(activation);
+
+            let source_rect = args
+                .get(1)
+                .unwrap_or(&Value::Undefined)
+                .coerce_to_object(activation);
+
+            let src_min_x = source_rect
+                .get("x", activation)?
+                .coerce_to_i32(activation)?;
+            let src_min_y = source_rect
+                .get("y", activation)?
+                .coerce_to_i32(activation)?;
+            let src_width = source_rect
+                .get("width", activation)?
+                .coerce_to_i32(activation)?;
+            let src_height = source_rect
+                .get("height", activation)?
+                .coerce_to_i32(activation)?;
+
+            let dest_point = args
+                .get(2)
+                .unwrap_or(&Value::Undefined)
+                .coerce_to_object(activation);
+
+            let dest_x = dest_point.get("x", activation)?.coerce_to_i32(activation)?;
+            let dest_y = dest_point.get("y", activation)?.coerce_to_i32(activation)?;
+
+            if let Some(src_bitmap) = source_bitmap.as_bitmap_data_object() {
+                if !src_bitmap.disposed() {
+                    let mut src_clone;
+                    {
+                        // needed to avoid aliasing if src == dest
+                        src_clone = src_bitmap.bitmap_data().read().clone();
+                    }
+
+                    let obj = args
+                        .get(3)
+                        .unwrap_or(&Value::Undefined)
+                        .coerce_to_object(activation);
+
+                    match obj {
+                        Object::BlurFilterObject(bfd) => {
+                            log::warn!("issa blur");
+                            let bfo = bfd.as_blur_filter_object().unwrap();
+                            /*
+                            bitmap_data
+                                .bitmap_data()
+                                .write(activation.context.gc_context)
+                                .apply_blur(
+                                    &mut src_clone,
+                                    (src_min_x, src_min_y, src_width, src_height),
+                                    (dest_x, dest_y),
+                                    bfo.get_quality(),
+                                    bfo.get_blur_x(),
+                                    bfo.get_blur_y(),
+                                );*/
+                        }
+
+                        Object::BevelFilterObject(bfd) => {
+                            log::warn!("issa bevel");
+                        }
+                        Object::GlowFilterObject(bfd) => {
+                            log::warn!("issa glow");
+                        }
+                        Object::DropShadowFilterObject(bfd) => {
+                            log::warn!("issa dropped shadow");
+                        }
+                        _ => {
+                            log::warn!("issa smth else");
+                            /*
+                            // STUB
+                            bitmap_data
+                                .bitmap_data()
+                                .write(activation.context.gc_context)
+                                .copy_pixels(
+                                    &src_clone,
+                                    (src_min_x, src_min_y, src_width, src_height),
+                                    (dest_x, dest_y),
+                                );
+                                */
+                        }
+                    };
+                }
+            }
+
+            return Ok(Value::Number(0.0));
+        }
+    }
+
     Ok((-1).into())
 }
 
@@ -800,18 +896,61 @@ pub fn copy_pixels<'gc>(
 }
 
 pub fn merge<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+    activation: &mut Activation<'_, 'gc, '_>,
     this: Object<'gc>,
-    _args: &[Value<'gc>],
+    args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
-            log::warn!("BitmapData.merge - not yet implemented");
-            return Ok(Value::Undefined);
+            let source_bitmap = args
+                .get(0)
+                .unwrap_or(&Value::Undefined)
+                .coerce_to_object(activation);
+
+            let source_rect = args
+                .get(1)
+                .unwrap_or(&Value::Undefined)
+                .coerce_to_object(activation);
+
+            let dest_point = args
+                .get(2)
+                .unwrap_or(&Value::Undefined)
+                .coerce_to_object(activation);
+
+            let red_mult = args
+                .get(3)
+                .unwrap_or(&Value::Undefined)
+                .coerce_to_i32(activation)?;
+
+            let green_mult = args
+                .get(4)
+                .unwrap_or(&Value::Undefined)
+                .coerce_to_i32(activation)?;
+
+            let blue_mult = args
+                .get(5)
+                .unwrap_or(&Value::Undefined)
+                .coerce_to_i32(activation)?;
+
+            let alpha_mult = args
+                .get(6)
+                .unwrap_or(&Value::Undefined)
+                .coerce_to_i32(activation)?;
+            /*
+                            if let Some(src_bitmap) = source_bitmap.as_bitmap_data_object() {
+                                if !src_bitmap.disposed() {
+
+                                    bitmap_data
+                                        .bitmap_data()
+                                        .write(activation.context.gc_context)
+                                        .merge(src_bitmap.bitmap_data());
+                                }
+                            }
+            */
         }
     }
 
-    Ok((-1).into())
+    Ok(Value::Undefined)
 }
 
 pub fn palette_map<'gc>(
