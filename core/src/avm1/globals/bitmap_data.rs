@@ -513,11 +513,104 @@ pub fn noise<'gc>(
 }
 
 pub fn apply_filter<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
+    activation: &mut Activation<'_, 'gc, '_>,
+    this: Object<'gc>,
+    args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    log::warn!("BitmapData.applyFilter - not yet implemented");
+    if let Some(bitmap_data) = this.as_bitmap_data_object() {
+        if !bitmap_data.disposed() {
+            let source_bitmap = args
+                .get(0)
+                .unwrap_or(&Value::Undefined)
+                .coerce_to_object(activation);
+
+            let source_rect = args
+                .get(1)
+                .unwrap_or(&Value::Undefined)
+                .coerce_to_object(activation);
+
+            let src_min_x = source_rect
+                .get("x", activation)?
+                .coerce_to_i32(activation)?;
+            let src_min_y = source_rect
+                .get("y", activation)?
+                .coerce_to_i32(activation)?;
+            let src_width = source_rect
+                .get("width", activation)?
+                .coerce_to_i32(activation)?;
+            let src_height = source_rect
+                .get("height", activation)?
+                .coerce_to_i32(activation)?;
+
+            let dest_point = args
+                .get(2)
+                .unwrap_or(&Value::Undefined)
+                .coerce_to_object(activation);
+
+            let dest_x = dest_point.get("x", activation)?.coerce_to_i32(activation)?;
+            let dest_y = dest_point.get("y", activation)?.coerce_to_i32(activation)?;
+
+            if let Some(src_bitmap) = source_bitmap.as_bitmap_data_object() {
+                if !src_bitmap.disposed() {
+                    let mut src_clone;
+                    {
+                        // needed to avoid aliasing if src == dest
+                        src_clone = src_bitmap.bitmap_data().read().clone();
+                    }
+
+                    let obj = args
+                        .get(3)
+                        .unwrap_or(&Value::Undefined)
+                        .coerce_to_object(activation);
+
+                    match obj {
+                        Object::BlurFilterObject(filter_object) => {
+                            let _blur_filter = filter_object.as_blur_filter_object().unwrap();
+                            log::warn!("BitmapData.applyFilter(): BlurFilter not yet implemented");
+                        }
+                        Object::BevelFilterObject(filter_object) => {
+                            let _bevel_filter = filter_object.as_bevel_filter_object().unwrap();
+                            log::warn!("BitmapData.applyFilter(): BevelFilter not yet implemented");
+                        }
+                        Object::GlowFilterObject(filter_object) => {
+                            let _glow_filter = filter_object.as_glow_filter_object().unwrap();
+                            log::warn!("BitmapData.applyFilter(): GlowFilter not yet implemented");
+                        }
+                        Object::DropShadowFilterObject(filter_object) => {
+                            let _drop_shadow_filter = filter_object.as_drop_shadow_filter_object().unwrap();
+                            log::warn!("BitmapData.applyFilter(): DropShadowFilter not yet implemented");
+                        }
+                        Object::GradientGlowFilterObject(filter_object) => {
+                            let _gradient_glow_filter = filter_object.as_gradient_glow_filter_object().unwrap();
+                            log::warn!("BitmapData.applyFilter(): GradientGlowFilter not yet implemented");
+                        }
+                        Object::ConvolutionFilterObject(filter_object) => {
+                            let _convolution_filter = filter_object.as_convolution_filter_object().unwrap();
+                            log::warn!("BitmapData.applyFilter(): ConvolutionFilter not yet implemented");
+                        }
+                        Object::ColorMatrixFilterObject(filter_object) => {
+                            let _color_matrix_filter = filter_object.as_color_matrix_filter_object().unwrap();
+                            log::warn!("BitmapData.applyFilter(): ColorMatrixFilter not yet implemented");
+                        }
+                        Object::GradientBevelFilterObject(filter_object) => {
+                            let _gradient_bevel_filter = filter_object.as_gradient_bevel_filter_object().unwrap();
+                            log::warn!("BitmapData.applyFilter(): GradientBevelFilter not yet implemented");
+                        }
+                        Object::DisplacementMapFilterObject(filter_object) => {
+                            let _displacement_map_filter = filter_object.as_displacement_map_filter_object().unwrap();
+                            log::warn!("BitmapData.applyFilter(): DisplacementMapFilter not yet implemented");
+                        }
+                        _ => {
+                            log::warn!("BitmapData.applyFilter(): Unrecognized filter object");
+                        }
+                    };
+                }
+            }
+
+            return Ok(Value::Number(0.0));
+        }
+    }
+
     Ok((-1).into())
 }
 
