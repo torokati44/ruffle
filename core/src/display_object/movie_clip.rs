@@ -2259,7 +2259,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
         match reader.read_video_frame()? {
             Tag::VideoFrame(vframe) => {
                 let library = context.library.library_for_movie_mut(self.movie());
-                match library.get_character_by_id(vframe.stream_id) {
+                match library.character_by_id(vframe.stream_id) {
                     Some(Character::Video(mut v)) => {
                         v.preload_swf_frame(vframe, context);
 
