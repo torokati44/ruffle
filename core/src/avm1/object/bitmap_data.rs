@@ -65,6 +65,20 @@ impl Color {
         Color::argb(alpha, self.red(), self.green(), self.blue())
     }
 
+    pub fn scaled_to_alpha(&self, new_alpha: u8) -> Color {
+        let old_alpha = self.alpha();
+
+        if old_alpha == 0 {
+            Color::argb(new_alpha, 0, 0, 0)
+        } else {
+            let r = (self.red() as u16 * new_alpha as u16 / old_alpha as u16) as u8;
+            let g = (self.green() as u16 * new_alpha as u16 / old_alpha as u16) as u8;
+            let b = (self.blue() as u16 * new_alpha as u16 / old_alpha as u16) as u8;
+
+            Color::argb(new_alpha, r, g, b)
+        }
+    }
+
     pub fn blend_over(&self, source: &Self) -> Self {
         let sa = source.alpha();
 
@@ -550,10 +564,7 @@ impl BitmapData {
                     // there could be a faster or more accurate way to do this,
                     // (without converting to floats and back, twice),
                     // but for now this should suffice
-                    let intermediate_color = source_color
-                        .to_un_multiplied_alpha()
-                        .with_alpha(final_alpha)
-                        .to_premultiplied_alpha(true);
+                    let intermediate_color = source_color.scaled_to_alpha(final_alpha);
 
                     // there are some interesting conditions in the following
                     // lines, these are a result of comparing the output in
