@@ -1,15 +1,55 @@
 //! Inverse discrete cosine transform
 
 use lazy_static::lazy_static;
-use std::cmp::{max, min};
+use std::{cmp::{max, min}, ops::Mul, ops::Add, ops::AddAssign};
 use std::f32::consts::{FRAC_1_SQRT_2, PI};
+
+#[derive(Clone,Copy)]
+struct FixedPoint(i32);
+
+impl From<f32> for FixedPoint {
+    fn from(x : f32) -> Self {
+        Self((x * (0x100 as f32)) as i32)
+    }
+}
+
+impl From<i16> for FixedPoint {
+    fn from(x : i16) -> Self {
+        Self((x as i32) << 8)
+    }
+}
+
+impl Mul for FixedPoint {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self {
+        Self((self.0 * rhs.0) >> 8)
+    }
+}
+
+impl Add for FixedPoint {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self {
+        Self(self.0 + rhs.0)
+    }
+}
+
+impl AddAssign for FixedPoint {
+    fn add_assign(&mut self, other: Self) {
+        self.0 = self.0 + other.0;
+    }
+}
+impl From<FixedPoint> for f32 {
+    fn from(fp : FixedPoint) -> f32 {
+        fp.0 as f32 / 0x100 as f32
+    }
+}
 
 /// The 1D basis function of the H.263 IDCT.
 ///
 /// `spatial` is the spatial-domain position of the basis function, while
 /// `freq` is the frequency-domain position the LEVEL came from.
-fn basis(spatial: f32, freq: f32) -> f32 {
-    f32::cos(PI * (2.0 * spatial + 1.0) * freq / 16.0)
+fn basis(spatial: f32, freq: f32) -> FixedPoint {
+    FixedPoint::from(f32::cos(PI * (2.0 * spatial + 1.0) * freq / 16.0))
 }
 
 lazy_static! {
@@ -17,7 +57,7 @@ lazy_static! {
     ///
     /// The outer parameter represents all valid `spatial` inputs, while the
     /// inner represents all valid `freq` inputs.
-    static ref BASIS_TABLE : [[f32; 8]; 8] = [
+    static ref BASIS_TABLE : [[FixedPoint; 8]; 8] = [
         [basis(0.0, 0.0), basis(0.0, 1.0), basis(0.0, 2.0), basis(0.0, 3.0),basis(0.0, 4.0),basis(0.0, 5.0),basis(0.0, 6.0),basis(0.0, 7.0)],
         [basis(1.0, 0.0), basis(1.0, 1.0), basis(1.0, 2.0), basis(1.0, 3.0),basis(1.0, 4.0),basis(1.0, 5.0),basis(1.0, 6.0),basis(1.0, 7.0)],
         [basis(2.0, 0.0), basis(2.0, 1.0), basis(2.0, 2.0), basis(2.0, 3.0),basis(2.0, 4.0),basis(2.0, 5.0),basis(2.0, 6.0),basis(2.0, 7.0)],
@@ -28,15 +68,15 @@ lazy_static! {
         [basis(7.0, 0.0), basis(7.0, 1.0), basis(7.0, 2.0), basis(7.0, 3.0),basis(7.0, 4.0),basis(7.0, 5.0),basis(7.0, 6.0),basis(7.0, 7.0)],
     ];
 
-    static ref CUV_TABLE : [[f32; 8]; 8] = [
-        [0.5, FRAC_1_SQRT_2, FRAC_1_SQRT_2, FRAC_1_SQRT_2, FRAC_1_SQRT_2, FRAC_1_SQRT_2, FRAC_1_SQRT_2, FRAC_1_SQRT_2],
-        [FRAC_1_SQRT_2, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-        [FRAC_1_SQRT_2, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-        [FRAC_1_SQRT_2, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-        [FRAC_1_SQRT_2, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-        [FRAC_1_SQRT_2, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-        [FRAC_1_SQRT_2, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-        [FRAC_1_SQRT_2, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+    static ref CUV_TABLE : [[FixedPoint; 8]; 8] = [
+        [FixedPoint::from(0.5), FixedPoint::from(FRAC_1_SQRT_2), FixedPoint::from(FRAC_1_SQRT_2), FixedPoint::from(FRAC_1_SQRT_2), FixedPoint::from(FRAC_1_SQRT_2), FixedPoint::from(FRAC_1_SQRT_2), FixedPoint::from(FRAC_1_SQRT_2), FixedPoint::from(FRAC_1_SQRT_2)],
+        [FixedPoint::from(FRAC_1_SQRT_2), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0)],
+        [FixedPoint::from(FRAC_1_SQRT_2), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0)],
+        [FixedPoint::from(FRAC_1_SQRT_2), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0)],
+        [FixedPoint::from(FRAC_1_SQRT_2), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0)],
+        [FixedPoint::from(FRAC_1_SQRT_2), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0)],
+        [FixedPoint::from(FRAC_1_SQRT_2), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0)],
+        [FixedPoint::from(FRAC_1_SQRT_2), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0), FixedPoint::from(1.0)],
     ];
 }
 
@@ -56,7 +96,7 @@ lazy_static! {
 /// step can happen simultaneously. Otherwise, you should provide an array of
 /// zeroes.
 pub fn idct_channel(
-    block_levels: &[[[f32; 8]; 8]],
+    block_levels: &[[[i16; 8]; 8]],
     output: &mut [u8],
     blk_per_line: usize,
     output_samples_per_line: usize,
@@ -78,7 +118,7 @@ pub fn idct_channel(
                 for x_offset in 0..8 {
                     let x = x_base * 8 + x_offset;
                     let y = y_base * 8 + y_offset;
-                    let mut sum = 0.0;
+                    let mut sum : FixedPoint = FixedPoint(0);
 
                     if x >= output_samples_per_line {
                         continue;
@@ -95,11 +135,12 @@ pub fn idct_channel(
                             let cosx = basis_table[x_offset][u];
                             let cosy = basis_table[y_offset][v];
 
-                            sum += cuv * *coeff * cosx * cosy;
+                            sum += cuv * FixedPoint::from(*coeff) * cosx * cosy;
                         }
                     }
 
-                    let clipped_sum = min(255, max(-256, (sum / 4.0 + sum.signum() * 0.5) as i16));
+                    let sm : f32 = f32::from(sum);
+                    let clipped_sum = min(255, max(-256, (sm / 4.0 + sm.signum() * 0.5) as i16));
                     let mocomp_pixel = output[x + (y * output_samples_per_line)] as u16 as i16;
 
                     output[x + (y * output_samples_per_line)] =
