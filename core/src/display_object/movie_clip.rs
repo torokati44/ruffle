@@ -1070,6 +1070,7 @@ impl<'gc> MovieClip<'gc> {
         let tag_stream_start = mc.static_data.swf.as_ref().as_ptr() as u64;
         let data = mc.static_data.swf.clone();
         let mut reader = data.read_from(mc.tag_stream_pos);
+        let mut end_tag_encountered = false;
         drop(mc);
 
         let vm_type = context.avm_type();
@@ -1094,9 +1095,24 @@ impl<'gc> MovieClip<'gc> {
             TagCode::SetBackgroundColor => self.set_background_color(context, reader),
             TagCode::StartSound => self.start_sound_1(context, reader),
             TagCode::SoundStreamBlock => self.sound_stream_block(context, reader),
+            TagCode::End => {
+                end_tag_encountered = true;
+                Ok(())
+            }
             _ => Ok(()),
         };
         let _ = tag_utils::decode_tags(&mut reader, tag_callback, TagCode::ShowFrame);
+
+        if end_tag_encountered {
+            // Hitting an "End" tag causes a loop, and acts exactly like a gotoAndPlay(1).
+            if self.current_frame() > 1 {
+                self.run_goto(context, 1, true);
+                return;
+            } else {
+                // Single frame clips stop and do not loop.
+                self.stop(context);
+            }
+        }
 
         let mut write = self.0.write(context.gc_context);
         write.tag_stream_pos = reader.get_ref().as_ptr() as u64 - tag_stream_start;
