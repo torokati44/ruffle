@@ -1,13 +1,16 @@
 //! YUV-to-RGB decode
 
+#[inline(always)]
 fn clamp(v: f32) -> u8 {
-    (v + 0.5).max(0.0).min(255.0) as u8
+    (v + 0.5) as u8
 }
 
+#[inline(always)]
 pub fn clamped_index(width: i32, height: i32, x: i32, y: i32) -> usize {
     (x.max(0).min(width - 1) + (y.max(0).min(height - 1) * width)) as usize
 }
 
+#[inline(always)]
 pub fn unclamped_index(width: i32, x: i32, y: i32) -> usize {
     (x + y * width) as usize
 }
@@ -86,6 +89,7 @@ pub fn sample_chroma_for_luma(
     ((sample + 8) / 16) as u8
 }
 
+#[inline(always)]
 fn yuv_to_rgb(yuv: (f32, f32, f32)) -> (f32, f32, f32) {
     let (mut y_sample, mut b_sample, mut r_sample) = yuv;
 
@@ -100,6 +104,7 @@ fn yuv_to_rgb(yuv: (f32, f32, f32)) -> (f32, f32, f32) {
     (r, g, b)
 }
 
+#[inline(always)]
 fn convert_and_write_pixel(
     yuv: (f32, f32, f32),
     rgba: &mut Vec<u8>,
