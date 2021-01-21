@@ -1429,6 +1429,7 @@ impl<'gc> MovieClip<'gc> {
         let tag_stream_start = mc.static_data.swf.as_ref().as_ptr() as u64;
         let data = mc.static_data.swf.clone();
         let mut reader = data.read_from(mc.tag_stream_pos);
+        let mut end_tag_encountered = false;
         drop(mc);
 
         use swf::TagCode;
@@ -1475,6 +1476,10 @@ impl<'gc> MovieClip<'gc> {
                 TagCode::StartSound if run_sounds => self.start_sound_1(context, reader),
                 TagCode::SoundStreamBlock if run_sounds => self.sound_stream_block(context, reader),
                 TagCode::ShowFrame => return Ok(ControlFlow::Exit),
+                TagCode::End => {
+                    end_tag_encountered = true;
+                    Ok(())
+                }
                 _ => Ok(()),
             }?;
 
@@ -1497,6 +1502,17 @@ impl<'gc> MovieClip<'gc> {
 
             if let Err(e) = self.remove_object(context, &mut reader, version) {
                 tracing::error!("Error running queued tag: {:?}, got {}", tag.tag_type, e);
+            }
+        }
+
+        if end_tag_encountered {
+            // Hitting an "End" tag causes a loop, and acts exactly like a gotoAndPlay(1).
+            if self.current_frame() > 1 {
+                self.run_goto(context, 1, true);
+                return;
+            } else {
+                // Single frame clips stop and do not loop.
+                self.stop(context);
             }
         }
 
