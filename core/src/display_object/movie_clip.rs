@@ -1008,6 +1008,7 @@ impl<'gc> MovieClip<'gc> {
         let data = mc.static_data.swf.clone();
         let mut reader = data.read_from(mc.tag_stream_pos);
         let mut has_stream_block = false;
+        let mut end_tag_encountered = false;
         drop(mc);
 
         use swf::TagCode;
@@ -1033,9 +1034,18 @@ impl<'gc> MovieClip<'gc> {
                 has_stream_block = true;
                 self.sound_stream_block(context, reader)
             }
+            TagCode::End => {
+                end_tag_encountered = true;
+                Ok(())
+            }
             _ => Ok(()),
         };
         let _ = tag_utils::decode_tags(&mut reader, tag_callback, TagCode::ShowFrame);
+
+        if end_tag_encountered && self.total_frames() > 1 {
+            self.run_goto(self_display_object, context, 1);
+            return;
+        }
 
         self.0.write(context.gc_context).tag_stream_pos =
             reader.get_ref().as_ptr() as u64 - tag_stream_start;
