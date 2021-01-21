@@ -1001,25 +1001,13 @@ impl<'gc> MovieClip<'gc> {
         context: &mut UpdateContext<'_, 'gc, '_>,
         run_display_actions: bool,
     ) {
-        // Advance frame number.
-        if self.current_frame() < self.total_frames() {
-            self.0.write(context.gc_context).current_frame += 1;
-        } else if self.total_frames() > 1 {
-            // Looping acts exactly like a gotoAndPlay(1).
-            // Specifically, object that existed on frame 1 should not be destroyed
-            // and recreated.
-            self.run_goto(self_display_object, context, 1);
-            return;
-        } else {
-            // Single frame clips do not play.
-            self.stop(context);
-        }
-
         let mc = self.0.read();
         let tag_stream_start = mc.static_data.swf.as_ref().as_ptr() as u64;
         let data = mc.static_data.swf.clone();
         let mut reader = data.read_from(mc.tag_stream_pos);
         let mut has_stream_block = false;
+        let mut show_frame_encountered = false;
+        let mut end_tag_encountered = false;
         drop(mc);
 
         use swf::TagCode;
@@ -1045,9 +1033,31 @@ impl<'gc> MovieClip<'gc> {
                 has_stream_block = true;
                 self.sound_stream_block(context, reader)
             }
+            TagCode::ShowFrame => {
+                show_frame_encountered = true;
+                Ok(())
+            }
+            TagCode::End => {
+                end_tag_encountered = true;
+                Ok(())
+            }
             _ => Ok(()),
         };
         let _ = tag_utils::decode_tags(&mut reader, tag_callback, TagCode::ShowFrame);
+
+        if end_tag_encountered {
+            // Hitting an "End" tag causes a loop, and acts exactly like a gotoAndPlay(1).
+            if self.current_frame() > 1 {
+                self.run_goto(self_display_object, context, 1);
+                return;
+            } else {
+                // Single frame clips stop and do not loop.
+                self.stop(context);
+            }
+        } else if show_frame_encountered {
+            // Advance frame number.
+            self.0.write(context.gc_context).current_frame += 1;
+        }
 
         self.0.write(context.gc_context).tag_stream_pos =
             reader.get_ref().as_ptr() as u64 - tag_stream_start;
