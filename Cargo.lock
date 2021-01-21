@@ -1381,7 +1381,7 @@ dependencies = [
  "futures-sink",
  "futures-task",
  "memchr",
- "pin-project-lite 0.2.4",
+ "pin-project-lite",
  "pin-utils",
  "proc-macro-hack",
  "proc-macro-nested",
@@ -2674,12 +2674,6 @@ dependencies = [
 
 [[package]]
 name = "pin-project-lite"
-version = "0.1.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c917123afa01924fc84bb20c4c03f004d9c38e5127e3c039bbf7f4b9c76a2f6b"
-
-[[package]]
-name = "pin-project-lite"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "439697af366c49a6d0a010c56a0d97685bc140ce0d377b13a2ea2aa42d64a827"
@@ -3012,6 +3006,7 @@ dependencies = [
  "log",
  "minimp3",
  "nelly2pcm_rs",
+ "num-complex",
  "num-traits",
  "num_enum 0.5.1",
  "percent-encoding",
@@ -3023,6 +3018,7 @@ dependencies = [
  "ruffle_codec_h263",
  "ruffle_codec_yuv",
  "ruffle_macros",
+ "rustdct",
  "serde",
  "smallvec",
  "swf",
@@ -3794,7 +3790,7 @@ checksum = "9f47026cdc4080c07e49b37087de021820269d996f581aac150ef9e5583eefe3"
 dependencies = [
  "cfg-if 1.0.0",
  "log",
- "pin-project-lite 0.2.4",
+ "pin-project-lite",
  "tracing-attributes",
  "tracing-core",
 ]
