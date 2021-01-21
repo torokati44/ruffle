@@ -453,7 +453,9 @@ impl Player {
             self.frame_accumulator += dt;
             let frame_time = 1000.0 / self.frame_rate;
 
-            const MAX_FRAMES_PER_TICK: u32 = 5; // Sanity cap on frame tick.
+            // A value of 1 will prefer staying behind the audio as opposed
+            // to getting stuck in a choppy frameskipfest.
+            const MAX_FRAMES_PER_TICK: u32 = 1; // Sanity cap on frame tick.
             let mut frame = 0;
             while frame < MAX_FRAMES_PER_TICK && self.frame_accumulator >= frame_time {
                 self.frame_accumulator -= frame_time;
