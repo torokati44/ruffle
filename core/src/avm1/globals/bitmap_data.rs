@@ -475,13 +475,29 @@ pub fn apply_filter<'gc>(
 }
 
 pub fn draw<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+    activation: &mut Activation<'_, 'gc, '_>,
     this: Object<'gc>,
-    _args: &[Value<'gc>],
+    args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    if let Some(bitmap_data) = this.as_bitmap_data_object() {
+    if let Some(mut bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
-            log::warn!("BitmapData.draw - not yet implemented");
+
+            let source = args
+                .get(0)
+                .unwrap_or(&Value::Undefined)
+                .coerce_to_object(activation);
+
+
+            if let Some(source_bitmap) = source.as_bitmap_data_object() {
+                if !source_bitmap.disposed() {
+                    bitmap_data.clone_from(&source_bitmap);
+                }
+            }
+            else {
+                log::warn!("BitmapData.draw - not yet implemented");
+                println!("{:?}", source);
+            }
+
             return Ok(Value::Undefined);
         }
     }
