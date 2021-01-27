@@ -9,11 +9,13 @@ use ruffle_codec_h263::parser::{decode_picture, H263Reader};
 use ruffle_codec_h263::{DecoderOption, H263State, PictureTypeCode};
 use ruffle_codec_yuv::bt601::yuv420_to_rgba;
 use swf::{VideoCodec, VideoDeblocking};
+use vp6_dec_rs::VP6State;
 
 /// A single preloaded video stream.
 pub enum VideoStream {
     /// An H.263 video stream.
     H263(H263State, Option<BitmapHandle>),
+    VP6(VP6State, Option<BitmapHandle>),
 }
 
 /// Desktop video backend.
@@ -52,6 +54,7 @@ impl VideoBackend for SoftwareVideoBackend {
                 H263State::new(DecoderOption::SORENSON_SPARK_BITSTREAM),
                 None,
             ))),
+            VideoCodec::VP6 => Ok(self.streams.insert(VideoStream::VP6(VP6State::new(), None))),
             _ => Err(format!("Unsupported video codec type {:?}", codec).into()),
         }
     }
@@ -79,6 +82,10 @@ impl VideoBackend for SoftwareVideoBackend {
                     PictureTypeCode::DisposablePFrame => Ok(FrameDependency::LastFrame),
                     _ => Err("Invalid picture type code!".into()),
                 }
+            }
+            VideoStream::VP6(_state, _last_bitmap) => {
+                // TODO actually parse the frame header and report correctly
+                Ok(FrameDependency::Keyframe)
             }
         }
     }
@@ -124,6 +131,23 @@ impl VideoBackend for SoftwareVideoBackend {
                     handle,
                     width,
                     height,
+                })
+            }
+            VideoStream::VP6(state, last_bitmap) => {
+                let (rgba, (width, height)) = state.decode(encoded_frame.data);
+
+                let handle = if let Some(lb) = last_bitmap {
+                    renderer.update_texture(*lb, width as u32, height as u32, rgba)?
+                } else {
+                    renderer.register_bitmap_raw(width as u32, height as u32, rgba)?
+                };
+
+                *last_bitmap = Some(handle);
+
+                Ok(BitmapInfo {
+                    handle,
+                    width: width as u16,
+                    height: height as u16,
                 })
             }
         }
