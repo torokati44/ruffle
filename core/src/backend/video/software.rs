@@ -9,11 +9,14 @@ use ruffle_codec_h263::parser::{decode_picture, H263Reader};
 use ruffle_codec_h263::{DecoderOption, H263State, PictureTypeCode};
 use ruffle_codec_yuv::bt601::yuv420_to_rgba;
 use swf::{VideoCodec, VideoDeblocking};
+use vp6_dec_rs::VP6State;
 
 /// A single preloaded video stream.
 pub enum VideoStream {
     /// An H.263 video stream.
     H263(H263State, Option<BitmapHandle>),
+    /// A VP6 video stream, with or without alpha channel.
+    Vp6(VP6State, Option<BitmapHandle>),
 }
 
 /// Software video backend that proxies to CPU-only codec implementations that
@@ -49,6 +52,12 @@ impl VideoBackend for SoftwareVideoBackend {
                 H263State::new(DecoderOption::SORENSON_SPARK_BITSTREAM),
                 None,
             ))),
+            VideoCodec::Vp6 => Ok(self
+                .streams
+                .insert(VideoStream::Vp6(VP6State::new(false), None))),
+            VideoCodec::Vp6WithAlpha => Ok(self
+                .streams
+                .insert(VideoStream::Vp6(VP6State::new(true), None))),
             _ => Err(format!("Unsupported video codec type {:?}", codec).into()),
         }
     }
@@ -76,6 +85,16 @@ impl VideoBackend for SoftwareVideoBackend {
                     PictureTypeCode::DisposablePFrame => Ok(FrameDependency::Past),
                     _ => Err("Invalid picture type code!".into()),
                 }
+            },
+            VideoStream::Vp6(_state, _last_bitmap) => {
+                // Luckily the very first bit of the encoded frames is exactly
+                // this flag, so we don't have to bother asking any "proper"
+                // decoder or parser.
+                Ok(if (encoded_frame.data[0] & 0b_1000_0000) == 0 {
+                    FrameDependency::None
+                } else {
+                    FrameDependency::Past
+                })
             }
         }
     }
@@ -119,8 +138,25 @@ impl VideoBackend for SoftwareVideoBackend {
 
                 Ok(BitmapInfo {
                     handle,
-                    width,
-                    height,
+                    width: width as u16,
+                    height: height as u16,
+                })
+	    }
+            VideoStream::Vp6(state, last_bitmap) => {
+                let (rgba, (width, height)) = state.decode(encoded_frame.data);
+
+                let handle = if let Some(lb) = last_bitmap {
+                    renderer.update_texture(*lb, width as u32, height as u32, rgba)?
+                } else {
+                    renderer.register_bitmap_raw(width as u32, height as u32, rgba)?
+                };
+
+                *last_bitmap = Some(handle);
+
+                Ok(BitmapInfo {
+                    handle,
+                    width: width as u16,
+                    height: height as u16,
                 })
             }
         }
