@@ -2967,6 +2967,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ruffle_codec_vp6"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "ruffle_codec_yuv"
 version = "0.1.0"
 
@@ -3002,6 +3009,7 @@ dependencies = [
  "quick-xml",
  "rand",
  "ruffle_codec_h263",
+ "ruffle_codec_vp6",
  "ruffle_codec_yuv",
  "ruffle_macros",
  "serde",
