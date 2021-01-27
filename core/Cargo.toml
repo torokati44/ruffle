@@ -38,6 +38,7 @@ rand = { version = "0.8.3", features = ["std", "small_rng"], default-features = 
 serde = { version = "1.0.123", features = ["derive"], optional = true }
 nellymoser-rs = { git = "https://github.com/ruffle-rs/nellymoser", branch = "main" }
 ruffle_codec_h263 = { path = "../codecs/h263" }
+ruffle_codec_vp6 = { path = "../codecs/vp6" }
 ruffle_codec_yuv = { path = "../codecs/yuv" }
 
 [dependencies.jpeg-decoder]
