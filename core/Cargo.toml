@@ -40,6 +40,7 @@ nellymoser-rs = { git = "https://github.com/ruffle-rs/nellymoser", branch = "mai
 regress = "0.2"
 ruffle_codec_h263 = { path = "../codecs/h263" }
 ruffle_codec_yuv = { path = "../codecs/yuv" }
+vp6-dec-rs = { git = "https://github.com/torokati44/vp6-dec-rs", branch = "main", features = ["allow-lgpl"] }
 
 [dependencies.jpeg-decoder]
 version = "0.1.22"
