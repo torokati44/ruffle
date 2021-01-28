@@ -2979,6 +2979,9 @@ dependencies = [
 [[package]]
 name = "ruffle_codec_vp6"
 version = "0.1.0"
+dependencies = [
+ "cc",
+]
 
 [[package]]
 name = "ruffle_codec_yuv"
