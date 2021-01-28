@@ -75,3 +75,78 @@ extern "C" {
     pub fn frame_linesize(arg1: *mut AVFrame, arg2: ::std::os::raw::c_int)
         -> ::std::os::raw::c_int;
 }
+
+
+
+use std::marker::Sized;
+use std::mem::size_of;
+use std::alloc::{
+    Layout,
+    alloc as underlying_alloc,
+    dealloc as underlying_dealloc,
+};
+
+unsafe fn wrapped_alloc(size : u32) -> *mut u8 {
+    // Compute a layout sufficient to store `AllocInfo`
+    // immediately before it.
+    let modified_layout = Layout::from_size_align(size as usize + 4, 4).unwrap();
+
+    let orig_ptr = underlying_alloc(modified_layout);
+    if orig_ptr.is_null() {
+        return orig_ptr;
+    }
+
+    let result_ptr = orig_ptr.add(4);
+
+    (orig_ptr.add(4) as *mut u32).write_unaligned(size);
+
+    result_ptr
+}
+
+unsafe fn wrapped_dealloc(ptr: *mut u8) {
+    assert!(!ptr.is_null());
+    let info_ptr = ptr.sub(4);
+    let size = (info_ptr as *mut u32).read_unaligned();
+    underlying_dealloc(ptr, Layout::from_size_align(size as usize, 4).unwrap());
+}
+
+
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+fn malloc(bytes: usize) -> *mut u8 {
+    unsafe {
+        wrapped_alloc(bytes as u32)
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+fn realloc(ptr: *mut u8, bytes: usize) -> *mut u8 {
+    unsafe {
+        if ptr.is_null() {
+            return malloc(bytes);
+        }
+
+        let info_ptr = ptr.sub(4);
+        let size = (info_ptr as *mut u32).read_unaligned();
+
+        let new_ptr = malloc(bytes);
+
+        for i in 0..bytes.min(size as usize) {
+            new_ptr.add(i).write_unaligned(ptr.add(i).read_unaligned());
+        }
+
+        new_ptr
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+fn free(ptr: *mut u8) {
+    unsafe {
+        if !ptr.is_null() {
+            //wrapped_dealloc(ptr)
+        }
+    }
+}

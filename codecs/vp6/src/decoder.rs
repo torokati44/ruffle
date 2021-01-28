@@ -53,7 +53,7 @@ impl VP6State {
                 frame_data( self.frame, 0),
                 num_pixels as usize,
             );
-            println!("size: {:} {:}", w, h);
+
             let mut r = vec![255; num_pixels*4];
             for i in 0..num_pixels {
                 let v = (*d)[i];
