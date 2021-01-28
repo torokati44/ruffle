@@ -25,7 +25,7 @@ pub struct AVDictionary {
     private: [u8; 0],
 }
 
-const AV_INPUT_BUFFER_PADDING_SIZE: u64 = 8;
+pub const AV_INPUT_BUFFER_PADDING_SIZE: u64 = 8;
 
 extern "C" {
     pub fn avcodec_alloc_context3(codec: *const AVCodec) -> *mut AVCodecContext;

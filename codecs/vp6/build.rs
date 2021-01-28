@@ -44,6 +44,7 @@ fn main() {
             "extern/libavutil/eval.c",
             "extern/libavcodec/options.c",
             "extern/libavcodec/null_bsf.c",
+            "src/helpers.c",
         ])
         .define("HAVE_AV_CONFIG_H", None)
         .includes(&["extern", "extern/libavutil", "extern/libavcodec"])

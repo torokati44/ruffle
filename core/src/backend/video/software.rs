@@ -55,7 +55,7 @@ impl VideoBackend for SoftwareVideoBackend {
                 None,
             ))),
             VideoCodec::VP6 => Ok(self.streams.insert(VideoStream::VP6(
-                VP6State {decoded_frames: 0 },
+                VP6State::new(),
                 None,
             ))),
             _ => Err(format!("Unsupported video codec type {:?}", codec).into()),
@@ -139,29 +139,22 @@ impl VideoBackend for SoftwareVideoBackend {
             VideoStream::VP6(state, last_bitmap)  => {
                 state.decoded_frames += 1;
                 log::warn!("decoding vp6 frame {:}...", state.decoded_frames);
-                let (width, height) = (100_u16, 100_u16);
 
-                let mut rgba = vec![0; width as usize * height as usize * 4];
-                for i in 0..(width as usize * height as usize) {
-                    rgba[i*4 + 3]  = 255;
-                }
-                rgba[state.decoded_frames as usize * 17] = 255;
-                rgba[state.decoded_frames as usize * 17+1] = 255;
-                rgba[state.decoded_frames as usize * 17+2] = 255;
-                rgba[state.decoded_frames as usize * 17+3] = 255;
+
+                let (rgba, (width, height)) = state.decode(encoded_frame.data);
 
                 let handle = if let Some(lb) = last_bitmap {
-                    renderer.update_texture(*lb, width.into(), height.into(), rgba)?
+                    renderer.update_texture(*lb, width as u32, height as u32, rgba)?
                 } else {
-                    renderer.register_bitmap_raw(width.into(), height.into(), rgba)?
+                    renderer.register_bitmap_raw(width as u32, height as u32, rgba)?
                 };
 
                 *last_bitmap = Some(handle);
 
                 Ok(BitmapInfo {
                     handle,
-                    width,
-                    height,
+                    width: width as u16,
+                    height: height as u16,
                 })
             }
         }
