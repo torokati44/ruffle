@@ -30,15 +30,12 @@ impl VP6State {
 
     pub fn decode(&mut self, encoded_frame: &[u8]) -> (Vec<u8>, (usize, usize)) {
         unsafe {
-            let inbuf =
-                av_malloc(encoded_frame.len() as usize + AV_INPUT_BUFFER_PADDING_SIZE as usize)
-                    as *mut u8;
+            packet_set_size(self.packet, encoded_frame.len() as i32);
 
+            let data = packet_data(self.packet);
             for (i, e) in encoded_frame.iter().enumerate() {
-                (*slice_from_raw_parts_mut(inbuf, encoded_frame.len()))[i] = *e;
+                (*slice_from_raw_parts_mut(data, encoded_frame.len()))[i] = *e;
             }
-
-            av_packet_from_data(self.packet, inbuf, encoded_frame.len() as i32);
 
             let ret = avcodec_send_packet(self.context, self.packet);
             let ret = avcodec_receive_frame(self.context, self.yuv_frame);

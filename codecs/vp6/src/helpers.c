@@ -9,6 +9,19 @@ extern AVCodec ff_vp6f_decoder;
 AVCodec *ff_vp6f_decoder_ptr = &ff_vp6f_decoder;
 
 
+void packet_set_size(AVPacket *p, int size) {
+    if (p->size < size) {
+        av_grow_packet(p, size - p->size);
+    }
+    else if (p->size > size) {
+        av_shrink_packet(p, size);
+    }
+}
+
+unsigned char *packet_data(AVPacket *p) {
+    return p->data;
+}
+
 int frame_width(AVFrame *f) {
     return f->width;
 }

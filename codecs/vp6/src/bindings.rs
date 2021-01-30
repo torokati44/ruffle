@@ -29,8 +29,6 @@ pub struct SwsContext {
     private: [u8; 0],
 }
 
-pub const AV_INPUT_BUFFER_PADDING_SIZE: u64 = 8;
-
 extern "C" {
     pub fn avcodec_alloc_context3(codec: *const AVCodec) -> *mut AVCodecContext;
     pub fn avcodec_free_context(avctx: *mut *mut AVCodecContext);
@@ -41,14 +39,7 @@ extern "C" {
         options: *mut *mut AVDictionary,
     ) -> ::std::os::raw::c_int;
 
-    pub fn av_malloc(size: usize) -> *mut ::std::os::raw::c_void;
-
     pub fn av_packet_alloc() -> *mut AVPacket;
-    pub fn av_packet_from_data(
-        pkt: *mut AVPacket,
-        data: *mut u8,
-        size: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
     pub fn av_packet_free(pkt: *mut *mut AVPacket);
 
     pub fn av_frame_alloc() -> *mut AVFrame;
@@ -69,6 +60,11 @@ extern "C" {
 extern "C" {
     pub static mut ff_vp6f_decoder_ptr: *mut AVCodec;
 
+    pub fn packet_set_size(pkt :*mut AVPacket, size: i32);
+    pub fn packet_data(
+        arg1: *mut AVPacket,
+    ) -> *mut ::std::os::raw::c_uchar;
+
     pub fn frame_width(arg1: *mut AVFrame) -> ::std::os::raw::c_int;
     pub fn frame_height(arg1: *mut AVFrame) -> ::std::os::raw::c_int;
     pub fn frame_data(
@@ -86,22 +82,21 @@ extern "C" {
     );
 }
 
-use std::alloc::{alloc as underlying_alloc, dealloc as underlying_dealloc, Layout};
 use std::marker::Sized;
 use std::mem::size_of;
+use std::{alloc::Layout, ptr::write_unaligned};
 
 #[cfg(target_arch = "wasm32")]
 unsafe fn wrapped_alloc(size: u32) -> *mut u8 {
-    let modified_layout = Layout::from_size_align(size as usize + 4, 4).unwrap();
-
-    let orig_ptr = underlying_alloc(modified_layout);
-    if orig_ptr.is_null() {
-        return orig_ptr;
+    let modified_size = size as usize + 4;
+    let info_ptr = std::alloc::alloc(Layout::from_size_align(modified_size, 4).unwrap());
+    if info_ptr.is_null() {
+        return info_ptr;
     }
 
-    let result_ptr = orig_ptr.add(4);
+    let result_ptr = info_ptr.add(4);
 
-    (orig_ptr.add(4) as *mut u32).write_unaligned(size);
+    (info_ptr as *mut u32).write_unaligned(modified_size as u32);
 
     result_ptr
 }
@@ -110,45 +105,44 @@ unsafe fn wrapped_alloc(size: u32) -> *mut u8 {
 unsafe fn wrapped_dealloc(ptr: *mut u8) {
     assert!(!ptr.is_null());
     let info_ptr = ptr.sub(4);
-    let size = (info_ptr as *mut u32).read_unaligned();
-    underlying_dealloc(ptr, Layout::from_size_align(size as usize, 4).unwrap());
+    let modified_size = (info_ptr as *mut u32).read_unaligned();
+    std::alloc::dealloc(info_ptr, Layout::from_size_align(modified_size as usize, 4).unwrap());
 }
 
 #[cfg(target_arch = "wasm32")]
 #[no_mangle]
-fn malloc(bytes: usize) -> *mut u8 {
+fn vp6_custom_malloc(bytes: usize) -> *mut u8 {
     unsafe { wrapped_alloc(bytes as u32) }
 }
 
 #[cfg(target_arch = "wasm32")]
 #[no_mangle]
-fn realloc(ptr: *mut u8, bytes: usize) -> *mut u8 {
+fn vp6_custom_realloc(ptr: *mut u8, bytes: usize) -> *mut u8 {
     unsafe {
         if ptr.is_null() {
-            return malloc(bytes);
+            return vp6_custom_malloc(bytes);
         }
 
         let info_ptr = ptr.sub(4);
-        let size = (info_ptr as *mut u32).read_unaligned();
+        let old_size = (info_ptr as *mut u32).read_unaligned();
+        let new_size = bytes + 4;
+        let new_ptr = std::alloc::realloc(
+            info_ptr,
+            Layout::from_size_align(old_size as usize, 4).unwrap(),
+            new_size,
+        );
 
-        let new_ptr = malloc(bytes);
-
-        for i in 0..bytes.min(size as usize) {
-            new_ptr.add(i).write_unaligned(ptr.add(i).read_unaligned());
-        }
-
-        free(ptr);
-
-        new_ptr
+        (new_ptr as *mut u32).write_unaligned(new_size as u32);
+        new_ptr.add(4)
     }
 }
 
 #[cfg(target_arch = "wasm32")]
 #[no_mangle]
-fn free(ptr: *mut u8) {
+fn vp6_custom_free(ptr: *mut u8) {
     unsafe {
         if !ptr.is_null() {
-            //wrapped_dealloc(ptr)
+            wrapped_dealloc(ptr)
         }
     }
 }

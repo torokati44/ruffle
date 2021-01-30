@@ -64,6 +64,7 @@ fn main() {
         build.include("extern/config-web");
         build.include("src/fakelibc");
         build.file("src/fakelibc/impl.c");
+        build.define("MALLOC_PREFIX", "vp6_custom_");
     } else {
         build.include("extern/config-desktop");
     }
