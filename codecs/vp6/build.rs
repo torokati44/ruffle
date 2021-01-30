@@ -49,6 +49,14 @@ fn main() {
         "extern/libavutil/eval.c",
         "extern/libavcodec/options.c",
         "extern/libavcodec/null_bsf.c",
+        "extern/libswscale/swscale.c",
+        "extern/libswscale/swscale_unscaled.c",
+        "extern/libswscale/utils.c",
+        "extern/libswscale/rgb2rgb.c",
+        "extern/libswscale/yuv2rgb.c",
+        "extern/libswscale/output.c",
+        "extern/libswscale/options.c",
+        "extern/libswscale/input.c",
         "src/helpers.c",
     ]);
 
@@ -56,8 +64,7 @@ fn main() {
         build.include("extern/config-web");
         build.include("src/fakelibc");
         build.file("src/fakelibc/impl.c");
-    }
-    else {
+    } else {
         build.include("extern/config-desktop");
     }
 

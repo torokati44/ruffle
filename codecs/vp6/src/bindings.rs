@@ -24,6 +24,10 @@ pub struct AVCodecContext {
 pub struct AVDictionary {
     private: [u8; 0],
 }
+#[repr(C)]
+pub struct SwsContext {
+    private: [u8; 0],
+}
 
 pub const AV_INPUT_BUFFER_PADDING_SIZE: u64 = 8;
 
@@ -65,7 +69,6 @@ extern "C" {
 extern "C" {
     pub static mut ff_vp6f_decoder_ptr: *mut AVCodec;
 
-
     pub fn frame_width(arg1: *mut AVFrame) -> ::std::os::raw::c_int;
     pub fn frame_height(arg1: *mut AVFrame) -> ::std::os::raw::c_int;
     pub fn frame_data(
@@ -74,21 +77,21 @@ extern "C" {
     ) -> *mut ::std::os::raw::c_uchar;
     pub fn frame_linesize(arg1: *mut AVFrame, arg2: ::std::os::raw::c_int)
         -> ::std::os::raw::c_int;
+
+    pub fn make_converter_context(yuv_frame: *mut AVFrame) -> *mut SwsContext;
+    pub fn convert_yuv_to_rgba(
+        context: *mut SwsContext,
+        yuv_frame: *mut AVFrame,
+        rgba_data: *mut u8,
+    );
 }
 
-
-
+use std::alloc::{alloc as underlying_alloc, dealloc as underlying_dealloc, Layout};
 use std::marker::Sized;
 use std::mem::size_of;
-use std::alloc::{
-    Layout,
-    alloc as underlying_alloc,
-    dealloc as underlying_dealloc,
-};
 
-unsafe fn wrapped_alloc(size : u32) -> *mut u8 {
-    // Compute a layout sufficient to store `AllocInfo`
-    // immediately before it.
+#[cfg(target_arch = "wasm32")]
+unsafe fn wrapped_alloc(size: u32) -> *mut u8 {
     let modified_layout = Layout::from_size_align(size as usize + 4, 4).unwrap();
 
     let orig_ptr = underlying_alloc(modified_layout);
@@ -103,6 +106,7 @@ unsafe fn wrapped_alloc(size : u32) -> *mut u8 {
     result_ptr
 }
 
+#[cfg(target_arch = "wasm32")]
 unsafe fn wrapped_dealloc(ptr: *mut u8) {
     assert!(!ptr.is_null());
     let info_ptr = ptr.sub(4);
@@ -110,14 +114,10 @@ unsafe fn wrapped_dealloc(ptr: *mut u8) {
     underlying_dealloc(ptr, Layout::from_size_align(size as usize, 4).unwrap());
 }
 
-
-
 #[cfg(target_arch = "wasm32")]
 #[no_mangle]
 fn malloc(bytes: usize) -> *mut u8 {
-    unsafe {
-        wrapped_alloc(bytes as u32)
-    }
+    unsafe { wrapped_alloc(bytes as u32) }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -136,6 +136,8 @@ fn realloc(ptr: *mut u8, bytes: usize) -> *mut u8 {
         for i in 0..bytes.min(size as usize) {
             new_ptr.add(i).write_unaligned(ptr.add(i).read_unaligned());
         }
+
+        free(ptr);
 
         new_ptr
     }

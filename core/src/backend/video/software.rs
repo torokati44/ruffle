@@ -54,10 +54,7 @@ impl VideoBackend for SoftwareVideoBackend {
                 H263State::new(DecoderOption::SORENSON_SPARK_BITSTREAM),
                 None,
             ))),
-            VideoCodec::VP6 => Ok(self.streams.insert(VideoStream::VP6(
-                VP6State::new(),
-                None,
-            ))),
+            VideoCodec::VP6 => Ok(self.streams.insert(VideoStream::VP6(VP6State::new(), None))),
             _ => Err(format!("Unsupported video codec type {:?}", codec).into()),
         }
     }
@@ -136,10 +133,8 @@ impl VideoBackend for SoftwareVideoBackend {
                     height,
                 })
             }
-            VideoStream::VP6(state, last_bitmap)  => {
-                state.decoded_frames += 1;
-                log::warn!("decoding vp6 frame {:}...", state.decoded_frames);
-
+            VideoStream::VP6(state, last_bitmap) => {
+                log::warn!("decoding vp6 frame...");
 
                 let (rgba, (width, height)) = state.decode(encoded_frame.data);
 
