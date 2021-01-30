@@ -39,6 +39,7 @@ impl VP6State {
 
             let ret = avcodec_send_packet(self.context, self.packet);
             let ret = avcodec_receive_frame(self.context, self.yuv_frame);
+            // TODO: check for return values (errors) everywhere, with proper cleanup!
 
             if self.sws_context.is_null() {
                 self.sws_context = make_converter_context(self.yuv_frame);
@@ -59,7 +60,7 @@ impl VP6State {
 impl Drop for VP6State {
     fn drop(&mut self) {
         unsafe {
-            // TODO: free the sws context
+            sws_freeContext(self.sws_context);
             av_frame_free(&mut self.yuv_frame);
             av_packet_free(&mut self.packet);
             avcodec_free_context(&mut self.context);

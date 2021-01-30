@@ -54,25 +54,18 @@ extern "C" {
         frame: *mut AVFrame,
     ) -> ::std::os::raw::c_int;
 
+    pub fn sws_freeContext(context: *mut SwsContext);
 }
 
 // These are our own helpers
 extern "C" {
     pub static mut ff_vp6f_decoder_ptr: *mut AVCodec;
 
-    pub fn packet_set_size(pkt :*mut AVPacket, size: i32);
-    pub fn packet_data(
-        arg1: *mut AVPacket,
-    ) -> *mut ::std::os::raw::c_uchar;
+    pub fn packet_set_size(pkt: *mut AVPacket, size: i32);
+    pub fn packet_data(arg1: *mut AVPacket) -> *mut ::std::os::raw::c_uchar;
 
     pub fn frame_width(arg1: *mut AVFrame) -> ::std::os::raw::c_int;
     pub fn frame_height(arg1: *mut AVFrame) -> ::std::os::raw::c_int;
-    pub fn frame_data(
-        arg1: *mut AVFrame,
-        arg2: ::std::os::raw::c_int,
-    ) -> *mut ::std::os::raw::c_uchar;
-    pub fn frame_linesize(arg1: *mut AVFrame, arg2: ::std::os::raw::c_int)
-        -> ::std::os::raw::c_int;
 
     pub fn make_converter_context(yuv_frame: *mut AVFrame) -> *mut SwsContext;
     pub fn convert_yuv_to_rgba(
@@ -82,9 +75,8 @@ extern "C" {
     );
 }
 
-use std::marker::Sized;
-use std::mem::size_of;
-use std::{alloc::Layout, ptr::write_unaligned};
+#[cfg(target_arch = "wasm32")]
+use std::alloc::Layout;
 
 #[cfg(target_arch = "wasm32")]
 unsafe fn wrapped_alloc(size: u32) -> *mut u8 {
@@ -94,11 +86,9 @@ unsafe fn wrapped_alloc(size: u32) -> *mut u8 {
         return info_ptr;
     }
 
-    let result_ptr = info_ptr.add(4);
-
     (info_ptr as *mut u32).write_unaligned(modified_size as u32);
 
-    result_ptr
+    info_ptr.add(4)
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -106,7 +96,10 @@ unsafe fn wrapped_dealloc(ptr: *mut u8) {
     assert!(!ptr.is_null());
     let info_ptr = ptr.sub(4);
     let modified_size = (info_ptr as *mut u32).read_unaligned();
-    std::alloc::dealloc(info_ptr, Layout::from_size_align(modified_size as usize, 4).unwrap());
+    std::alloc::dealloc(
+        info_ptr,
+        Layout::from_size_align(modified_size as usize, 4).unwrap(),
+    );
 }
 
 #[cfg(target_arch = "wasm32")]

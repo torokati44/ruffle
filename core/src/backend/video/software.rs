@@ -84,7 +84,6 @@ impl VideoBackend for SoftwareVideoBackend {
                 }
             }
             VideoStream::VP6(_state, _last_bitmap) => {
-                log::error!("preloading vp6 frame...");
                 Ok(FrameDependency::Keyframe)
             }
         }
