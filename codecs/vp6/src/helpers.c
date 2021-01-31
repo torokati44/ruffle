@@ -1,3 +1,9 @@
+// The wasm32-unknown-unknown ABI is not always in perfect match with the
+// Rust one (even with it trying to be C-like), mostly regarding struct data layout.
+// These little helpers are used to avoid having to pass structures by value across
+// the FFI boundary, or having to access any C struct members from Rust.
+// Trivial types like integers, floating point numbers, and pointers, should be fine.
+
 #include "libavutil/common.h"
 #include "libavcodec/avcodec.h"
 #include "libswscale/swscale.h"

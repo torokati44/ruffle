@@ -84,6 +84,7 @@ impl VideoBackend for SoftwareVideoBackend {
                 }
             }
             VideoStream::VP6(_state, _last_bitmap) => {
+                // TODO actually parse the frame header and report correctly
                 Ok(FrameDependency::Keyframe)
             }
         }
