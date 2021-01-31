@@ -16,6 +16,7 @@ use crate::context::{ActionType, RenderContext, UpdateContext};
 use crate::display_object::container::{ChildContainer, TDisplayObjectContainer};
 use crate::display_object::{
     Bitmap, Button, DisplayObjectBase, EditText, Graphic, MorphShapeStatic, TDisplayObject, Text,
+    Video,
 };
 use crate::drawing::Drawing;
 use crate::events::{ButtonKeyCode, ClipEvent, ClipEventResult};
@@ -32,7 +33,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use swf::read::SwfReadExt;
-use swf::{FillStyle, FrameLabelData, LineStyle};
+use swf::{FillStyle, FrameLabelData, LineStyle, Tag};
 
 type FrameNumber = u16;
 
@@ -288,6 +289,10 @@ impl<'gc> MovieClip<'gc> {
                 .0
                 .write(context.gc_context)
                 .define_sound(context, reader),
+            TagCode::DefineVideoStream => self
+                .0
+                .write(context.gc_context)
+                .define_video_stream(context, reader),
             TagCode::DefineSprite => self.0.write(context.gc_context).define_sprite(
                 context,
                 reader,
@@ -379,6 +384,10 @@ impl<'gc> MovieClip<'gc> {
                 &mut static_data,
                 1,
             ),
+            TagCode::VideoFrame => self
+                .0
+                .write(context.gc_context)
+                .preload_video_frame(context, reader),
             TagCode::SoundStreamHead2 => {
                 self.0.write(context.gc_context).preload_sound_stream_head(
                     context,
@@ -1095,7 +1104,7 @@ impl<'gc> MovieClip<'gc> {
                     }
                 }
                 // Run first frame.
-                child.apply_place_object(context.gc_context, self.movie(), place_object);
+                child.apply_place_object(context, self.movie(), place_object);
                 child.post_instantiation(context, child, None, Instantiator::Movie, false);
                 child.run_frame(context);
             }
@@ -1258,11 +1267,7 @@ impl<'gc> MovieClip<'gc> {
                 // If it's a rewind, we removed any dead children above, so we always
                 // modify the previous child.
                 Some(prev_child) if params.id() == 0 || is_rewind => {
-                    prev_child.apply_place_object(
-                        context.gc_context,
-                        self.movie(),
-                        &params.place_object,
-                    );
+                    prev_child.apply_place_object(context, self.movie(), &params.place_object);
                 }
                 _ => {
                     if let Some(child) = clip.instantiate_child(
@@ -2234,6 +2239,32 @@ impl<'gc, 'a> MovieClipData<'gc> {
     }
 
     #[inline]
+    fn preload_video_frame(
+        &mut self,
+        context: &mut UpdateContext<'_, 'gc, '_>,
+        reader: &mut SwfStream,
+    ) -> DecodeResult {
+        match reader.read_video_frame()? {
+            Tag::VideoFrame(vframe) => {
+                let library = context.library.library_for_movie_mut(self.movie());
+                match library.character_by_id(vframe.stream_id) {
+                    Some(Character::Video(mut v)) => {
+                        v.preload_swf_frame(vframe, context);
+
+                        Ok(())
+                    }
+                    _ => Err(format!(
+                        "Attempted to preload video frames into non-video character {}",
+                        vframe.stream_id
+                    )
+                    .into()),
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    #[inline]
     fn define_bits(
         &mut self,
         context: &mut UpdateContext<'_, 'gc, '_>,
@@ -2608,6 +2639,27 @@ impl<'gc, 'a> MovieClipData<'gc> {
         Ok(())
     }
 
+    #[inline]
+    fn define_video_stream(
+        &mut self,
+        context: &mut UpdateContext<'_, 'gc, '_>,
+        reader: &mut SwfStream,
+    ) -> DecodeResult {
+        match reader.read_define_video_stream()? {
+            Tag::DefineVideoStream(streamdef) => {
+                let id = streamdef.id;
+                let video = Video::from_swf_tag(self.movie(), streamdef, context.gc_context);
+                context
+                    .library
+                    .library_for_movie_mut(self.movie())
+                    .register_character(id, Character::Video(video));
+            }
+            _ => unreachable!(),
+        };
+
+        Ok(())
+    }
+
     fn define_sprite(
         &mut self,
         context: &mut UpdateContext<'_, 'gc, '_>,
@@ -2832,7 +2884,7 @@ impl<'gc, 'a> MovieClip<'gc> {
             }
             PlaceObjectAction::Modify => {
                 if let Some(child) = self.child_by_depth(place_object.depth.into()) {
-                    child.apply_place_object(context.gc_context, self.movie(), &place_object);
+                    child.apply_place_object(context, self.movie(), &place_object);
                     child
                 } else {
                     return Ok(());

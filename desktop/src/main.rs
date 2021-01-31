@@ -26,6 +26,7 @@ use std::time::Instant;
 use tinyfiledialogs::open_file_dialog;
 use url::Url;
 
+use ruffle_core::backend::video;
 use ruffle_core::tag_utils::SwfMovie;
 use ruffle_render_wgpu::clap::{GraphicsBackend, PowerPreference};
 use std::io::Read;
@@ -241,9 +242,10 @@ fn run_player(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     )); //TODO: actually implement this backend type
     let storage = Box::new(storage::DiskStorageBackend::new());
     let locale = Box::new(locale::DesktopLocaleBackend::new());
+    let video = Box::new(video::SoftwareVideoBackend::new());
     let log = Box::new(ruffle_core::backend::log::NullLogBackend::new());
     let ui = Box::new(ui::DesktopUiBackend::new(window.clone()));
-    let player = Player::new(renderer, audio, navigator, storage, locale, log, ui)?;
+    let player = Player::new(renderer, audio, navigator, storage, locale, video, log, ui)?;
     {
         let mut player = player.lock().unwrap();
         player.set_root_movie(Arc::new(movie));
@@ -462,9 +464,10 @@ fn run_timedemo(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     let navigator = Box::new(ruffle_core::backend::navigator::NullNavigatorBackend::new());
     let storage = Box::new(ruffle_core::backend::storage::MemoryStorageBackend::default());
     let locale = Box::new(locale::DesktopLocaleBackend::new());
+    let video = Box::new(ruffle_core::backend::video::SoftwareVideoBackend::default());
     let log = Box::new(ruffle_core::backend::log::NullLogBackend::new());
     let ui = Box::new(ruffle_core::backend::ui::NullUiBackend::new());
-    let player = Player::new(renderer, audio, navigator, storage, locale, log, ui)?;
+    let player = Player::new(renderer, audio, navigator, storage, locale, video, log, ui)?;
     player.lock().unwrap().set_root_movie(Arc::new(movie));
     player.lock().unwrap().set_is_playing(true);
 

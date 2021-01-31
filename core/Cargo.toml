@@ -37,6 +37,8 @@ encoding_rs = "0.8.28"
 rand = { version = "0.8.3", features = ["std", "small_rng"], default-features = false }
 serde = { version = "1.0.123", features = ["derive"], optional = true }
 nellymoser-rs = { git = "https://github.com/ruffle-rs/nellymoser", branch = "main" }
+ruffle_codec_h263 = { path = "../codecs/h263" }
+ruffle_codec_yuv = { path = "../codecs/yuv" }
 
 [dependencies.jpeg-decoder]
 version = "0.1.22"

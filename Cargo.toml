@@ -12,6 +12,9 @@ members = [
     "render/wgpu",
     "render/common_tess",
     "render/webgl",
+
+    "codecs/h263",
+    "codecs/yuv",
 ]
 
 # Don't optimize build scripts and macros.
@@ -23,3 +26,9 @@ panic = "abort"
 
 [profile.release]
 panic = "abort"
+
+[profile.dev.package.ruffle_codec_h263]
+opt-level = 3
+
+[profile.dev.package.ruffle_codec_yuv]
+opt-level = 3
