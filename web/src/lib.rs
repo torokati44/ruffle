@@ -461,7 +461,8 @@ impl Ruffle {
         let log = Box::new(log_adapter::WebLogBackend::new(trace_observer.clone()));
         let ui = Box::new(ui::WebUiBackend::new(js_player.clone(), &canvas));
         let video = Box::new(SoftwareVideoBackend::new());
-        let core = ruffle_core::Player::new(renderer, audio, navigator, storage, locale, video, log, ui)?;
+        let core =
+            ruffle_core::Player::new(renderer, audio, navigator, storage, locale, video, log, ui)?;
 
         {
             let mut core = core.lock().unwrap();

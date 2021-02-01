@@ -1,6 +1,7 @@
 use std::ptr::slice_from_raw_parts_mut;
 
 use crate::bindings::*;
+
 pub struct VP6State {
     context: *mut AVCodecContext,
     packet: *mut AVPacket,
@@ -37,8 +38,8 @@ impl VP6State {
                 (*slice_from_raw_parts_mut(data, encoded_frame.len()))[i] = *e;
             }
 
-            let ret = avcodec_send_packet(self.context, self.packet);
-            let ret = avcodec_receive_frame(self.context, self.yuv_frame);
+            let _ret = avcodec_send_packet(self.context, self.packet);
+            let _ret = avcodec_receive_frame(self.context, self.yuv_frame);
             // TODO: check for return values (errors) everywhere, with proper cleanup!
 
             if self.sws_context.is_null() {
@@ -56,7 +57,12 @@ impl VP6State {
     }
 }
 
-// This trivial implementation of `drop` adds a print to console.
+impl Default for VP6State {
+    fn default() -> Self {
+        VP6State::new()
+    }
+}
+
 impl Drop for VP6State {
     fn drop(&mut self) {
         unsafe {
