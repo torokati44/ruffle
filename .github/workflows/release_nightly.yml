@@ -64,6 +64,9 @@ jobs:
           prerelease: true
 
   build:
+    defaults:
+      run:
+        shell: bash -l {0}
     name: Build ${{ matrix.os }}
     needs: create-nightly-release
     if: needs.create-nightly-release.outputs.activity_check == 'true'
@@ -100,10 +103,14 @@ jobs:
       - name: Setup conda
         uses: conda-incubator/setup-miniconda@v2
         with:
-          activate-environment: binaryen
+          activate-environment: devtools
 
       - name: Install binaryen
         run: conda install -c conda-forge binaryen
+
+      - name: Add msys to PATH for clang
+        if: matrix.os == 'windows-latest'
+        run: echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH
 
       - name: Build Web
         if: matrix.os == 'ubuntu-latest'

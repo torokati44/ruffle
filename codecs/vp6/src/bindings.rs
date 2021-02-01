@@ -87,10 +87,8 @@ extern "C" {
 // first 4 bytes store the allocation size, so we can read it for deallocation.
 // The pointer returned to C points to just after these 4 bytes.
 
-#[cfg(target_arch = "wasm32")]
 use std::alloc::Layout;
 
-#[cfg(target_arch = "wasm32")]
 unsafe fn wrapped_alloc(size: u32) -> *mut u8 {
     let modified_size = size as usize + 4;
     let info_ptr = std::alloc::alloc(Layout::from_size_align(modified_size, 4).unwrap());
@@ -103,7 +101,6 @@ unsafe fn wrapped_alloc(size: u32) -> *mut u8 {
     info_ptr.add(4)
 }
 
-#[cfg(target_arch = "wasm32")]
 unsafe fn wrapped_dealloc(ptr: *mut u8) {
     assert!(!ptr.is_null());
     let info_ptr = ptr.sub(4);
@@ -114,13 +111,11 @@ unsafe fn wrapped_dealloc(ptr: *mut u8) {
     );
 }
 
-#[cfg(target_arch = "wasm32")]
 #[no_mangle]
 fn vp6_custom_malloc(bytes: usize) -> *mut u8 {
     unsafe { wrapped_alloc(bytes as u32) }
 }
 
-#[cfg(target_arch = "wasm32")]
 #[no_mangle]
 fn vp6_custom_realloc(ptr: *mut u8, bytes: usize) -> *mut u8 {
     unsafe {
@@ -142,7 +137,6 @@ fn vp6_custom_realloc(ptr: *mut u8, bytes: usize) -> *mut u8 {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
 #[no_mangle]
 fn vp6_custom_free(ptr: *mut u8) {
     unsafe {

@@ -39,6 +39,7 @@ fn main() {
         "extern/libavutil/imgutils.c",
         "extern/libavutil/intmath.c",
         "extern/libavutil/log.c",
+        "extern/libavutil/log2_tab.c",
         "extern/libavutil/mathematics.c",
         "extern/libavutil/mem.c",
         "extern/libavutil/opt.c",
@@ -56,22 +57,32 @@ fn main() {
         "src/helpers.c",
     ]);
 
-    if std::env::var("TARGET").unwrap() == "wasm32-unknown-unknown" {
+    let target = std::env::var("TARGET").unwrap();
+    if target == "wasm32-unknown-unknown" || target == "x86_64-pc-windows-msvc" {
+        // relying on our fake libc fragment
         build
             .define("MALLOC_PREFIX", "vp6_custom_")
-            .include("extern/config-web")
             .include("src/fakelibc")
-            .file("src/fakelibc/impl.c");
+            .file("src/fakelibc/impl.c")
+            .define("HAVE_ISINF", "0")
+            .define("HAVE_ISNAN", "0");
     } else {
-        build.include("extern/config-desktop");
+        // mostly relying on the system libc
+        build.define("HAVE_ISINF", "1").define("HAVE_ISNAN", "1");
     }
 
     build
+        .compiler("clang")
         .define("HAVE_AV_CONFIG_H", None)
-        .includes(&["extern", "extern/libavutil", "extern/libavcodec"])
+        .includes(&[
+            "extern",
+            "extern/config",
+            "extern/libavutil",
+            "extern/libavcodec",
+        ])
         .warnings(false)
         .extra_warnings(false)
-        .flag_if_supported("-Wno-attributes")
-        .flag_if_supported("-Wno-discarded-qualifiers")
+        .flag("-Wno-attributes")
+        .flag("-Wno-discarded-qualifiers")
         .compile("vp6");
 }
