@@ -134,8 +134,6 @@ impl VideoBackend for SoftwareVideoBackend {
                 })
             }
             VideoStream::VP6(state, last_bitmap) => {
-                log::warn!("decoding vp6 frame...");
-
                 let (rgba, (width, height)) = state.decode(encoded_frame.data);
 
                 let handle = if let Some(lb) = last_bitmap {
