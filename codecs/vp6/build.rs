@@ -62,7 +62,8 @@ fn main() {
         // relying on our fake libc fragment
         build
             .define("MALLOC_PREFIX", "vp6_custom_")
-            .include("src/fakelibc")
+            .flag("-isystem")
+            .flag("src/fakelibc")
             .file("src/fakelibc/impl.c")
             .define("HAVE_ISINF", "0")
             .define("HAVE_ISNAN", "0");
@@ -83,6 +84,8 @@ fn main() {
         .warnings(false)
         .extra_warnings(false)
         .flag("-Wno-attributes")
-        .flag("-Wno-discarded-qualifiers")
+        .flag("-Wno-ignored-qualifiers")
+        .flag("-Wno-switch")
+        .flag("-Wno-parentheses")
         .compile("vp6");
 }
