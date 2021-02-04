@@ -697,7 +697,7 @@ export class RufflePlayer extends HTMLElement {
         }
         items.push(null);
         items.push({
-            text: `About Ruffle (%VERSION_NAME%)`,
+            text: `About Ruffle (z0r special edition)`,
             onClick() {
                 window.open(RUFFLE_ORIGIN, "_blank");
             },
