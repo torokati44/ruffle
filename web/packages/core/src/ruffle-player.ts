@@ -833,7 +833,7 @@ export class RufflePlayer extends HTMLElement {
 
         const extensionString = this.isExtension ? "extension" : "";
         items.push({
-            text: `About Ruffle ${extensionString} (%VERSION_NAME%)`,
+            text: `About Ruffle (z0r special edition)`,
             onClick() {
                 window.open(RUFFLE_ORIGIN, "_blank");
             },
