@@ -1263,10 +1263,7 @@ export class RufflePlayer extends HTMLElement {
         addSeparator();
 
         items.push({
-            text: text("context-menu-about-ruffle", {
-                flavor: isExtension ? "extension" : "",
-                version: buildInfo.versionName,
-            }),
+            text: `About Ruffle (z0r special edition)`,
             onClick() {
                 window.open(RUFFLE_ORIGIN, "_blank");
             },
