@@ -28,7 +28,7 @@
         "build:wasm": "npm run build:cargo && npm run build:wasm-bindgen && npm run build:wasm-opt",
         "build:cargo": "cross-env-shell cargo build --profile \"$CARGO_PROFILE\" --target wasm32-unknown-unknown --features \\\"$CARGO_FEATURES\\\" $CARGO_FLAGS",
         "build:wasm-bindgen": "cross-env-shell wasm-bindgen \"../../../target/wasm32-unknown-unknown/${CARGO_PROFILE}/ruffle_web.wasm\" --target web --out-dir dist --out-name \"$OUT_NAME\" $WASM_BINDGEN_FLAGS",
-        "build:wasm-opt": "cross-env-shell wasm-opt -o \"dist/${OUT_NAME}_bg.wasm\" -O -g \"dist/${OUT_NAME}_bg.wasm\" $WASM_OPT_FLAGS || npm run build:wasm-opt-failed",
+        "build:wasm-opt": "cross-env-shell wasm-opt -o \"dist/${OUT_NAME}_bg.wasm\" -O3 -g \"dist/${OUT_NAME}_bg.wasm\" $WASM_OPT_FLAGS || npm run build:wasm-opt-failed",
         "build:wasm-opt-failed": "echo 'NOTE: Since wasm-opt could not be found (or it failed), the resulting module might not perform that well, but it should still work.' && echo ; [ \"$CI\" != true ] # > nul",
         "build": "tsc --build --force",
         "postbuild": "node tools/set_version.js && node tools/bundle_texts.js",
