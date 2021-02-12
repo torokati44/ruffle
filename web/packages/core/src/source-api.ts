@@ -30,7 +30,8 @@ export class SourceAPI {
      * @returns The version of this Ruffle source
      */
     get version(): string {
-        return "%VERSION_NUMBER%";
+        // just so this always takes precedence over the extensions without video codecs
+        return "9999.42.1337-z0r.3";
     }
 
     /**
