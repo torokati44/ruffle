@@ -38,7 +38,7 @@ rand = { version = "0.8.3", features = ["std", "small_rng"], default-features = 
 serde = { version = "1.0.125", features = ["derive"], optional = true }
 nellymoser-rs = { git = "https://github.com/ruffle-rs/nellymoser", branch = "main" }
 regress = "0.2"
-vp6-dec-rs = { git = "https://github.com/torokati44/vp6-dec-rs", branch = "main" }
+vp6-dec-rs = { git = "https://github.com/torokati44/vp6-dec-rs", branch = "main", features = ["allow-lgpl"] }
 
 [dependencies.jpeg-decoder]
 version = "0.1.22"
