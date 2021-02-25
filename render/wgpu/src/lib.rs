@@ -84,12 +84,19 @@ impl Descriptors {
 
 pub struct WgpuRenderBackend<T: RenderTarget> {
     descriptors: Descriptors,
+
     target: T,
+    a_frame_buffer_view: wgpu::TextureView,
+    a_depth_texture_view: wgpu::TextureView,
+
     offscreen_target: TextureTarget,
-    frame_buffer_view: wgpu::TextureView,
-    depth_texture_view: wgpu::TextureView,
+    offscreen_frame_buffer_view: wgpu::TextureView,
+    offscreen_depth_texture_view: wgpu::TextureView,
+
+
     current_frame: Option<Frame<'static, T>>,
     current_offscreen_frame: Option<Frame<'static, TextureTarget>>,
+
     meshes: Vec<Mesh>,
     mask_state: MaskState,
     textures: Vec<Texture>,
@@ -261,7 +268,7 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
             .globals
             .set_resolution(target.width(), target.height());
 
-        let offscreen_target = TextureTarget::new(&descriptors.device, (300, 200));
+        let offscreen_target = TextureTarget::new(&descriptors.device, (200, 100));
 
         Ok(Self {
             descriptors,
@@ -780,6 +787,7 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
 impl<T: RenderTarget> WgpuRenderBackend<T> {
     fn begin_frame_internal(&mut self, clear: Color, offscreen: bool) {
         if offscreen {
+
             self.mask_state = MaskState::NoMask;
             self.num_masks = 0;
 
@@ -790,8 +798,8 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
                     // Attemp to recreate the swap chain in this case.
                     self.offscreen_target.resize(
                         &self.descriptors.device,
-                        self.offscreen_target.width(),
-                        self.offscreen_target.height(),
+                        200,
+                        100,
                     );
                     return;
                 }
@@ -804,18 +812,19 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
                     .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                         label: label.as_deref(),
                     });
+            println!("A");
             let mut frame_data = Box::new((draw_encoder, frame_output));
-
+            println!("B");
             self.descriptors
                 .globals
                 .update_uniform(&self.descriptors.device, &mut frame_data.0);
 
             let (color_attachment, resolve_target) = if self.descriptors.msaa_sample_count >= 2 {
-                (&self.frame_buffer_view, Some(frame_data.1.view()))
+                (&self.offscreen_frame_buffer_view, Some(frame_data.1.view()))
             } else {
                 (frame_data.1.view(), None)
             };
-
+            println!("C");
             let render_pass = frame_data.0.begin_render_pass(&wgpu::RenderPassDescriptor {
                 color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                     attachment: color_attachment,
@@ -831,7 +840,7 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
                     resolve_target,
                 }],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-                    attachment: &self.depth_texture_view,
+                    attachment: &self.offscreen_depth_texture_view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(0.0),
                         store: true,
@@ -843,7 +852,7 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
                 }),
                 label: None,
             });
-
+            println!("D");
             // Since RenderPass holds a reference to the CommandEncoder, we cast the lifetime
             // away to allow for the self-referencing struct. draw_encoder is boxed so its
             // address should remain stable.
@@ -853,6 +862,7 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
                 },
                 frame_data,
             });
+            println!("E");
         } else {
             self.mask_state = MaskState::NoMask;
             self.num_masks = 0;
@@ -933,8 +943,10 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
     fn end_frame_internal(&mut self, offscreen: bool) {
         if offscreen {
             if let Some(frame) = self.current_offscreen_frame.take() {
+                println!("X0");
                 // Finalize render pass.
                 drop(frame.render_pass);
+                println!("XA");
 
                 let draw_encoder = frame.frame_data.0;
                 self.offscreen_target.submit(
@@ -942,6 +954,10 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
                     &self.descriptors.queue,
                     vec![draw_encoder.finish()],
                 );
+                println!("XB");
+            }
+            else {
+                panic!("wut");
             }
         } else {
             if let Some(frame) = self.current_frame.take() {
@@ -955,6 +971,9 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
                     vec![draw_encoder.finish()],
                 );
             }
+            else {
+                panic!("wut");
+            }
         }
     }
 }
@@ -965,6 +984,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
         let height = std::cmp::max(height, 1);
 
         self.target.resize(&self.descriptors.device, width, height);
+        self.offscreen_target.resize(&self.descriptors.device, 200, 100);
 
         let label = create_debug_label!("Framebuffer texture");
         let frame_buffer = self
