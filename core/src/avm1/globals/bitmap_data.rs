@@ -7,8 +7,12 @@ use crate::avm1::property::Attribute;
 use crate::avm1::{activation::Activation, object::bitmap_data::BitmapData};
 use crate::avm1::{Object, TObject, Value};
 use crate::character::Character;
+use crate::context::RenderContext;
 use crate::display_object::TDisplayObject;
+use crate::prelude::BoundingBox;
+use downcast_rs::Downcast;
 use gc_arena::{GcCell, MutationContext};
+use swf::Twips;
 
 pub fn constructor<'gc>(
     activation: &mut Activation<'_, 'gc, '_>,
@@ -473,7 +477,8 @@ pub fn apply_filter<'gc>(
     log::warn!("BitmapData.applyFilter - not yet implemented");
     Ok((-1).into())
 }
-
+use std::fs::File;
+use std::io::prelude::*;
 pub fn draw<'gc>(
     activation: &mut Activation<'_, 'gc, '_>,
     this: Object<'gc>,
@@ -481,22 +486,77 @@ pub fn draw<'gc>(
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let Some(mut bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
-
-            let source = args
+            if let Some(source) = args
                 .get(0)
                 .unwrap_or(&Value::Undefined)
-                .coerce_to_object(activation);
+                .coerce_to_object(activation)
+                .as_display_object()
+            {
+                activation
+                    .context
+                    .renderer
+                    .begin_frame_offscreen(swf::Color::from_rgb(0, 0));
 
+                let mut transform_stack = crate::transform::TransformStack::new();
 
-            if let Some(source_bitmap) = source.as_bitmap_data_object() {
-                if !source_bitmap.disposed() {
-                    bitmap_data.clone_from(&source_bitmap);
-                }
+                transform_stack.push(&crate::transform::Transform {
+                    ..Default::default()
+                });
+
+                let mut view_bounds = BoundingBox::default();
+                view_bounds.set_x(Twips::from_pixels(0.0));
+                view_bounds.set_y(Twips::from_pixels(0.0));
+                view_bounds.set_width(Twips::from_pixels(300.0));
+                view_bounds.set_height(Twips::from_pixels(200.0));
+
+                let mut render_context = RenderContext {
+                    renderer: activation.context.renderer,
+                    library: &activation.context.library,
+                    transform_stack: &mut transform_stack,
+                    view_bounds,
+                    clip_depth_stack: vec![],
+                    allow_mask: true,
+                };
+
+                source.render(&mut render_context);
+                let bm = activation.context.renderer.end_frame_offscreen();
+
+                let bmd = bitmap_data.bitmap_data();
+                let mut write = bmd.write(activation.context.gc_context);
+
+                match bm {
+                    Some(bm) => match bm.data {
+                        crate::backend::render::BitmapFormat::Rgba(d) => {
+                            println!("bmd is size {:} x {:}", bm.width, bm.height);
+
+                            let mut file = File::create("bm.rgba").unwrap();
+                            file.write_all(&d).unwrap();
+
+                            for y in 0..bm.height {
+                                for x in 0..bm.width {
+                                    let ind = (x + y * bm.width) * 4;
+                                    let r = d[ind as usize];
+                                    let g = d[ind as usize + 1usize];
+                                    let b = d[ind as usize + 2usize];
+                                    let a = d[ind as usize + 3usize];
+
+                                    if write.is_point_in_bounds(x as i32, y as i32) {
+                                        write.set_pixel32_raw(x, y, Color::argb(a, r, g, b));
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    },
+                    None => {}
+                };
             }
-            else {
-                log::warn!("BitmapData.draw - not yet implemented");
-                println!("{:?}", source);
-            }
+
+            /*
+            public draw(source:Object, [matrix:Matrix],
+                [colorTransform:ColorTransform], [blendMode:Object],
+                [clipRect:Rectangle], [smooth:Boolean]) : Void
+                */
 
             return Ok(Value::Undefined);
         }

@@ -46,6 +46,9 @@ pub trait RenderBackend: Downcast {
     fn deactivate_mask(&mut self);
     fn pop_mask(&mut self);
 
+    fn begin_frame_offscreen(&mut self, clear: Color);
+    fn end_frame_offscreen(&mut self) -> Option<Bitmap>;
+
     fn get_bitmap_pixels(&mut self, bitmap: BitmapHandle) -> Option<Bitmap>;
     fn register_bitmap_raw(
         &mut self,
@@ -161,6 +164,11 @@ impl RenderBackend for NullRenderer {
     fn activate_mask(&mut self) {}
     fn deactivate_mask(&mut self) {}
     fn pop_mask(&mut self) {}
+
+    fn begin_frame_offscreen(&mut self, _clear: Color) {}
+    fn end_frame_offscreen(&mut self) -> Option<Bitmap> {
+        None
+    }
 
     fn get_bitmap_pixels(&mut self, _bitmap: BitmapHandle) -> Option<Bitmap> {
         None
