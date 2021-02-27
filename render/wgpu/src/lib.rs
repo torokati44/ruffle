@@ -82,7 +82,6 @@ impl Descriptors {
     }
 }
 
-
 pub struct TargetWithViewsAndFrame<T: RenderTarget> {
     target: T,
     frame_buffer_view: wgpu::TextureView,
@@ -90,7 +89,126 @@ pub struct TargetWithViewsAndFrame<T: RenderTarget> {
     current_frame: Option<Frame<'static, T>>,
 }
 
+impl<T: RenderTarget> TargetWithViewsAndFrame<T> {
+    fn new(descriptors: &Descriptors, target: T) -> Self {
+        let extent = wgpu::Extent3d {
+            width: target.width(),
+            height: target.height(),
+            depth: 1,
+        };
 
+        let frame_buffer_label = create_debug_label!("Framebuffer texture");
+        let frame_buffer = descriptors.device.create_texture(&wgpu::TextureDescriptor {
+            label: frame_buffer_label.as_deref(),
+            size: extent,
+            mip_level_count: 1,
+            sample_count: descriptors.msaa_sample_count,
+            dimension: wgpu::TextureDimension::D2,
+            format: target.format(),
+            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+        });
+        let frame_buffer_view = frame_buffer.create_view(&Default::default());
+
+        let depth_label = create_debug_label!("Depth texture");
+        let depth_texture = descriptors.device.create_texture(&wgpu::TextureDescriptor {
+            label: depth_label.as_deref(),
+            size: extent,
+            mip_level_count: 1,
+            sample_count: descriptors.msaa_sample_count,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth24PlusStencil8,
+            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+        });
+
+        let depth_texture_view = depth_texture.create_view(&Default::default());
+
+        TargetWithViewsAndFrame {
+            target,
+            frame_buffer_view,
+            depth_texture_view,
+            current_frame: None,
+        }
+    }
+
+    fn begin_frame(&mut self, desc: &mut Descriptors, clear: Color) {
+        let frame_output = match self.target.get_next_texture() {
+            Ok(frame) => frame,
+            Err(e) => {
+                log::warn!("Couldn't begin new render frame: {}", e);
+                // Attemp to recreate the swap chain in this case.
+                self.target
+                    .resize(&desc.device, self.target.width(), self.target.height());
+                return;
+            }
+        };
+
+        let label = create_debug_label!("Draw encoder");
+        let draw_encoder = desc
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: label.as_deref(),
+            });
+
+        let mut frame_data = Box::new((draw_encoder, frame_output));
+
+        desc.globals.update_uniform(&desc.device, &mut frame_data.0);
+
+        let (color_attachment, resolve_target) = if desc.msaa_sample_count >= 2 {
+            (&self.frame_buffer_view, Some(frame_data.1.view()))
+        } else {
+            (frame_data.1.view(), None)
+        };
+
+        let render_pass = frame_data.0.begin_render_pass(&wgpu::RenderPassDescriptor {
+            color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+                attachment: color_attachment,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: f64::from(clear.r) / 255.0,
+                        g: f64::from(clear.g) / 255.0,
+                        b: f64::from(clear.b) / 255.0,
+                        a: f64::from(clear.a) / 255.0,
+                    }),
+                    store: true,
+                },
+                resolve_target,
+            }],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
+                attachment: &self.depth_texture_view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(0.0),
+                    store: true,
+                }),
+                stencil_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(0),
+                    store: true,
+                }),
+            }),
+            label: None,
+        });
+
+        // Since RenderPass holds a reference to the CommandEncoder, we cast the lifetime
+        // away to allow for the self-referencing struct. draw_encoder is boxed so its
+        // address should remain stable.
+        self.current_frame = Some(Frame {
+            render_pass: unsafe {
+                std::mem::transmute::<_, wgpu::RenderPass<'static>>(render_pass)
+            },
+            frame_data,
+        });
+    }
+
+    fn end_frame(&mut self, desc: &mut Descriptors) {
+        if let Some(frame) = self.current_frame.take() {
+            // Finalize render pass.
+            drop(frame.render_pass);
+
+            let draw_encoder = frame.frame_data.0;
+            self.target
+                .submit(&desc.device, &desc.queue, vec![draw_encoder.finish()]);
+        }
+    }
+}
 
 pub struct WgpuRenderBackend<T: RenderTarget> {
     descriptors: Descriptors,
@@ -232,93 +350,17 @@ impl WgpuRenderBackend<TextureTarget> {
 
 impl<T: RenderTarget> WgpuRenderBackend<T> {
     pub fn new(mut descriptors: Descriptors, target: T) -> Result<Self, Error> {
-        let extent = wgpu::Extent3d {
-            width: target.width(),
-            height: target.height(),
-            depth: 1,
-        };
-        let tf = target.format().clone();
-        let frame_buffer_label = create_debug_label!("Framebuffer texture");
-        let frame_buffer = descriptors.device.create_texture(&wgpu::TextureDescriptor {
-            label: frame_buffer_label.as_deref(),
-            size: extent,
-            mip_level_count: 1,
-            sample_count: descriptors.msaa_sample_count,
-            dimension: wgpu::TextureDimension::D2,
-            format: target.format(),
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
-        });
-        let frame_buffer_view = frame_buffer.create_view(&Default::default());
-
-        let depth_label = create_debug_label!("Depth texture");
-        let depth_texture = descriptors.device.create_texture(&wgpu::TextureDescriptor {
-            label: depth_label.as_deref(),
-            size: extent,
-            mip_level_count: 1,
-            sample_count: descriptors.msaa_sample_count,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Depth24PlusStencil8,
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
-        });
-
-        let depth_texture_view = depth_texture.create_view(&Default::default());
-
         let (quad_vbo, quad_ibo, quad_tex_transforms) = create_quad_buffers(&descriptors.device);
 
         descriptors
             .globals
             .set_resolution(target.width(), target.height());
 
-        let target = TargetWithViewsAndFrame {
-            target,
-            frame_buffer_view,
-            depth_texture_view,
-            current_frame : None
-        };
+        let target = TargetWithViewsAndFrame::new(&descriptors, target);
 
-
-
-        let extent = wgpu::Extent3d {
-            width: 300,
-            height: 200,
-            depth: 1,
-        };
-
-        let frame_buffer_label = create_debug_label!("Framebuffer texture");
-        let frame_buffer = descriptors.device.create_texture(&wgpu::TextureDescriptor {
-            label: frame_buffer_label.as_deref(),
-            size: extent,
-            mip_level_count: 1,
-            sample_count: descriptors.msaa_sample_count,
-            dimension: wgpu::TextureDimension::D2,
-            format: tf,
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
-        });
-        let frame_buffer_view = frame_buffer.create_view(&Default::default());
-
-        let depth_label = create_debug_label!("Depth texture");
-        let depth_texture = descriptors.device.create_texture(&wgpu::TextureDescriptor {
-            label: depth_label.as_deref(),
-            size: extent,
-            mip_level_count: 1,
-            sample_count: descriptors.msaa_sample_count,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Depth24PlusStencil8,
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
-        });
-
-        let depth_texture_view = depth_texture.create_view(&Default::default());
-
+        // TODO: own descriptors?
         let offscreen_target = TextureTarget::new(&descriptors.device, (300, 200));
-
-
-        let offscreen_target = TargetWithViewsAndFrame {
-            target: offscreen_target,
-            frame_buffer_view,
-            depth_texture_view,
-            current_frame : None
-        };
-
+        let offscreen_target = TargetWithViewsAndFrame::new(&descriptors, offscreen_target);
 
         Ok(Self {
             descriptors,
@@ -834,201 +876,35 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
 
 impl<T: RenderTarget> WgpuRenderBackend<T> {
     fn begin_frame_internal(&mut self, clear: Color, offscreen: bool) {
+        self.mask_state = MaskState::NoMask;
+        self.num_masks = 0;
+
         if offscreen {
-
-            self.mask_state = MaskState::NoMask;
-            self.num_masks = 0;
-
-            let frame_output = match self.offscreen_target.target.get_next_texture() {
-                Ok(frame) => frame,
-                Err(e) => {
-                    log::warn!("Couldn't begin new render frame: {}", e);
-                    // Attemp to recreate the swap chain in this case.
-                    self.offscreen_target.target.resize(
-                        &self.descriptors.device,
-                        self.offscreen_target.target.width(),
-                        self.offscreen_target.target.height(),
-                    );
-                    return;
-                }
-            };
-
-            let label = create_debug_label!("Draw encoder");
-            let draw_encoder =
-                self.descriptors
-                    .device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: label.as_deref(),
-                    });
-            println!("A");
-            let mut frame_data = Box::new((draw_encoder, frame_output));
-            println!("B");
-            self.descriptors
-                .globals
-                .update_uniform(&self.descriptors.device, &mut frame_data.0);
-
-            let (color_attachment, resolve_target) = if self.descriptors.msaa_sample_count >= 2 {
-                (&self.offscreen_target.frame_buffer_view, Some(frame_data.1.view()))
-            } else {
-                (frame_data.1.view(), None)
-            };
-            println!("C");
-            let render_pass = frame_data.0.begin_render_pass(&wgpu::RenderPassDescriptor {
-                color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                    attachment: color_attachment,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.0, g: 0.0, b:0.0, a:0.0
-                        }),
-                        store: true,
-                    },
-                    resolve_target,
-                }],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-                    attachment: &self.offscreen_target.depth_texture_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(0.0),
-                        store: true,
-                    }),
-                    stencil_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(0),
-                        store: true,
-                    }),
-                }),
-                label: None,
-            });
-            println!("D");
-            // Since RenderPass holds a reference to the CommandEncoder, we cast the lifetime
-            // away to allow for the self-referencing struct. draw_encoder is boxed so its
-            // address should remain stable.
-            self.offscreen_target.current_frame = Some(Frame {
-                render_pass: unsafe {
-                    std::mem::transmute::<_, wgpu::RenderPass<'static>>(render_pass)
-                },
-                frame_data,
-            });
-            println!("E");
+            self.offscreen_target
+                .begin_frame(&mut self.descriptors, clear);
         } else {
-            self.mask_state = MaskState::NoMask;
-            self.num_masks = 0;
-
-            let frame_output = match self.target.target.get_next_texture() {
-                Ok(frame) => frame,
-                Err(e) => {
-                    log::warn!("Couldn't begin new render frame: {}", e);
-                    // Attemp to recreate the swap chain in this case.
-                    self.target.target.resize(
-                        &self.descriptors.device,
-                        self.target.target.width(),
-                        self.target.target.height(),
-                    );
-                    return;
-                }
-            };
-
-            let label = create_debug_label!("Draw encoder");
-            let draw_encoder =
-                self.descriptors
-                    .device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: label.as_deref(),
-                    });
-            let mut frame_data = Box::new((draw_encoder, frame_output));
-
-            self.descriptors
-                .globals
-                .update_uniform(&self.descriptors.device, &mut frame_data.0);
-
-            let (color_attachment, resolve_target) = if self.descriptors.msaa_sample_count >= 2 {
-                (&self.target.frame_buffer_view, Some(frame_data.1.view()))
-            } else {
-                (frame_data.1.view(), None)
-            };
-
-            let render_pass = frame_data.0.begin_render_pass(&wgpu::RenderPassDescriptor {
-                color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                    attachment: color_attachment,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: f64::from(clear.r) / 255.0,
-                            g: f64::from(clear.g) / 255.0,
-                            b: f64::from(clear.b) / 255.0,
-                            a: f64::from(clear.a) / 255.0,
-                        }),
-                        store: true,
-                    },
-                    resolve_target,
-                }],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-                    attachment: &self.target.depth_texture_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(0.0),
-                        store: true,
-                    }),
-                    stencil_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(0),
-                        store: true,
-                    }),
-                }),
-                label: None,
-            });
-
-            // Since RenderPass holds a reference to the CommandEncoder, we cast the lifetime
-            // away to allow for the self-referencing struct. draw_encoder is boxed so its
-            // address should remain stable.
-            self.target.current_frame = Some(Frame {
-                render_pass: unsafe {
-                    std::mem::transmute::<_, wgpu::RenderPass<'static>>(render_pass)
-                },
-                frame_data,
-            });
+            self.target.begin_frame(&mut self.descriptors, clear);
         }
     }
 
     fn end_frame_internal(&mut self, offscreen: bool) {
         if offscreen {
-            if let Some(frame) = self.offscreen_target.current_frame.take() {
-                println!("X0");
-                // Finalize render pass.
-                drop(frame.render_pass);
-                println!("XA");
-
-                let draw_encoder = frame.frame_data.0;
-                self.offscreen_target.target.submit(
-                    &self.descriptors.device,
-                    &self.descriptors.queue,
-                    vec![draw_encoder.finish()],
-                );
-                println!("XB");
-            }
-            else {
-                panic!("wut");
-            }
+            self.offscreen_target.end_frame(&mut self.descriptors);
         } else {
-            if let Some(frame) = self.target.current_frame.take() {
-                // Finalize render pass.
-                drop(frame.render_pass);
-
-                let draw_encoder = frame.frame_data.0;
-                self.target.target.submit(
-                    &self.descriptors.device,
-                    &self.descriptors.queue,
-                    vec![draw_encoder.finish()],
-                );
-            }
-            else {
-                panic!("wut");
-            }
+            self.target.end_frame(&mut self.descriptors);
         }
     }
 }
+
 impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
     fn set_viewport_dimensions(&mut self, width: u32, height: u32) {
         // Avoid panics from creating 0-sized framebuffers.
         let width = std::cmp::max(width, 1);
         let height = std::cmp::max(height, 1);
 
-        self.target.target.resize(&self.descriptors.device, width, height);
+        self.target
+            .target
+            .resize(&self.descriptors.device, width, height);
         // TODO: resize offscren target sometime?
 
         let label = create_debug_label!("Framebuffer texture");
@@ -1142,12 +1018,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
             let frame = if let Some(frame) = &mut self.target.current_frame {
                 frame.get()
             } else {
-
-
-
                 return;
-
-
             };
 
             let transform = Transform {
@@ -1222,134 +1093,109 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
 
             frame.render_pass.draw_indexed(0..6, 0, 0..1);
         }
-
-
-
-
     }
 
     fn render_shape(&mut self, shape: ShapeHandle, transform: &Transform) {
-
         let frame = if let Some(frame) = &mut self.target.current_frame {
             frame.get()
         } else {
-
-
-
-
-
-
-
-
-        let frame = if let Some(frame) = &mut self.offscreen_target.current_frame {
-            frame.get()
-        } else {
-            return;
-        };
-
-        let mesh = &mut self.meshes[shape.0];
-
-        let world_matrix = [
-            [1.0, 0.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-            [
-                0.0f32,
-                0.0f32,
-                0.0,
-                1.0,
-            ],
-        ];
-
-        frame
-            .render_pass
-            .set_bind_group(0, self.descriptors.globals.bind_group(), &[]);
-
-        for draw in &mesh.draws {
-            match &draw.draw_type {
-                DrawType::Color => {
-                    frame.render_pass.set_pipeline(
-                        &self
-                            .descriptors
-                            .pipelines
-                            .color_pipelines
-                            .pipeline_for(self.mask_state),
-                    );
-                }
-                DrawType::Gradient { bind_group, .. } => {
-                    frame.render_pass.set_pipeline(
-                        &self
-                            .descriptors
-                            .pipelines
-                            .gradient_pipelines
-                            .pipeline_for(self.mask_state),
-                    );
-                    frame.render_pass.set_bind_group(1, bind_group, &[]);
-                }
-                DrawType::Bitmap {
-                    is_repeating,
-                    is_smoothed,
-                    bind_group,
-                    ..
-                } => {
-                    frame.render_pass.set_pipeline(
-                        &self
-                            .descriptors
-                            .pipelines
-                            .bitmap_pipelines
-                            .pipeline_for(self.mask_state),
-                    );
-                    frame.render_pass.set_bind_group(1, bind_group, &[]);
-                    frame.render_pass.set_bind_group(
-                        2,
-                        self.descriptors
-                            .bitmap_samplers
-                            .get_bind_group(*is_repeating, *is_smoothed),
-                        &[],
-                    );
-                }
-            }
-
-            frame.render_pass.set_push_constants(
-                wgpu::ShaderStage::VERTEX,
-                0,
-                bytemuck::cast_slice(&[Transforms { world_matrix }]),
-            );
-            frame.render_pass.set_push_constants(
-                wgpu::ShaderStage::FRAGMENT,
-                std::mem::size_of::<Transforms>() as u32,
-                bytemuck::cast_slice(&[ColorAdjustments::from(transform.color_transform)]),
-            );
-            frame
-                .render_pass
-                .set_vertex_buffer(0, draw.vertex_buffer.slice(..));
-            frame
-                .render_pass
-                .set_index_buffer(draw.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-
-            match self.mask_state {
-                MaskState::NoMask => (),
-                MaskState::DrawMaskStencil => {
-                    debug_assert!(self.num_masks > 0);
-                    frame.render_pass.set_stencil_reference(self.num_masks - 1);
-                }
-                MaskState::DrawMaskedContent | MaskState::ClearMaskStencil => {
-                    debug_assert!(self.num_masks > 0);
-                    frame.render_pass.set_stencil_reference(self.num_masks);
-                }
+            let frame = if let Some(frame) = &mut self.offscreen_target.current_frame {
+                frame.get()
+            } else {
+                return;
             };
 
-            frame.render_pass.draw_indexed(0..draw.index_count, 0, 0..1);
-        }
+            let mesh = &mut self.meshes[shape.0];
 
+            let world_matrix = [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0f32, 0.0f32, 0.0, 1.0],
+            ];
 
+            frame
+                .render_pass
+                .set_bind_group(0, self.descriptors.globals.bind_group(), &[]);
 
+            for draw in &mesh.draws {
+                match &draw.draw_type {
+                    DrawType::Color => {
+                        frame.render_pass.set_pipeline(
+                            &self
+                                .descriptors
+                                .pipelines
+                                .color_pipelines
+                                .pipeline_for(self.mask_state),
+                        );
+                    }
+                    DrawType::Gradient { bind_group, .. } => {
+                        frame.render_pass.set_pipeline(
+                            &self
+                                .descriptors
+                                .pipelines
+                                .gradient_pipelines
+                                .pipeline_for(self.mask_state),
+                        );
+                        frame.render_pass.set_bind_group(1, bind_group, &[]);
+                    }
+                    DrawType::Bitmap {
+                        is_repeating,
+                        is_smoothed,
+                        bind_group,
+                        ..
+                    } => {
+                        frame.render_pass.set_pipeline(
+                            &self
+                                .descriptors
+                                .pipelines
+                                .bitmap_pipelines
+                                .pipeline_for(self.mask_state),
+                        );
+                        frame.render_pass.set_bind_group(1, bind_group, &[]);
+                        frame.render_pass.set_bind_group(
+                            2,
+                            self.descriptors
+                                .bitmap_samplers
+                                .get_bind_group(*is_repeating, *is_smoothed),
+                            &[],
+                        );
+                    }
+                }
 
-        return;
+                frame.render_pass.set_push_constants(
+                    wgpu::ShaderStage::VERTEX,
+                    0,
+                    bytemuck::cast_slice(&[Transforms { world_matrix }]),
+                );
+                frame.render_pass.set_push_constants(
+                    wgpu::ShaderStage::FRAGMENT,
+                    std::mem::size_of::<Transforms>() as u32,
+                    bytemuck::cast_slice(&[ColorAdjustments::from(transform.color_transform)]),
+                );
+                frame
+                    .render_pass
+                    .set_vertex_buffer(0, draw.vertex_buffer.slice(..));
+                frame
+                    .render_pass
+                    .set_index_buffer(draw.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
 
+                match self.mask_state {
+                    MaskState::NoMask => (),
+                    MaskState::DrawMaskStencil => {
+                        debug_assert!(self.num_masks > 0);
+                        frame.render_pass.set_stencil_reference(self.num_masks - 1);
+                    }
+                    MaskState::DrawMaskedContent | MaskState::ClearMaskStencil => {
+                        debug_assert!(self.num_masks > 0);
+                        frame.render_pass.set_stencil_reference(self.num_masks);
+                    }
+                };
 
+                frame.render_pass.draw_indexed(0..draw.index_count, 0, 0..1);
+            }
 
-
+            return;
         };
 
         let mesh = &mut self.meshes[shape.0];
@@ -1449,17 +1295,9 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
     }
 
     fn draw_rect(&mut self, color: Color, matrix: &Matrix) {
-
         let frame = if let Some(frame) = &mut self.target.current_frame {
             frame.get()
         } else {
-
-
-
-
-
-
-
             let frame = if let Some(frame) = &mut self.offscreen_target.current_frame {
                 frame.get()
             } else {
@@ -1470,12 +1308,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
                 [1.0, 0.0, 0.0, 0.0],
                 [0.0, 1.0, 0.0, 0.0],
                 [0.0, 0.0, 1.0, 0.0],
-                [
-                    0.0f32,
-                    0.0f32,
-                    0.0,
-                    1.0,
-                ],
+                [0.0f32, 0.0f32, 0.0, 1.0],
             ];
 
             let mult_color = [
@@ -1531,16 +1364,6 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
             };
 
             frame.render_pass.draw_indexed(0..6, 0, 0..1);
-
-
-
-
-
-
-
-
-
-
 
             return;
         };
@@ -1618,15 +1441,18 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
 
     fn end_frame_offscreen(&mut self) -> Option<Bitmap> {
         self.end_frame_internal(true);
-        self.offscreen_target.target.capture(self.device()).map(|i| {
-            let samples = i.into_flat_samples();
+        self.offscreen_target
+            .target
+            .capture(self.device())
+            .map(|i| {
+                let samples = i.into_flat_samples();
 
-            Bitmap {
-                width: samples.layout.width,
-                height: samples.layout.height,
-                data: BitmapFormat::Rgba(samples.samples),
-            }
-        })
+                Bitmap {
+                    width: samples.layout.width,
+                    height: samples.layout.height,
+                    data: BitmapFormat::Rgba(samples.samples),
+                }
+            })
     }
 
     fn push_mask(&mut self) {
