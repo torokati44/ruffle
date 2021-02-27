@@ -1096,6 +1096,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
     }
 
     fn render_shape(&mut self, shape: ShapeHandle, transform: &Transform) {
+        // TODO: clean up this two-level mess with some kind of dynamic dispatch maybe, or clever generics, or I dunno...
         let frame = if let Some(frame) = &mut self.target.current_frame {
             frame.get()
         } else {
