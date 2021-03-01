@@ -90,6 +90,274 @@ pub struct TargetWithViewsAndFrame<T: RenderTarget> {
 }
 
 impl<T: RenderTarget> TargetWithViewsAndFrame<T> {
+    fn render_shape(
+        &mut self,
+        mesh: &Mesh,
+        transform: &Transform,
+        descriptors: &Descriptors,
+        mask_state: MaskState,
+        num_masks: u32,
+    ) {
+        if let Some(frame) = &mut self.current_frame {
+            let frame = frame.get();
+
+            let world_matrix = [
+                [transform.matrix.a, transform.matrix.b, 0.0, 0.0],
+                [transform.matrix.c, transform.matrix.d, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [
+                    transform.matrix.tx.to_pixels() as f32,
+                    transform.matrix.ty.to_pixels() as f32,
+                    0.0,
+                    1.0,
+                ],
+            ];
+
+            frame
+                .render_pass
+                .set_bind_group(0, descriptors.globals.bind_group(), &[]);
+
+            for draw in &mesh.draws {
+                match &draw.draw_type {
+                    DrawType::Color => {
+                        frame.render_pass.set_pipeline(
+                            &descriptors
+                                .pipelines
+                                .color_pipelines
+                                .pipeline_for(mask_state),
+                        );
+                    }
+                    DrawType::Gradient { bind_group, .. } => {
+                        frame.render_pass.set_pipeline(
+                            &descriptors
+                                .pipelines
+                                .gradient_pipelines
+                                .pipeline_for(mask_state),
+                        );
+                        frame.render_pass.set_bind_group(1, bind_group, &[]);
+                    }
+                    DrawType::Bitmap {
+                        is_repeating,
+                        is_smoothed,
+                        bind_group,
+                        ..
+                    } => {
+                        frame.render_pass.set_pipeline(
+                            &descriptors
+                                .pipelines
+                                .bitmap_pipelines
+                                .pipeline_for(mask_state),
+                        );
+                        frame.render_pass.set_bind_group(1, bind_group, &[]);
+                        frame.render_pass.set_bind_group(
+                            2,
+                            descriptors
+                                .bitmap_samplers
+                                .get_bind_group(*is_repeating, *is_smoothed),
+                            &[],
+                        );
+                    }
+                }
+
+                frame.render_pass.set_push_constants(
+                    wgpu::ShaderStage::VERTEX,
+                    0,
+                    bytemuck::cast_slice(&[Transforms { world_matrix }]),
+                );
+                frame.render_pass.set_push_constants(
+                    wgpu::ShaderStage::FRAGMENT,
+                    std::mem::size_of::<Transforms>() as u32,
+                    bytemuck::cast_slice(&[ColorAdjustments::from(transform.color_transform)]),
+                );
+                frame
+                    .render_pass
+                    .set_vertex_buffer(0, draw.vertex_buffer.slice(..));
+                frame
+                    .render_pass
+                    .set_index_buffer(draw.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+
+                match mask_state {
+                    MaskState::NoMask => (),
+                    MaskState::DrawMaskStencil => {
+                        debug_assert!(num_masks > 0);
+                        frame.render_pass.set_stencil_reference(num_masks - 1);
+                    }
+                    MaskState::DrawMaskedContent | MaskState::ClearMaskStencil => {
+                        debug_assert!(num_masks > 0);
+                        frame.render_pass.set_stencil_reference(num_masks);
+                    }
+                };
+
+                frame.render_pass.draw_indexed(0..draw.index_count, 0, 0..1);
+            }
+        };
+    }
+
+    fn render_bitmap(
+        &mut self,
+
+        quad_vbo: &wgpu::Buffer,
+        quad_ibo: &wgpu::Buffer,
+
+        texture: &Texture,
+        smoothing: bool,
+        transform: &Transform,
+
+        descriptors: &Descriptors,
+        mask_state: MaskState,
+        num_masks: u32,
+    ) {
+        if let Some(frame) = &mut self.current_frame {
+            let frame = frame.get();
+
+            let transform = Transform {
+                matrix: transform.matrix
+                    * Matrix {
+                        a: texture.width as f32,
+                        d: texture.height as f32,
+                        ..Default::default()
+                    },
+                ..*transform
+            };
+
+            let world_matrix = [
+                [transform.matrix.a, transform.matrix.b, 0.0, 0.0],
+                [transform.matrix.c, transform.matrix.d, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [
+                    transform.matrix.tx.to_pixels() as f32,
+                    transform.matrix.ty.to_pixels() as f32,
+                    0.0,
+                    1.0,
+                ],
+            ];
+
+            frame.render_pass.set_pipeline(
+                descriptors
+                    .pipelines
+                    .bitmap_pipelines
+                    .pipeline_for(mask_state),
+            );
+            frame.render_pass.set_push_constants(
+                wgpu::ShaderStage::VERTEX,
+                0,
+                bytemuck::cast_slice(&[Transforms { world_matrix }]),
+            );
+            frame.render_pass.set_push_constants(
+                wgpu::ShaderStage::FRAGMENT,
+                std::mem::size_of::<Transforms>() as u32,
+                bytemuck::cast_slice(&[ColorAdjustments::from(transform.color_transform)]),
+            );
+            frame
+                .render_pass
+                .set_bind_group(0, descriptors.globals.bind_group(), &[]);
+            frame
+                .render_pass
+                .set_bind_group(1, &texture.bind_group, &[]);
+            frame.render_pass.set_bind_group(
+                2,
+                descriptors.bitmap_samplers.get_bind_group(false, smoothing),
+                &[],
+            );
+            frame.render_pass.set_vertex_buffer(0, quad_vbo.slice(..));
+            frame
+                .render_pass
+                .set_index_buffer(quad_ibo.slice(..), wgpu::IndexFormat::Uint32);
+
+            match mask_state {
+                MaskState::NoMask => (),
+                MaskState::DrawMaskStencil => {
+                    debug_assert!(num_masks > 0);
+                    frame.render_pass.set_stencil_reference(num_masks - 1);
+                }
+                MaskState::DrawMaskedContent | MaskState::ClearMaskStencil => {
+                    debug_assert!(num_masks > 0);
+                    frame.render_pass.set_stencil_reference(num_masks);
+                }
+            };
+
+            frame.render_pass.draw_indexed(0..6, 0, 0..1);
+        }
+    }
+
+    fn draw_rect(
+        &mut self,
+        quad_vbo: &wgpu::Buffer,
+        quad_ibo: &wgpu::Buffer,
+        color: &Color,
+        matrix: &Matrix,
+        descriptors: &Descriptors,
+        mask_state: MaskState,
+        num_masks: u32,
+    ) {
+        if let Some(frame) = &mut self.current_frame {
+            let frame = frame.get();
+
+            let world_matrix = [
+                [matrix.a, matrix.b, 0.0, 0.0],
+                [matrix.c, matrix.d, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [
+                    matrix.tx.to_pixels() as f32,
+                    matrix.ty.to_pixels() as f32,
+                    0.0,
+                    1.0,
+                ],
+            ];
+
+            let mult_color = [
+                f32::from(color.r) / 255.0,
+                f32::from(color.g) / 255.0,
+                f32::from(color.b) / 255.0,
+                f32::from(color.a) / 255.0,
+            ];
+
+            let add_color = [0.0, 0.0, 0.0, 0.0];
+            frame.render_pass.set_pipeline(
+                &descriptors
+                    .pipelines
+                    .color_pipelines
+                    .pipeline_for(mask_state),
+            );
+
+            frame.render_pass.set_push_constants(
+                wgpu::ShaderStage::VERTEX,
+                0,
+                bytemuck::cast_slice(&[Transforms { world_matrix }]),
+            );
+            frame.render_pass.set_push_constants(
+                wgpu::ShaderStage::FRAGMENT,
+                std::mem::size_of::<Transforms>() as u32,
+                bytemuck::cast_slice(&[ColorAdjustments {
+                    mult_color,
+                    add_color,
+                }]),
+            );
+
+            frame
+                .render_pass
+                .set_bind_group(0, descriptors.globals.bind_group(), &[]);
+            frame.render_pass.set_vertex_buffer(0, quad_vbo.slice(..));
+            frame
+                .render_pass
+                .set_index_buffer(quad_ibo.slice(..), wgpu::IndexFormat::Uint32);
+
+            match mask_state {
+                MaskState::NoMask => (),
+                MaskState::DrawMaskStencil => {
+                    debug_assert!(num_masks > 0);
+                    frame.render_pass.set_stencil_reference(num_masks - 1);
+                }
+                MaskState::DrawMaskedContent | MaskState::ClearMaskStencil => {
+                    debug_assert!(num_masks > 0);
+                    frame.render_pass.set_stencil_reference(num_masks);
+                }
+            };
+
+            frame.render_pass.draw_indexed(0..6, 0, 0..1);
+        }
+    }
+
     fn new(descriptors: &Descriptors, target: T) -> Self {
         let extent = wgpu::Extent3d {
             width: target.width(),
@@ -874,28 +1142,6 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
     }
 }
 
-impl<T: RenderTarget> WgpuRenderBackend<T> {
-    fn begin_frame_internal(&mut self, clear: Color, offscreen: bool) {
-        self.mask_state = MaskState::NoMask;
-        self.num_masks = 0;
-
-        if offscreen {
-            self.offscreen_target
-                .begin_frame(&mut self.descriptors, clear);
-        } else {
-            self.target.begin_frame(&mut self.descriptors, clear);
-        }
-    }
-
-    fn end_frame_internal(&mut self, offscreen: bool) {
-        if offscreen {
-            self.offscreen_target.end_frame(&mut self.descriptors);
-        } else {
-            self.target.end_frame(&mut self.descriptors);
-        }
-    }
-}
-
 impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
     fn set_viewport_dimensions(&mut self, width: u32, height: u32) {
         // Avoid panics from creating 0-sized framebuffers.
@@ -1006,442 +1252,115 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
     }
 
     fn begin_frame(&mut self, clear: Color) {
-        self.begin_frame_internal(clear, false);
+        self.mask_state = MaskState::NoMask;
+        self.num_masks = 0;
+
+        self.target.begin_frame(&mut self.descriptors, clear);
     }
 
     fn begin_frame_offscreen(&mut self, clear: Color) {
-        self.begin_frame_internal(clear, true);
+        self.mask_state = MaskState::NoMask;
+        self.num_masks = 0;
+
+        self.offscreen_target
+            .begin_frame(&mut self.descriptors, clear);
     }
 
     fn render_bitmap(&mut self, bitmap: BitmapHandle, transform: &Transform, smoothing: bool) {
         if let Some(texture) = self.textures.get(bitmap.0) {
-            let frame = if let Some(frame) = &mut self.target.current_frame {
-                frame.get()
-            } else {
-                return;
-            };
+            if self.target.current_frame.is_some() {
+                self.target.render_bitmap(
+                    &self.quad_vbo,
+                    &self.quad_ibo,
+                    texture,
+                    smoothing,
+                    transform,
+                    &self.descriptors,
+                    self.mask_state,
+                    self.num_masks,
+                );
+            }
 
-            let transform = Transform {
-                matrix: transform.matrix
-                    * Matrix {
-                        a: texture.width as f32,
-                        d: texture.height as f32,
-                        ..Default::default()
-                    },
-                ..*transform
-            };
+            if self.offscreen_target.current_frame.is_some() {
+                let mut tf = transform.clone();
+                tf.matrix = Matrix::default();
 
-            let world_matrix = [
-                [transform.matrix.a, transform.matrix.b, 0.0, 0.0],
-                [transform.matrix.c, transform.matrix.d, 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [
-                    transform.matrix.tx.to_pixels() as f32,
-                    transform.matrix.ty.to_pixels() as f32,
-                    0.0,
-                    1.0,
-                ],
-            ];
-
-            frame.render_pass.set_pipeline(
-                self.descriptors
-                    .pipelines
-                    .bitmap_pipelines
-                    .pipeline_for(self.mask_state),
-            );
-            frame.render_pass.set_push_constants(
-                wgpu::ShaderStage::VERTEX,
-                0,
-                bytemuck::cast_slice(&[Transforms { world_matrix }]),
-            );
-            frame.render_pass.set_push_constants(
-                wgpu::ShaderStage::FRAGMENT,
-                std::mem::size_of::<Transforms>() as u32,
-                bytemuck::cast_slice(&[ColorAdjustments::from(transform.color_transform)]),
-            );
-            frame
-                .render_pass
-                .set_bind_group(0, self.descriptors.globals.bind_group(), &[]);
-            frame
-                .render_pass
-                .set_bind_group(1, &texture.bind_group, &[]);
-            frame.render_pass.set_bind_group(
-                2,
-                self.descriptors
-                    .bitmap_samplers
-                    .get_bind_group(false, smoothing),
-                &[],
-            );
-            frame
-                .render_pass
-                .set_vertex_buffer(0, self.quad_vbo.slice(..));
-            frame
-                .render_pass
-                .set_index_buffer(self.quad_ibo.slice(..), wgpu::IndexFormat::Uint32);
-
-            match self.mask_state {
-                MaskState::NoMask => (),
-                MaskState::DrawMaskStencil => {
-                    debug_assert!(self.num_masks > 0);
-                    frame.render_pass.set_stencil_reference(self.num_masks - 1);
-                }
-                MaskState::DrawMaskedContent | MaskState::ClearMaskStencil => {
-                    debug_assert!(self.num_masks > 0);
-                    frame.render_pass.set_stencil_reference(self.num_masks);
-                }
-            };
-
-            frame.render_pass.draw_indexed(0..6, 0, 0..1);
+                self.offscreen_target.render_bitmap(
+                    &self.quad_vbo,
+                    &self.quad_ibo,
+                    texture,
+                    smoothing,
+                    &tf,
+                    &self.descriptors,
+                    self.mask_state,
+                    self.num_masks,
+                );
+            }
         }
     }
 
     fn render_shape(&mut self, shape: ShapeHandle, transform: &Transform) {
-        // TODO: clean up this two-level mess with some kind of dynamic dispatch maybe, or clever generics, or I dunno...
-        let frame = if let Some(frame) = &mut self.target.current_frame {
-            frame.get()
-        } else {
-            let frame = if let Some(frame) = &mut self.offscreen_target.current_frame {
-                frame.get()
-            } else {
-                return;
-            };
-
-            let mesh = &mut self.meshes[shape.0];
-
-            let world_matrix = [
-                [1.0, 0.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [0.0f32, 0.0f32, 0.0, 1.0],
-            ];
-
-            frame
-                .render_pass
-                .set_bind_group(0, self.descriptors.globals.bind_group(), &[]);
-
-            for draw in &mesh.draws {
-                match &draw.draw_type {
-                    DrawType::Color => {
-                        frame.render_pass.set_pipeline(
-                            &self
-                                .descriptors
-                                .pipelines
-                                .color_pipelines
-                                .pipeline_for(self.mask_state),
-                        );
-                    }
-                    DrawType::Gradient { bind_group, .. } => {
-                        frame.render_pass.set_pipeline(
-                            &self
-                                .descriptors
-                                .pipelines
-                                .gradient_pipelines
-                                .pipeline_for(self.mask_state),
-                        );
-                        frame.render_pass.set_bind_group(1, bind_group, &[]);
-                    }
-                    DrawType::Bitmap {
-                        is_repeating,
-                        is_smoothed,
-                        bind_group,
-                        ..
-                    } => {
-                        frame.render_pass.set_pipeline(
-                            &self
-                                .descriptors
-                                .pipelines
-                                .bitmap_pipelines
-                                .pipeline_for(self.mask_state),
-                        );
-                        frame.render_pass.set_bind_group(1, bind_group, &[]);
-                        frame.render_pass.set_bind_group(
-                            2,
-                            self.descriptors
-                                .bitmap_samplers
-                                .get_bind_group(*is_repeating, *is_smoothed),
-                            &[],
-                        );
-                    }
-                }
-
-                frame.render_pass.set_push_constants(
-                    wgpu::ShaderStage::VERTEX,
-                    0,
-                    bytemuck::cast_slice(&[Transforms { world_matrix }]),
-                );
-                frame.render_pass.set_push_constants(
-                    wgpu::ShaderStage::FRAGMENT,
-                    std::mem::size_of::<Transforms>() as u32,
-                    bytemuck::cast_slice(&[ColorAdjustments::from(transform.color_transform)]),
-                );
-                frame
-                    .render_pass
-                    .set_vertex_buffer(0, draw.vertex_buffer.slice(..));
-                frame
-                    .render_pass
-                    .set_index_buffer(draw.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-
-                match self.mask_state {
-                    MaskState::NoMask => (),
-                    MaskState::DrawMaskStencil => {
-                        debug_assert!(self.num_masks > 0);
-                        frame.render_pass.set_stencil_reference(self.num_masks - 1);
-                    }
-                    MaskState::DrawMaskedContent | MaskState::ClearMaskStencil => {
-                        debug_assert!(self.num_masks > 0);
-                        frame.render_pass.set_stencil_reference(self.num_masks);
-                    }
-                };
-
-                frame.render_pass.draw_indexed(0..draw.index_count, 0, 0..1);
-            }
-
-            return;
-        };
-
         let mesh = &mut self.meshes[shape.0];
 
-        let world_matrix = [
-            [transform.matrix.a, transform.matrix.b, 0.0, 0.0],
-            [transform.matrix.c, transform.matrix.d, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-            [
-                transform.matrix.tx.to_pixels() as f32,
-                transform.matrix.ty.to_pixels() as f32,
-                0.0,
-                1.0,
-            ],
-        ];
-
-        frame
-            .render_pass
-            .set_bind_group(0, self.descriptors.globals.bind_group(), &[]);
-
-        for draw in &mesh.draws {
-            match &draw.draw_type {
-                DrawType::Color => {
-                    frame.render_pass.set_pipeline(
-                        &self
-                            .descriptors
-                            .pipelines
-                            .color_pipelines
-                            .pipeline_for(self.mask_state),
-                    );
-                }
-                DrawType::Gradient { bind_group, .. } => {
-                    frame.render_pass.set_pipeline(
-                        &self
-                            .descriptors
-                            .pipelines
-                            .gradient_pipelines
-                            .pipeline_for(self.mask_state),
-                    );
-                    frame.render_pass.set_bind_group(1, bind_group, &[]);
-                }
-                DrawType::Bitmap {
-                    is_repeating,
-                    is_smoothed,
-                    bind_group,
-                    ..
-                } => {
-                    frame.render_pass.set_pipeline(
-                        &self
-                            .descriptors
-                            .pipelines
-                            .bitmap_pipelines
-                            .pipeline_for(self.mask_state),
-                    );
-                    frame.render_pass.set_bind_group(1, bind_group, &[]);
-                    frame.render_pass.set_bind_group(
-                        2,
-                        self.descriptors
-                            .bitmap_samplers
-                            .get_bind_group(*is_repeating, *is_smoothed),
-                        &[],
-                    );
-                }
-            }
-
-            frame.render_pass.set_push_constants(
-                wgpu::ShaderStage::VERTEX,
-                0,
-                bytemuck::cast_slice(&[Transforms { world_matrix }]),
+        if self.target.current_frame.is_some() {
+            self.target.render_shape(
+                mesh,
+                transform,
+                &self.descriptors,
+                self.mask_state,
+                self.num_masks,
             );
-            frame.render_pass.set_push_constants(
-                wgpu::ShaderStage::FRAGMENT,
-                std::mem::size_of::<Transforms>() as u32,
-                bytemuck::cast_slice(&[ColorAdjustments::from(transform.color_transform)]),
+        }
+
+        if self.offscreen_target.current_frame.is_some() {
+            let mut tf = transform.clone();
+            tf.matrix = Matrix::default();
+
+            self.offscreen_target.render_shape(
+                mesh,
+                &tf,
+                &self.descriptors,
+                self.mask_state,
+                self.num_masks,
             );
-            frame
-                .render_pass
-                .set_vertex_buffer(0, draw.vertex_buffer.slice(..));
-            frame
-                .render_pass
-                .set_index_buffer(draw.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-
-            match self.mask_state {
-                MaskState::NoMask => (),
-                MaskState::DrawMaskStencil => {
-                    debug_assert!(self.num_masks > 0);
-                    frame.render_pass.set_stencil_reference(self.num_masks - 1);
-                }
-                MaskState::DrawMaskedContent | MaskState::ClearMaskStencil => {
-                    debug_assert!(self.num_masks > 0);
-                    frame.render_pass.set_stencil_reference(self.num_masks);
-                }
-            };
-
-            frame.render_pass.draw_indexed(0..draw.index_count, 0, 0..1);
         }
     }
 
     fn draw_rect(&mut self, color: Color, matrix: &Matrix) {
-        let frame = if let Some(frame) = &mut self.target.current_frame {
-            frame.get()
-        } else {
-            let frame = if let Some(frame) = &mut self.offscreen_target.current_frame {
-                frame.get()
-            } else {
-                return;
-            };
-
-            let world_matrix = [
-                [1.0, 0.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [0.0f32, 0.0f32, 0.0, 1.0],
-            ];
-
-            let mult_color = [
-                f32::from(color.r) / 255.0,
-                f32::from(color.g) / 255.0,
-                f32::from(color.b) / 255.0,
-                f32::from(color.a) / 255.0,
-            ];
-
-            let add_color = [0.0, 0.0, 0.0, 0.0];
-            frame.render_pass.set_pipeline(
-                &self
-                    .descriptors
-                    .pipelines
-                    .color_pipelines
-                    .pipeline_for(self.mask_state),
+        if self.target.current_frame.is_some() {
+            self.target.draw_rect(
+                &self.quad_vbo,
+                &self.quad_ibo,
+                &color,
+                matrix,
+                &self.descriptors,
+                self.mask_state,
+                self.num_masks,
             );
+        }
 
-            frame.render_pass.set_push_constants(
-                wgpu::ShaderStage::VERTEX,
-                0,
-                bytemuck::cast_slice(&[Transforms { world_matrix }]),
+        if self.offscreen_target.current_frame.is_some() {
+            let m = Matrix::default();
+
+            self.offscreen_target.draw_rect(
+                &self.quad_vbo,
+                &self.quad_ibo,
+                &color,
+                &m,
+                &self.descriptors,
+                self.mask_state,
+                self.num_masks,
             );
-            frame.render_pass.set_push_constants(
-                wgpu::ShaderStage::FRAGMENT,
-                std::mem::size_of::<Transforms>() as u32,
-                bytemuck::cast_slice(&[ColorAdjustments {
-                    mult_color,
-                    add_color,
-                }]),
-            );
-
-            frame
-                .render_pass
-                .set_bind_group(0, self.descriptors.globals.bind_group(), &[]);
-            frame
-                .render_pass
-                .set_vertex_buffer(0, self.quad_vbo.slice(..));
-            frame
-                .render_pass
-                .set_index_buffer(self.quad_ibo.slice(..), wgpu::IndexFormat::Uint32);
-
-            match self.mask_state {
-                MaskState::NoMask => (),
-                MaskState::DrawMaskStencil => {
-                    debug_assert!(self.num_masks > 0);
-                    frame.render_pass.set_stencil_reference(self.num_masks - 1);
-                }
-                MaskState::DrawMaskedContent | MaskState::ClearMaskStencil => {
-                    debug_assert!(self.num_masks > 0);
-                    frame.render_pass.set_stencil_reference(self.num_masks);
-                }
-            };
-
-            frame.render_pass.draw_indexed(0..6, 0, 0..1);
-
-            return;
-        };
-
-        let world_matrix = [
-            [matrix.a, matrix.b, 0.0, 0.0],
-            [matrix.c, matrix.d, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-            [
-                matrix.tx.to_pixels() as f32,
-                matrix.ty.to_pixels() as f32,
-                0.0,
-                1.0,
-            ],
-        ];
-
-        let mult_color = [
-            f32::from(color.r) / 255.0,
-            f32::from(color.g) / 255.0,
-            f32::from(color.b) / 255.0,
-            f32::from(color.a) / 255.0,
-        ];
-
-        let add_color = [0.0, 0.0, 0.0, 0.0];
-        frame.render_pass.set_pipeline(
-            &self
-                .descriptors
-                .pipelines
-                .color_pipelines
-                .pipeline_for(self.mask_state),
-        );
-
-        frame.render_pass.set_push_constants(
-            wgpu::ShaderStage::VERTEX,
-            0,
-            bytemuck::cast_slice(&[Transforms { world_matrix }]),
-        );
-        frame.render_pass.set_push_constants(
-            wgpu::ShaderStage::FRAGMENT,
-            std::mem::size_of::<Transforms>() as u32,
-            bytemuck::cast_slice(&[ColorAdjustments {
-                mult_color,
-                add_color,
-            }]),
-        );
-
-        frame
-            .render_pass
-            .set_bind_group(0, self.descriptors.globals.bind_group(), &[]);
-        frame
-            .render_pass
-            .set_vertex_buffer(0, self.quad_vbo.slice(..));
-        frame
-            .render_pass
-            .set_index_buffer(self.quad_ibo.slice(..), wgpu::IndexFormat::Uint32);
-
-        match self.mask_state {
-            MaskState::NoMask => (),
-            MaskState::DrawMaskStencil => {
-                debug_assert!(self.num_masks > 0);
-                frame.render_pass.set_stencil_reference(self.num_masks - 1);
-            }
-            MaskState::DrawMaskedContent | MaskState::ClearMaskStencil => {
-                debug_assert!(self.num_masks > 0);
-                frame.render_pass.set_stencil_reference(self.num_masks);
-            }
-        };
-
-        frame.render_pass.draw_indexed(0..6, 0, 0..1);
+        }
     }
 
     fn end_frame(&mut self) {
-        self.end_frame_internal(false);
+        self.target.end_frame(&mut self.descriptors);
     }
 
     fn end_frame_offscreen(&mut self) -> Option<Bitmap> {
-        self.end_frame_internal(true);
+        self.offscreen_target.end_frame(&mut self.descriptors);
+
         self.offscreen_target
             .target
             .capture(self.device())
