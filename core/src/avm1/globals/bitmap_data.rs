@@ -10,7 +10,6 @@ use crate::character::Character;
 use crate::context::RenderContext;
 use crate::display_object::TDisplayObject;
 use crate::prelude::BoundingBox;
-use downcast_rs::Downcast;
 use gc_arena::{GcCell, MutationContext};
 use swf::Twips;
 
@@ -484,7 +483,7 @@ pub fn draw<'gc>(
     this: Object<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    if let Some(mut bitmap_data) = this.as_bitmap_data_object() {
+    if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             if let Some(source) = args
                 .get(0)
