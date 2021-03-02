@@ -23,6 +23,7 @@ pub fn constructor<'gc>(
     set_color(activation, this, args.get(7..8).unwrap_or_default())?;
     set_alpha(activation, this, args.get(8..9).unwrap_or_default())?;
 
+    println!("constructed disp filt");
     Ok(this.into())
 }
 

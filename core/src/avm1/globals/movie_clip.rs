@@ -220,6 +220,7 @@ pub fn create_proto<'gc>(
         "transform" => [transform, set_transform],
         "enabled" => [enabled, set_enabled],
         "focusEnabled" => [focus_enabled, set_focus_enabled],
+        "filters" => [filters, set_filters],
         "_lockroot" => [lock_root, set_lock_root],
         "useHandCursor" => [use_hand_cursor, set_use_hand_cursor],
     );
@@ -1357,6 +1358,25 @@ fn set_focus_enabled<'gc>(
         value.as_bool(activation.current_swf_version()),
         &mut activation.context,
     );
+    Ok(())
+}
+
+fn filters<'gc>(
+    this: MovieClip<'gc>,
+    activation: &mut Activation<'_, 'gc, '_>,
+) -> Result<Value<'gc>, Error<'gc>> {
+    // TODO: return stored
+    let constructor = activation.context.avm1.prototypes.array_constructor;
+    constructor.construct(activation, &[])
+}
+
+fn set_filters<'gc>(
+    this: MovieClip<'gc>,
+    activation: &mut Activation<'_, 'gc, '_>,
+    value: Value<'gc>,
+) -> Result<(), Error<'gc>> {
+    // TODO: store
+    println!("setting filters: {:#?}", value);
     Ok(())
 }
 

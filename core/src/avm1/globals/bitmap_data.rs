@@ -475,6 +475,8 @@ pub fn apply_filter<'gc>(
     this: Object<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    println!("applyFilter: {:?} {:#?}", this, args);
+
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             //public applyFilter(sourceBitmap:BitmapData, sourceRect:Rectangle,   destPoint:Point, filter:BitmapFilter) : Number
