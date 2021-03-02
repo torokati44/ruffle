@@ -13,6 +13,8 @@ use crate::prelude::BoundingBox;
 use gc_arena::{GcCell, MutationContext};
 use swf::Twips;
 
+use super::matrix::object_to_matrix;
+
 pub fn constructor<'gc>(
     activation: &mut Activation<'_, 'gc, '_>,
     this: Object<'gc>,
@@ -476,8 +478,7 @@ pub fn apply_filter<'gc>(
     log::warn!("BitmapData.applyFilter - not yet implemented");
     Ok((-1).into())
 }
-use std::fs::File;
-use std::io::prelude::*;
+
 pub fn draw<'gc>(
     activation: &mut Activation<'_, 'gc, '_>,
     this: Object<'gc>,
@@ -485,6 +486,19 @@ pub fn draw<'gc>(
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
+
+
+            /*
+            public draw(source:Object, [matrix:Matrix],
+                [colorTransform:ColorTransform], [blendMode:Object],
+                [clipRect:Rectangle], [smooth:Boolean]) : Void
+                */
+
+            let matrix = args.get(1).unwrap_or(&Value::Undefined).coerce_to_object(activation);
+            let matrix = object_to_matrix(matrix, activation)?;
+
+            println!("BitmapData.draw, matrix: {:#?}", matrix);
+
             if let Some(source) = args
                 .get(0)
                 .unwrap_or(&Value::Undefined)
@@ -526,11 +540,6 @@ pub fn draw<'gc>(
                 match bm {
                     Some(bm) => match bm.data {
                         crate::backend::render::BitmapFormat::Rgba(d) => {
-                            println!("bmd is size {:} x {:}", bm.width, bm.height);
-
-                            let mut file = File::create("bm.rgba").unwrap();
-                            file.write_all(&d).unwrap();
-
                             for y in 0..bm.height {
                                 for x in 0..bm.width {
                                     let ind = (x + y * bm.width) * 4;
@@ -550,12 +559,6 @@ pub fn draw<'gc>(
                     None => {}
                 };
             }
-
-            /*
-            public draw(source:Object, [matrix:Matrix],
-                [colorTransform:ColorTransform], [blendMode:Object],
-                [clipRect:Rectangle], [smooth:Boolean]) : Void
-                */
 
             return Ok(Value::Undefined);
         }
@@ -911,6 +914,12 @@ pub fn merge<'gc>(
 
             let dest_x = dest_point.get("x", activation)?.coerce_to_i32(activation)?;
             let dest_y = dest_point.get("y", activation)?.coerce_to_i32(activation)?;
+
+            println!("args: {:#?}", args);
+
+            println!("merging from xy: {} {}", src_min_x, src_min_y);
+
+            println!("merging to xy: {} {}", dest_x, dest_y);
 
             let red_mult = args
                 .get(3)
