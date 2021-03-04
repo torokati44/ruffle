@@ -595,7 +595,8 @@ pub fn draw<'gc>(
             let matrix = args.get(1).unwrap_or(&Value::Undefined).coerce_to_object(activation);
             let matrix = object_to_matrix(matrix, activation)?;
 
-            println!("BitmapData.draw, matrix: {:#?}", matrix);
+            // println!("BitmapData.draw, matrix: {:#?}", matrix);
+            println!("BitmapData.draw, args: {:#?}", args);
 
             if let Some(source) = args
                 .get(0)

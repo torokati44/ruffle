@@ -1259,6 +1259,8 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
     }
 
     fn begin_frame_offscreen(&mut self, clear: Color) {
+        println!("begin_frame_offscreen");
+
         self.mask_state = MaskState::NoMask;
         self.num_masks = 0;
 
@@ -1267,6 +1269,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
     }
 
     fn render_bitmap(&mut self, bitmap: BitmapHandle, transform: &Transform, smoothing: bool) {
+
         if let Some(texture) = self.textures.get(bitmap.0) {
             if self.target.current_frame.is_some() {
                 self.target.render_bitmap(
@@ -1285,6 +1288,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
                 let mut tf = transform.clone();
                 tf.matrix = Matrix::default();
 
+                println!("offscreen render bitmap");
                 self.offscreen_target.render_bitmap(
                     &self.quad_vbo,
                     &self.quad_ibo,
@@ -1315,7 +1319,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
         if self.offscreen_target.current_frame.is_some() {
             let mut tf = transform.clone();
             tf.matrix = Matrix::default();
-
+            println!("offscreen render shape!");
             self.offscreen_target.render_shape(
                 mesh,
                 &tf,
@@ -1327,6 +1331,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
     }
 
     fn draw_rect(&mut self, color: Color, matrix: &Matrix) {
+
         if self.target.current_frame.is_some() {
             self.target.draw_rect(
                 &self.quad_vbo,
@@ -1341,7 +1346,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
 
         if self.offscreen_target.current_frame.is_some() {
             let m = Matrix::default();
-
+            println!("offscreen draw rect");
             self.offscreen_target.draw_rect(
                 &self.quad_vbo,
                 &self.quad_ibo,
@@ -1359,6 +1364,8 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
     }
 
     fn end_frame_offscreen(&mut self) -> Option<Bitmap> {
+        println!("end_frame_offscreen");
+
         self.offscreen_target.end_frame(&mut self.descriptors);
 
         self.offscreen_target
