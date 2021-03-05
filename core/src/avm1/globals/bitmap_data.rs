@@ -10,6 +10,20 @@ use crate::character::Character;
 use crate::display_object::TDisplayObject;
 use gc_arena::{GcCell, MutationContext};
 
+fn object_to_rectangle<'gc>(
+    object: Object<'gc>,
+    activation: &mut Activation<'_, 'gc, '_>,
+) -> Result<(i32, i32, i32, i32), Error<'gc>> {
+    let x = object.get("x", activation)?.coerce_to_i32(activation)?;
+    let y = object.get("y", activation)?.coerce_to_i32(activation)?;
+    let width = object.get("width", activation)?.coerce_to_i32(activation)?;
+    let height = object
+        .get("height", activation)?
+        .coerce_to_i32(activation)?;
+
+    Ok((x, y, width, height))
+}
+
 pub fn constructor<'gc>(
     activation: &mut Activation<'_, 'gc, '_>,
     this: Object<'gc>,
@@ -252,20 +266,17 @@ pub fn copy_channel<'gc>(
                     .coerce_to_u32(activation)?
                     .min(bitmap_data.bitmap_data().read().height());
 
-                let src_min_x = source_rect
-                    .get("x", activation)?
-                    .coerce_to_u32(activation)?;
-                let src_min_y = source_rect
-                    .get("y", activation)?
-                    .coerce_to_u32(activation)?;
-                let src_width = source_rect
-                    .get("width", activation)?
-                    .coerce_to_u32(activation)?;
-                let src_height = source_rect
-                    .get("height", activation)?
-                    .coerce_to_u32(activation)?;
+                let (src_min_x, src_min_y, src_width, src_height) =
+                    object_to_rectangle(source_rect, activation)?;
                 let src_max_x = src_min_x + src_width;
                 let src_max_y = src_min_y + src_height;
+
+                let (src_min_x, src_min_y, src_max_x, src_max_y) = (
+                    src_min_x as u32,
+                    src_min_y as u32,
+                    src_max_x as u32,
+                    src_max_y as u32,
+                );
 
                 let src_bitmap_data = source_bitmap.bitmap_data();
 
@@ -317,14 +328,8 @@ pub fn fill_rect<'gc>(
             if let Some(color_val) = args.get(1) {
                 let color = color_val.coerce_to_i32(activation)?;
 
-                let x = rectangle.get("x", activation)?.coerce_to_u32(activation)?;
-                let y = rectangle.get("y", activation)?.coerce_to_u32(activation)?;
-                let width = rectangle
-                    .get("width", activation)?
-                    .coerce_to_u32(activation)?;
-                let height = rectangle
-                    .get("height", activation)?
-                    .coerce_to_u32(activation)?;
+                let (x, y, width, height) = object_to_rectangle(rectangle, activation)?;
+                let (x, y, width, height) = (x as u32, y as u32, width as u32, height as u32);
 
                 bitmap_data
                     .bitmap_data()
@@ -521,14 +526,7 @@ pub fn color_transform<'gc>(
                 .unwrap_or(&Value::Undefined)
                 .coerce_to_object(activation);
 
-            let x = rectangle.get("x", activation)?.coerce_to_i32(activation)?;
-            let y = rectangle.get("y", activation)?.coerce_to_i32(activation)?;
-            let width = rectangle
-                .get("width", activation)?
-                .coerce_to_i32(activation)?;
-            let height = rectangle
-                .get("height", activation)?
-                .coerce_to_i32(activation)?;
+            let (x, y, width, height) = object_to_rectangle(rectangle, activation)?;
 
             let min_x = x.max(0) as u32;
             let end_x = (x + width) as u32;
@@ -687,18 +685,8 @@ pub fn copy_pixels<'gc>(
                 .unwrap_or(&Value::Undefined)
                 .coerce_to_object(activation);
 
-            let src_min_x = source_rect
-                .get("x", activation)?
-                .coerce_to_i32(activation)?;
-            let src_min_y = source_rect
-                .get("y", activation)?
-                .coerce_to_i32(activation)?;
-            let src_width = source_rect
-                .get("width", activation)?
-                .coerce_to_i32(activation)?;
-            let src_height = source_rect
-                .get("height", activation)?
-                .coerce_to_i32(activation)?;
+            let (src_min_x, src_min_y, src_width, src_height) =
+                object_to_rectangle(source_rect, activation)?;
 
             let dest_point = args
                 .get(2)
@@ -831,18 +819,8 @@ pub fn palette_map<'gc>(
                 .unwrap_or(&Value::Undefined)
                 .coerce_to_object(activation);
 
-            let src_min_x = source_rect
-                .get("x", activation)?
-                .coerce_to_i32(activation)?;
-            let src_min_y = source_rect
-                .get("y", activation)?
-                .coerce_to_i32(activation)?;
-            let src_width = source_rect
-                .get("width", activation)?
-                .coerce_to_i32(activation)?;
-            let src_height = source_rect
-                .get("height", activation)?
-                .coerce_to_i32(activation)?;
+            let (src_min_x, src_min_y, src_width, src_height) =
+                object_to_rectangle(source_rect, activation)?;
 
             let dest_point = args
                 .get(2)
