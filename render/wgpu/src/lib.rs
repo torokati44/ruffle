@@ -51,7 +51,7 @@ pub use wgpu;
 pub struct Descriptors {
     pub device: wgpu::Device,
     queue: wgpu::Queue,
-    globals: Globals,
+    pub globals: Globals,
     pipelines: Pipelines,
     bitmap_samplers: BitmapSamplers,
     msaa_sample_count: u32,
@@ -399,6 +399,9 @@ impl<T: RenderTarget> TargetWithViewsAndFrame<T> {
     }
 
     fn begin_frame(&mut self, desc: &mut Descriptors, clear: Color) {
+
+        desc.globals.set_resolution(self.target.width(), self.target.height());
+
         let frame_output = match self.target.get_next_texture() {
             Ok(frame) => frame,
             Err(e) => {
@@ -479,7 +482,7 @@ impl<T: RenderTarget> TargetWithViewsAndFrame<T> {
 }
 
 pub struct WgpuRenderBackend<T: RenderTarget> {
-    descriptors: Descriptors,
+    pub descriptors: Descriptors,
 
     target: TargetWithViewsAndFrame<T>,
     offscreen_target: TargetWithViewsAndFrame<TextureTarget>,
@@ -624,10 +627,12 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
             .globals
             .set_resolution(target.width(), target.height());
 
+        let (w, h) = (target.width(), target.height());
+
         let target = TargetWithViewsAndFrame::new(&descriptors, target);
 
-        // TODO: own descriptors?
-        let offscreen_target = TextureTarget::new(&descriptors.device, (300, 200));
+        // TODO: own descriptors? what size? dynamic?
+        let offscreen_target = TextureTarget::new(&descriptors.device, (w, h));
         let offscreen_target = TargetWithViewsAndFrame::new(&descriptors, offscreen_target);
 
         Ok(Self {

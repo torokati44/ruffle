@@ -11,7 +11,7 @@ use crate::context::RenderContext;
 use crate::display_object::TDisplayObject;
 use crate::prelude::BoundingBox;
 use gc_arena::{GcCell, MutationContext};
-use swf::Twips;
+use swf::{Matrix, Twips};
 
 use super::matrix::object_to_matrix;
 
@@ -584,19 +584,20 @@ pub fn draw<'gc>(
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
-
-
             /*
             public draw(source:Object, [matrix:Matrix],
                 [colorTransform:ColorTransform], [blendMode:Object],
                 [clipRect:Rectangle], [smooth:Boolean]) : Void
                 */
 
-            let matrix = args.get(1).unwrap_or(&Value::Undefined).coerce_to_object(activation);
-            let matrix = object_to_matrix(matrix, activation)?;
+            let matrix = args
+                .get(1)
+                .map(|o| o.coerce_to_object(activation))
+                .map(|o| object_to_matrix(o, activation).unwrap_or(Matrix::default()))
+                .unwrap_or(Matrix::default());
 
-            // println!("BitmapData.draw, matrix: {:#?}", matrix);
-            println!("BitmapData.draw, args: {:#?}", args);
+            println!("BitmapData.draw, matrix: {:#?}", matrix);
+            //println!("BitmapData.draw, args: {:#?}", args);
 
             if let Some(source) = args
                 .get(0)
@@ -609,20 +610,27 @@ pub fn draw<'gc>(
                     .renderer
                     .begin_frame_offscreen(swf::Color::from_rgb(0, 0));
 
+                let bmd = bitmap_data.bitmap_data();
+                let mut write = bmd.write(activation.context.gc_context);
+
                 let mut transform_stack = crate::transform::TransformStack::new();
 
                 transform_stack.push(&crate::transform::Transform {
-                    //matrix,
+                    matrix,
                     ..Default::default()
                 });
 
+
+                activation
+                .context
+                .renderer.set_viewport_dimensions(write.width(), write.height());
 
 
                 let mut view_bounds = BoundingBox::default();
                 view_bounds.set_x(Twips::from_pixels(0.0));
                 view_bounds.set_y(Twips::from_pixels(0.0));
-                view_bounds.set_width(Twips::from_pixels(300.0));
-                view_bounds.set_height(Twips::from_pixels(200.0));
+                view_bounds.set_width(Twips::from_pixels(write.width() as f64));
+                view_bounds.set_height(Twips::from_pixels(write.height() as f64));
 
                 let mut render_context = RenderContext {
                     renderer: activation.context.renderer,
@@ -637,8 +645,6 @@ pub fn draw<'gc>(
 
                 let bm = activation.context.renderer.end_frame_offscreen();
 
-                let bmd = bitmap_data.bitmap_data();
-                let mut write = bmd.write(activation.context.gc_context);
 
                 match bm {
                     Some(bm) => match bm.data {
@@ -652,7 +658,9 @@ pub fn draw<'gc>(
                                     let a = d[ind as usize + 3usize];
 
                                     if write.is_point_in_bounds(x as i32, y as i32) {
-                                        write.set_pixel32_raw(x, y, Color::argb(a, r, g, b));
+                                        let nc = Color::argb(a, r, g, b);
+                                        let oc = write.get_pixel_raw(x, y).unwrap();
+                                        write.set_pixel32_raw(x, y, oc.blend_over(&nc));
                                     }
                                 }
                             }
