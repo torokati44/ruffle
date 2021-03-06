@@ -202,15 +202,18 @@ impl RenderTarget for TextureTarget {
             usage: wgpu::TextureUsage::RENDER_ATTACHMENT | wgpu::TextureUsage::COPY_SRC,
         });
 
+        self.buffer_dimensions = BufferDimensions::new(width as usize, height as usize);
+
+        let size = (self.buffer_dimensions.padded_bytes_per_row * self.buffer_dimensions.height) as u64;
+
         let buffer_label = create_debug_label!("Render target buffer");
         self.buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: buffer_label.as_deref(),
-            size: width as u64 * height as u64 * 4,
+            size,
             usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::MAP_READ,
             mapped_at_creation: false,
         });
 
-        self.buffer_dimensions = BufferDimensions::new(width as usize, height as usize);
     }
 
     fn format(&self) -> wgpu::TextureFormat {

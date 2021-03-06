@@ -82,12 +82,6 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
 
     fn run_frame(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
 
-        context.renderer.set_offscreen_viewport_dimensions(128, 128);
-
-
-        context
-            .renderer
-            .begin_frame_offscreen(Color::from_rgb(0, 0));
 
 
         let mut write = self.0.write(context.gc_context);
@@ -102,6 +96,18 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
 
         // view_bounds.set_width(Twips::from_pixels(512.0));
         // view_bounds.set_height(Twips::from_pixels(512.0));
+
+
+        //context.renderer.set_offscreen_viewport_dimensions(view_bounds.width().to_pixels() as u32,
+        //view_bounds.height().to_pixels() as u32);
+
+        context.renderer.set_offscreen_viewport_dimensions(173, 179);
+
+
+        context
+            .renderer
+            .begin_frame_offscreen(Color::from_rgb(0, 0));
+
 
 
         let mut transform_stack = crate::transform::TransformStack::new();
@@ -140,7 +146,9 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
         //for i in 400..bmd.len() {
         //    bmd[(i as isize -400) as usize] += bmd[i];
         //}
-
+        for i in 400..(bmd.len()/4) {
+            bmd[i*4+3] /= 2;
+        }
         let mut write = self.0.write(context.gc_context);
 
         //let mut file = File::create(format!("file-{:#?}.rgba", self.as_ptr())).unwrap();
@@ -167,6 +175,12 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
     fn render_self(&self, context: &mut RenderContext<'_, 'gc>) {
 
         let read = self.0.read();
+
+        context.renderer.render_shape(
+            self.0.read().static_data.render_handle,
+            context.transform_stack.transform(),
+        );
+
         match read.proxy_bitmap {
             Some(bmh) => {
                 println!("rendering bitmap");
@@ -178,12 +192,12 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
                     .render_bitmap(bmh, &tx, false);
             }
             None => {
-                println!("rendering for real");
+                // println!("rendering for real");
 
-                context.renderer.render_shape(
-                    self.0.read().static_data.render_handle,
-                    context.transform_stack.transform(),
-                );
+                // context.renderer.render_shape(
+                //     self.0.read().static_data.render_handle,
+                //     context.transform_stack.transform(),
+                // );
             }
         }
 

@@ -1156,7 +1156,6 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
         self.target
             .target
             .resize(&self.descriptors.device, width, height);
-        // TODO: resize offscren target sometime?
 
         let label = create_debug_label!("Framebuffer texture");
         let frame_buffer = self
@@ -1207,7 +1206,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
             .target
             .resize(&self.descriptors.device, width, height);
 
-        let label = create_debug_label!("Framebuffer texture");
+        let label = create_debug_label!("Offscreen framebuffer texture");
         let frame_buffer = self
             .descriptors
             .device
@@ -1226,7 +1225,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
             });
         self.offscreen_target.frame_buffer_view = frame_buffer.create_view(&Default::default());
 
-        let label = create_debug_label!("Depth texture");
+        let label = create_debug_label!("Offscreen depth texture");
         let depth_texture = self
             .descriptors
             .device
