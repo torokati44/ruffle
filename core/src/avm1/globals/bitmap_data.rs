@@ -612,8 +612,11 @@ pub fn draw<'gc>(
                 let mut transform_stack = crate::transform::TransformStack::new();
 
                 transform_stack.push(&crate::transform::Transform {
+                    //matrix,
                     ..Default::default()
                 });
+
+
 
                 let mut view_bounds = BoundingBox::default();
                 view_bounds.set_x(Twips::from_pixels(0.0));
@@ -630,7 +633,8 @@ pub fn draw<'gc>(
                     allow_mask: true,
                 };
 
-                source.render(&mut render_context);
+                source.render(&mut render_context, false);
+
                 let bm = activation.context.renderer.end_frame_offscreen();
 
                 let bmd = bitmap_data.bitmap_data();

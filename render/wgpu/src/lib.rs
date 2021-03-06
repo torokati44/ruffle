@@ -1285,8 +1285,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
             }
 
             if self.offscreen_target.current_frame.is_some() {
-                let mut tf = transform.clone();
-                tf.matrix = Matrix::default();
+                let tf = transform.clone();
 
                 println!("offscreen render bitmap");
                 self.offscreen_target.render_bitmap(
@@ -1318,7 +1317,9 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
 
         if self.offscreen_target.current_frame.is_some() {
             let mut tf = transform.clone();
-            tf.matrix = Matrix::default();
+            println!("matrix: {:?}", transform.matrix);
+            //tf.matrix = Matrix::default();
+
             println!("offscreen render shape!");
             self.offscreen_target.render_shape(
                 mesh,
@@ -1345,13 +1346,12 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
         }
 
         if self.offscreen_target.current_frame.is_some() {
-            let m = Matrix::default();
             println!("offscreen draw rect");
             self.offscreen_target.draw_rect(
                 &self.quad_vbo,
                 &self.quad_ibo,
                 &color,
-                &m,
+                matrix,
                 &self.descriptors,
                 self.mask_state,
                 self.num_masks,

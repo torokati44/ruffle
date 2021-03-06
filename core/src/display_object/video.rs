@@ -401,7 +401,7 @@ impl<'gc> TDisplayObject<'gc> for Video<'gc> {
         bounding_box
     }
 
-    fn render(&self, context: &mut RenderContext) {
+    fn render_self(&self, context: &mut RenderContext) {
         if !self.world_bounds().intersects(&context.view_bounds) {
             // Off-screen; culled
             return;

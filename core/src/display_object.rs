@@ -949,11 +949,14 @@ pub trait TDisplayObject<'gc>:
 
     fn render_self(&self, _context: &mut RenderContext<'_, 'gc>) {}
 
-    fn render(&self, context: &mut RenderContext<'_, 'gc>) {
+    fn render(&self, context: &mut RenderContext<'_, 'gc>, use_transform: bool) {
         if self.maskee().is_some() {
             return;
         }
-        context.transform_stack.push(&*self.transform());
+
+        if use_transform {
+            context.transform_stack.push(&*self.transform());
+        }
 
         let mask = self.masker();
         let mut mask_transform = crate::transform::Transform::default();
@@ -978,8 +981,9 @@ pub trait TDisplayObject<'gc>:
             context.allow_mask = true;
             context.renderer.pop_mask();
         }
-
-        context.transform_stack.pop();
+        if use_transform {
+            context.transform_stack.pop();
+        }
     }
 
     fn unload(&self, context: &mut UpdateContext<'_, 'gc, '_>) {

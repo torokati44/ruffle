@@ -1000,7 +1000,7 @@ impl Player {
             };
 
             for (_depth, level) in root_data.levels.iter() {
-                level.render(&mut render_context);
+                level.render(&mut render_context, true);
             }
         });
         transform_stack.pop();
