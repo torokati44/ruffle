@@ -1,7 +1,7 @@
 //! `MovieClip` display object and support code.
-use crate::avm1::{
+use crate::{avm1::{
     Avm1, AvmString, Object as Avm1Object, StageObject, TObject as Avm1TObject, Value as Avm1Value,
-};
+}, backend::render::BitmapHandle};
 use crate::avm2::Activation as Avm2Activation;
 use crate::avm2::{
     Avm2, Error as Avm2Error, Namespace as Avm2Namespace, Object as Avm2Object, QName as Avm2QName,
@@ -80,6 +80,7 @@ pub struct MovieClipData<'gc> {
     flags: MovieClipFlags,
     avm2_constructor: Option<Avm2Object<'gc>>,
     drawing: Drawing,
+    proxy_bitmap: Option<BitmapHandle>,
     is_focusable: bool,
     has_focus: bool,
     enabled: bool,
@@ -107,6 +108,7 @@ impl<'gc> MovieClip<'gc> {
                 flags: MovieClipFlags::empty(),
                 avm2_constructor: None,
                 drawing: Drawing::new(),
+                proxy_bitmap: None,
                 is_focusable: false,
                 has_focus: false,
                 enabled: true,
@@ -139,6 +141,7 @@ impl<'gc> MovieClip<'gc> {
                 flags: MovieClipFlags::empty(),
                 avm2_constructor: Some(constr),
                 drawing: Drawing::new(),
+                proxy_bitmap: None,
                 is_focusable: false,
                 has_focus: false,
                 enabled: true,
@@ -174,6 +177,7 @@ impl<'gc> MovieClip<'gc> {
                 flags: MovieClipFlags::PLAYING,
                 avm2_constructor: None,
                 drawing: Drawing::new(),
+                proxy_bitmap: None,
                 is_focusable: false,
                 has_focus: false,
                 enabled: true,
@@ -1819,7 +1823,16 @@ impl<'gc> TDisplayObject<'gc> for MovieClip<'gc> {
     }
 
     fn render_self(&self, context: &mut RenderContext<'_, 'gc>) {
-        self.0.read().drawing.render(context);
+        let read = self.0.read();
+        read.drawing.render(context);
+        drop(read);
+
+        let write = self.0.write(context.);
+        context.renderer.begin_frame_offscreen(Color::from_rgb(0, 0));
+        let bm = context.renderer.end_frame_offscreen();
+        drop(write);
+
+
         self.render_children(context);
     }
 

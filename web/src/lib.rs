@@ -869,6 +869,7 @@ impl Ruffle {
                 let canvas_width = canvas.client_width();
                 let canvas_height = canvas.client_height();
                 let device_pixel_ratio = window.device_pixel_ratio(); // Changes via user zooming.
+                println!("dpi: ", device_pixel_ratio);
                 if instance.borrow().canvas_width != canvas_width
                     || instance.borrow().canvas_height != canvas_height
                     || (instance.borrow().device_pixel_ratio - device_pixel_ratio).abs()

@@ -399,8 +399,8 @@ impl<T: RenderTarget> TargetWithViewsAndFrame<T> {
     }
 
     fn begin_frame(&mut self, desc: &mut Descriptors, clear: Color) {
-
-        desc.globals.set_resolution(self.target.width(), self.target.height());
+        desc.globals
+            .set_resolution(self.target.width(), self.target.height());
 
         let frame_output = match self.target.get_next_texture() {
             Ok(frame) => frame,
