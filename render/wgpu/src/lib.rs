@@ -1274,21 +1274,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
     }
 
     fn render_bitmap(&mut self, bitmap: BitmapHandle, transform: &Transform, smoothing: bool) {
-
         if let Some(texture) = self.textures.get(bitmap.0) {
-            if self.target.current_frame.is_some() {
-                self.target.render_bitmap(
-                    &self.quad_vbo,
-                    &self.quad_ibo,
-                    texture,
-                    smoothing,
-                    transform,
-                    &self.descriptors,
-                    self.mask_state,
-                    self.num_masks,
-                );
-            }
-
             if self.offscreen_target.current_frame.is_some() {
                 let tf = transform.clone();
 
@@ -1303,22 +1289,23 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
                     self.mask_state,
                     self.num_masks,
                 );
+            } else if self.target.current_frame.is_some() {
+                self.target.render_bitmap(
+                    &self.quad_vbo,
+                    &self.quad_ibo,
+                    texture,
+                    smoothing,
+                    transform,
+                    &self.descriptors,
+                    self.mask_state,
+                    self.num_masks,
+                );
             }
         }
     }
 
     fn render_shape(&mut self, shape: ShapeHandle, transform: &Transform) {
         let mesh = &mut self.meshes[shape.0];
-
-        if self.target.current_frame.is_some() {
-            self.target.render_shape(
-                mesh,
-                transform,
-                &self.descriptors,
-                self.mask_state,
-                self.num_masks,
-            );
-        }
 
         if self.offscreen_target.current_frame.is_some() {
             let mut tf = transform.clone();
@@ -1333,13 +1320,21 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
                 self.mask_state,
                 self.num_masks,
             );
+        } else if self.target.current_frame.is_some() {
+            self.target.render_shape(
+                mesh,
+                transform,
+                &self.descriptors,
+                self.mask_state,
+                self.num_masks,
+            );
         }
     }
 
     fn draw_rect(&mut self, color: Color, matrix: &Matrix) {
-
-        if self.target.current_frame.is_some() {
-            self.target.draw_rect(
+        if self.offscreen_target.current_frame.is_some() {
+            println!("offscreen draw rect");
+            self.offscreen_target.draw_rect(
                 &self.quad_vbo,
                 &self.quad_ibo,
                 &color,
@@ -1348,11 +1343,8 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
                 self.mask_state,
                 self.num_masks,
             );
-        }
-
-        if self.offscreen_target.current_frame.is_some() {
-            println!("offscreen draw rect");
-            self.offscreen_target.draw_rect(
+        } else if self.target.current_frame.is_some() {
+            self.target.draw_rect(
                 &self.quad_vbo,
                 &self.quad_ibo,
                 &color,

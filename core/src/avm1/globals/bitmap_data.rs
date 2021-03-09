@@ -620,11 +620,10 @@ pub fn draw<'gc>(
                     ..Default::default()
                 });
 
-
                 activation
-                .context
-                .renderer.set_viewport_dimensions(write.width(), write.height());
-
+                    .context
+                    .renderer
+                    .set_viewport_dimensions(write.width(), write.height());
 
                 let mut view_bounds = BoundingBox::default();
                 view_bounds.set_x(Twips::from_pixels(0.0));
@@ -644,7 +643,6 @@ pub fn draw<'gc>(
                 source.render(&mut render_context, false);
 
                 let bm = activation.context.renderer.end_frame_offscreen();
-
 
                 match bm {
                     Some(bm) => match bm.data {

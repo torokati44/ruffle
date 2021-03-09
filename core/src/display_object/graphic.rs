@@ -1,9 +1,12 @@
-use crate::avm1::Object as Avm1Object;
 use crate::avm2::{
     Activation as Avm2Activation, Error as Avm2Error, Namespace as Avm2Namespace,
     Object as Avm2Object, QName as Avm2QName, StageObject as Avm2StageObject,
     TObject as Avm2TObject,
 };
+use crate::backend::render::BitmapFormat;
+use crate::{avm1::Object as Avm1Object, backend::render::BitmapHandle};
+pub use crate::{library::MovieLibrary, transform::Transform, Color};
+
 use crate::backend::render::ShapeHandle;
 use crate::context::{RenderContext, UpdateContext};
 use crate::display_object::{DisplayObjectBase, TDisplayObject};
@@ -24,6 +27,7 @@ pub struct GraphicData<'gc> {
     base: DisplayObjectBase<'gc>,
     static_data: gc_arena::Gc<'gc, GraphicStatic>,
     avm2_object: Option<Avm2Object<'gc>>,
+    proxy_bitmap: Option<BitmapHandle>,
 }
 
 impl<'gc> Graphic<'gc> {
@@ -47,6 +51,7 @@ impl<'gc> Graphic<'gc> {
                 base: Default::default(),
                 static_data: gc_arena::Gc::allocate(context.gc_context, static_data),
                 avm2_object: None,
+                proxy_bitmap: None,
             },
         ))
     }
@@ -74,20 +79,99 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
         bounds
     }
 
-    fn run_frame(&self, _context: &mut UpdateContext) {
-        // Noop
+    fn run_frame(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
+        context
+            .renderer
+            .begin_frame_offscreen(Color::from_rgb(0, 0));
+
+        let mut transform_stack = crate::transform::TransformStack::new();
+
+        transform_stack.push(&crate::transform::Transform {
+            ..Default::default()
+        });
+
+        let mut view_bounds = BoundingBox::default();
+        view_bounds.set_x(Twips::from_pixels(0.0));
+        view_bounds.set_y(Twips::from_pixels(0.0));
+        view_bounds.set_width(Twips::from_pixels(512.0));
+        view_bounds.set_height(Twips::from_pixels(512.0));
+
+        let mut render_context = RenderContext {
+            renderer: context.renderer,
+            library: &context.library,
+            transform_stack: &mut transform_stack,
+            view_bounds,
+            clip_depth_stack: vec![],
+            allow_mask: true,
+        };
+
+        self.render(&mut render_context, false);
+
+        let bm = context.renderer.end_frame_offscreen().unwrap();
+        let mut bmd = match bm.data {
+            BitmapFormat::Rgb(x) => x,
+            BitmapFormat::Rgba(x) => x,
+        };
+
+        bmd[8] = 0;
+        bmd[9] = 0;
+        bmd[10] = 255;
+        bmd[11] = 0;
+
+        bmd[12] = 255;
+        bmd[13] = 255;
+        bmd[14] = 0;
+        bmd[15] = 255;
+
+        let mut write = self.0.write(context.gc_context);
+
+        //let mut file = File::create(format!("file-{}.rgba", write.current_frame)).unwrap();
+        //file.write_all(&bmd);
+
+        match write.proxy_bitmap {
+            Some(bmh) => {
+                let nbmh = context
+                    .renderer
+                    .update_texture(bmh, bm.width, bm.height, bmd)
+                    .unwrap();
+                write.proxy_bitmap = Some(nbmh);
+            }
+            None => {
+                let nbmh = context
+                    .renderer
+                    .register_bitmap_raw(bm.width, bm.height, bmd)
+                    .unwrap();
+                write.proxy_bitmap = Some(nbmh);
+            }
+        };
     }
 
-    fn render_self(&self, context: &mut RenderContext) {
+    fn render_self(&self, context: &mut RenderContext<'_, 'gc>) {
         if !self.world_bounds().intersects(&context.view_bounds) {
             // Off-screen; culled
             return;
         }
 
-        context.renderer.render_shape(
-            self.0.read().static_data.render_handle,
-            context.transform_stack.transform(),
-        );
+        let read = self.0.read();
+        match read.proxy_bitmap {
+            Some(bmh) => {
+                println!("rendering bitmap");
+
+                context
+                    .renderer
+                    .render_bitmap(bmh, context.transform_stack.transform(), false);
+            }
+            None => {
+                println!("rendering for real");
+
+                context.renderer.render_shape(
+                    self.0.read().static_data.render_handle,
+                    context.transform_stack.transform(),
+                );
+            }
+        }
+
+        drop(read);
     }
 
     fn hit_test_shape(

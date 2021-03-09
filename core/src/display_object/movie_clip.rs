@@ -1,7 +1,4 @@
 //! `MovieClip` display object and support code.
-use crate::{avm1::{
-    Avm1, AvmString, Object as Avm1Object, StageObject, TObject as Avm1TObject, Value as Avm1Value,
-}, backend::render::BitmapHandle};
 use crate::avm2::Activation as Avm2Activation;
 use crate::avm2::{
     Avm2, Error as Avm2Error, Namespace as Avm2Namespace, Object as Avm2Object, QName as Avm2QName,
@@ -9,7 +6,17 @@ use crate::avm2::{
 };
 use crate::backend::audio::{PreloadStreamHandle, SoundHandle, SoundInstanceHandle};
 use crate::backend::ui::MouseCursor;
+use crate::{
+    avm1::{
+        Avm1, AvmString, Object as Avm1Object, StageObject, TObject as Avm1TObject,
+        Value as Avm1Value,
+    },
+    backend::render::{BitmapFormat, BitmapHandle},
+};
 use bitflags::bitflags;
+use std::fs::File;
+use std::io::prelude::*;
+use std::path::Path;
 
 use crate::avm1::activation::{Activation as Avm1Activation, ActivationIdentifier};
 use crate::character::Character;
@@ -1770,12 +1777,75 @@ impl<'gc> TDisplayObject<'gc> for MovieClip<'gc> {
         }
 
         if is_load_frame {
-            self.0.write(context.gc_context).run_clip_postevent(
-                (*self).into(),
-                context,
-                ClipEvent::Load,
-            );
+            let mut mc = self.0.write(context.gc_context);
+            mc.run_clip_postevent((*self).into(), context, ClipEvent::Load);
+            drop(mc);
         }
+
+        context
+            .renderer
+            .begin_frame_offscreen(Color::from_rgb(0, 0));
+
+        let mut transform_stack = crate::transform::TransformStack::new();
+
+        transform_stack.push(&crate::transform::Transform {
+            ..Default::default()
+        });
+
+        let mut view_bounds = BoundingBox::default();
+        view_bounds.set_x(Twips::from_pixels(0.0));
+        view_bounds.set_y(Twips::from_pixels(0.0));
+        view_bounds.set_width(Twips::from_pixels(128.0));
+        view_bounds.set_height(Twips::from_pixels(128.0));
+
+        let mut render_context = RenderContext {
+            renderer: context.renderer,
+            library: &context.library,
+            transform_stack: &mut transform_stack,
+            view_bounds,
+            clip_depth_stack: vec![],
+            allow_mask: true,
+        };
+
+        self.render(&mut render_context, true);
+
+        let bm = context.renderer.end_frame_offscreen().unwrap();
+        let mut bmd = match bm.data {
+            BitmapFormat::Rgb(x) => x,
+            BitmapFormat::Rgba(x) => x,
+        };
+
+        bmd[8] = 0;
+        bmd[9] = 0;
+        bmd[10] = 255;
+        bmd[11] = 0;
+
+        bmd[12] = 255;
+        bmd[13] = 255;
+        bmd[14] = 0;
+        bmd[15] = 255;
+
+        let mut write = self.0.write(context.gc_context);
+
+        //let mut file = File::create(format!("file-{}.rgba", write.current_frame)).unwrap();
+        //file.write_all(&bmd);
+
+        match write.proxy_bitmap {
+            Some(bmh) => {
+                let nbmh = context
+                    .renderer
+                    .update_texture(bmh, bm.width, bm.height, bmd)
+                    .unwrap();
+                write.proxy_bitmap = Some(nbmh);
+            }
+            None => {
+                let nbmh = context
+                    .renderer
+                    .register_bitmap_raw(bm.width, bm.height, bmd)
+                    .unwrap();
+                write.proxy_bitmap = Some(nbmh);
+            }
+        };
     }
 
     fn run_frame_scripts(self, context: &mut UpdateContext<'_, 'gc, '_>) {
@@ -1824,14 +1894,20 @@ impl<'gc> TDisplayObject<'gc> for MovieClip<'gc> {
 
     fn render_self(&self, context: &mut RenderContext<'_, 'gc>) {
         let read = self.0.read();
-        read.drawing.render(context);
+        match read.proxy_bitmap {
+            Some(bmh) => {
+                println!("rendering bitmap");
+                context
+                    .renderer
+                    .render_bitmap(bmh, &read.base.transform, false);
+            }
+            None => {
+                println!("rendering for real");
+                read.drawing.render(context);
+            }
+        }
+
         drop(read);
-
-        let write = self.0.write(context.);
-        context.renderer.begin_frame_offscreen(Color::from_rgb(0, 0));
-        let bm = context.renderer.end_frame_offscreen();
-        drop(write);
-
 
         self.render_children(context);
     }
