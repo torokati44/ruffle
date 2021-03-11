@@ -81,6 +81,10 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
     }
 
     fn run_frame(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
+
+        context.renderer.set_offscreen_viewport_dimensions(128, 128);
+
+
         context
             .renderer
             .begin_frame_offscreen(Color::from_rgb(0, 0));
@@ -95,16 +99,18 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
 
         let mut view_bounds = self.world_bounds();
         // let mut view_bounds = BoundingBox::default();
-        // view_bounds.set_x(Twips::from_pixels(0.0));
-        // view_bounds.set_y(Twips::from_pixels(0.0));
+
         // view_bounds.set_width(Twips::from_pixels(512.0));
         // view_bounds.set_height(Twips::from_pixels(512.0));
 
 
         let mut transform_stack = crate::transform::TransformStack::new();
         let mut mx = self.local_to_global_matrix();
-        //mx.tx = view_bounds.x_min;
-        //mx.ty = view_bounds.y_min;
+        mx.tx -= view_bounds.x_min;
+        mx.ty -= view_bounds.y_min;
+
+        view_bounds.set_x(Twips::from_pixels(0.0));
+        view_bounds.set_y(Twips::from_pixels(0.0));
 
         //view_bounds.x_min = Twips::from_pixels(0.0);
         //view_bounds.y_min = Twips::from_pixels(0.0);
@@ -131,9 +137,9 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
             BitmapFormat::Rgba(x) => x,
         };
 
-        for i in 400..bmd.len() {
-            bmd[(i as isize -400) as usize] += bmd[i];
-        }
+        //for i in 400..bmd.len() {
+        //    bmd[(i as isize -400) as usize] += bmd[i];
+        //}
 
         let mut write = self.0.write(context.gc_context);
 
@@ -159,18 +165,14 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
     }
 
     fn render_self(&self, context: &mut RenderContext<'_, 'gc>) {
-        if !self.world_bounds().intersects(&context.view_bounds) {
-            // Off-screen; culled
-            return;
-        }
 
         let read = self.0.read();
         match read.proxy_bitmap {
             Some(bmh) => {
                 println!("rendering bitmap");
                 let mut tx = Transform::default();
-                //tx.matrix.tx = self.world_bounds().x_min * -1;
-                //tx.matrix.ty = self.world_bounds().y_min * -1;
+                tx.matrix.tx += self.world_bounds().x_min;
+                tx.matrix.ty += self.world_bounds().y_min;
                 context
                     .renderer
                     .render_bitmap(bmh, &tx, false);

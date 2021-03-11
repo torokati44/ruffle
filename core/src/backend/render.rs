@@ -8,6 +8,7 @@ use swf::Matrix;
 
 pub trait RenderBackend: Downcast {
     fn set_viewport_dimensions(&mut self, width: u32, height: u32);
+    fn set_offscreen_viewport_dimensions(&mut self, width: u32, height: u32);
     fn register_shape(
         &mut self,
         shape: DistilledShape,
@@ -99,6 +100,7 @@ impl Default for NullRenderer {
 
 impl RenderBackend for NullRenderer {
     fn set_viewport_dimensions(&mut self, _width: u32, _height: u32) {}
+    fn set_offscreen_viewport_dimensions(&mut self, _width: u32, _height: u32) {}
     fn register_shape(
         &mut self,
         _shape: DistilledShape,

@@ -209,6 +209,8 @@ impl RenderTarget for TextureTarget {
             usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::MAP_READ,
             mapped_at_creation: false,
         });
+
+        self.buffer_dimensions = BufferDimensions::new(width as usize, height as usize);
     }
 
     fn format(&self) -> wgpu::TextureFormat {

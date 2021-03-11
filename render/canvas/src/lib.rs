@@ -418,7 +418,10 @@ impl RenderBackend for WebCanvasRenderBackend {
         self.viewport_width = width;
         self.viewport_height = height;
     }
-
+    fn set_offscreen_viewport_dimensions(&mut self, width: u32, height: u32) {
+        self.viewport_width = width;
+        self.viewport_height = height;
+    }
     fn register_shape(
         &mut self,
         shape: DistilledShape,

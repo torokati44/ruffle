@@ -1198,6 +1198,55 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
         self.descriptors.globals.set_resolution(width, height);
     }
 
+    fn set_offscreen_viewport_dimensions(&mut self, width: u32, height: u32) {
+        // Avoid panics from creating 0-sized framebuffers.
+        let width = std::cmp::max(width, 1);
+        let height = std::cmp::max(height, 1);
+
+        self.offscreen_target
+            .target
+            .resize(&self.descriptors.device, width, height);
+
+        let label = create_debug_label!("Framebuffer texture");
+        let frame_buffer = self
+            .descriptors
+            .device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: label.as_deref(),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth: 1,
+                },
+                mip_level_count: 1,
+                sample_count: self.descriptors.msaa_sample_count,
+                dimension: wgpu::TextureDimension::D2,
+                format: self.offscreen_target.target.format(),
+                usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+            });
+        self.offscreen_target.frame_buffer_view = frame_buffer.create_view(&Default::default());
+
+        let label = create_debug_label!("Depth texture");
+        let depth_texture = self
+            .descriptors
+            .device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: label.as_deref(),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth: 1,
+                },
+                mip_level_count: 1,
+                sample_count: self.descriptors.msaa_sample_count,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Depth24PlusStencil8,
+                usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+            });
+        self.offscreen_target.depth_texture_view = depth_texture.create_view(&Default::default());
+        self.descriptors.globals.set_resolution(width, height);
+    }
+
     fn register_shape(
         &mut self,
         shape: DistilledShape,
@@ -1309,7 +1358,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
 
         if self.offscreen_target.current_frame.is_some() {
             let mut tf = transform.clone();
-            println!("matrix: {:?}", transform.matrix);
+            //println!("matrix: {:?}", transform.matrix);
             //tf.matrix = Matrix::default();
 
             println!("offscreen render shape!");
