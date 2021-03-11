@@ -6,7 +6,8 @@ use crate::avm2::{
 use crate::backend::render::BitmapFormat;
 use crate::{avm1::Object as Avm1Object, backend::render::BitmapHandle};
 pub use crate::{library::MovieLibrary, transform::Transform, Color};
-
+use std::fs::File;
+use std::io::Write;
 use crate::backend::render::ShapeHandle;
 use crate::context::{RenderContext, UpdateContext};
 use crate::display_object::{DisplayObjectBase, TDisplayObject};
@@ -84,17 +85,34 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
             .renderer
             .begin_frame_offscreen(Color::from_rgb(0, 0));
 
-        let mut transform_stack = crate::transform::TransformStack::new();
 
+        let mut write = self.0.write(context.gc_context);
+        let opbm = write.proxy_bitmap;
+        write.proxy_bitmap = None;
+        drop(write);
+
+
+
+        let mut view_bounds = self.world_bounds();
+        // let mut view_bounds = BoundingBox::default();
+        // view_bounds.set_x(Twips::from_pixels(0.0));
+        // view_bounds.set_y(Twips::from_pixels(0.0));
+        // view_bounds.set_width(Twips::from_pixels(512.0));
+        // view_bounds.set_height(Twips::from_pixels(512.0));
+
+
+        let mut transform_stack = crate::transform::TransformStack::new();
+        let mut mx = self.local_to_global_matrix();
+        //mx.tx = view_bounds.x_min;
+        //mx.ty = view_bounds.y_min;
+
+        //view_bounds.x_min = Twips::from_pixels(0.0);
+        //view_bounds.y_min = Twips::from_pixels(0.0);
         transform_stack.push(&crate::transform::Transform {
+            matrix: mx,
             ..Default::default()
         });
 
-        let mut view_bounds = BoundingBox::default();
-        view_bounds.set_x(Twips::from_pixels(0.0));
-        view_bounds.set_y(Twips::from_pixels(0.0));
-        view_bounds.set_width(Twips::from_pixels(512.0));
-        view_bounds.set_height(Twips::from_pixels(512.0));
 
         let mut render_context = RenderContext {
             renderer: context.renderer,
@@ -113,22 +131,16 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
             BitmapFormat::Rgba(x) => x,
         };
 
-        bmd[8] = 0;
-        bmd[9] = 0;
-        bmd[10] = 255;
-        bmd[11] = 0;
-
-        bmd[12] = 255;
-        bmd[13] = 255;
-        bmd[14] = 0;
-        bmd[15] = 255;
+        for i in 400..bmd.len() {
+            bmd[(i as isize -400) as usize] += bmd[i];
+        }
 
         let mut write = self.0.write(context.gc_context);
 
-        //let mut file = File::create(format!("file-{}.rgba", write.current_frame)).unwrap();
+        //let mut file = File::create(format!("file-{:#?}.rgba", self.as_ptr())).unwrap();
         //file.write_all(&bmd);
 
-        match write.proxy_bitmap {
+        match opbm {
             Some(bmh) => {
                 let nbmh = context
                     .renderer
@@ -156,10 +168,12 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
         match read.proxy_bitmap {
             Some(bmh) => {
                 println!("rendering bitmap");
-
+                let mut tx = Transform::default();
+                //tx.matrix.tx = self.world_bounds().x_min * -1;
+                //tx.matrix.ty = self.world_bounds().y_min * -1;
                 context
                     .renderer
-                    .render_bitmap(bmh, context.transform_stack.transform(), false);
+                    .render_bitmap(bmh, &tx, false);
             }
             None => {
                 println!("rendering for real");
