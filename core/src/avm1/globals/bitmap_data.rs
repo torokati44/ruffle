@@ -638,6 +638,7 @@ pub fn draw<'gc>(
                     view_bounds,
                     clip_depth_stack: vec![],
                     allow_mask: true,
+                    gc_context: activation.context.gc_context
                 };
 
                 source.render(&mut render_context, false);

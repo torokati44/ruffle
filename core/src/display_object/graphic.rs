@@ -1,8 +1,8 @@
-use crate::avm2::{
+use crate::{avm2::{
     Activation as Avm2Activation, Error as Avm2Error, Namespace as Avm2Namespace,
     Object as Avm2Object, QName as Avm2QName, StageObject as Avm2StageObject,
     TObject as Avm2TObject,
-};
+}, backend::render::RenderBackend, library::Library};
 use crate::backend::render::BitmapFormat;
 use crate::{avm1::Object as Avm1Object, backend::render::BitmapHandle};
 pub use crate::{library::MovieLibrary, transform::Transform, Color};
@@ -15,7 +15,7 @@ use crate::prelude::*;
 use crate::tag_utils::SwfMovie;
 use crate::types::{Degrees, Percent};
 use crate::vminterface::{AvmType, Instantiator};
-use gc_arena::{Collect, GcCell};
+use gc_arena::{Collect, GcCell, MutationContext};
 use std::sync::Arc;
 
 #[derive(Clone, Debug, Collect, Copy)]
@@ -56,6 +56,118 @@ impl<'gc> Graphic<'gc> {
             },
         ))
     }
+
+    fn update_proxy_bitmap(&self, renderer : &mut dyn RenderBackend,
+         library: &Library<'gc>,
+         gc_context: MutationContext<'gc, '_>) {
+
+
+        let mut write = self.0.write(gc_context);
+        let opbm = write.proxy_bitmap;
+        write.proxy_bitmap = None;
+        drop(write);
+
+
+        let mut view_bounds = self.world_bounds();
+        // let mut view_bounds = BoundingBox::default();
+
+        // view_bounds.set_width(Twips::from_pixels(512.0));
+        // view_bounds.set_height(Twips::from_pixels(512.0));
+        /*
+        let w = view_bounds.width().to_pixels() as u32;
+        let h = view_bounds.height().to_pixels() as u32;
+        let w = u32::max(16, u32::min(4096, w));
+        let h = u32::max(16, u32::min(4096, h));
+        println!("resizing to {} {}", w, h);
+        */
+        let w = 512_u32;
+        let h = 512_u32;
+        renderer.set_offscreen_viewport_dimensions(w, h);
+
+        renderer
+            .begin_frame_offscreen(Color::from_rgb(0, 0));
+
+        let mut transform_stack = crate::transform::TransformStack::new();
+        let mut mx = self.local_to_global_matrix();
+        mx.tx -= view_bounds.x_min;
+        mx.ty -= view_bounds.y_min;
+
+        view_bounds.set_x(Twips::from_pixels(0.0));
+        view_bounds.set_y(Twips::from_pixels(0.0));
+
+        //view_bounds.x_min = Twips::from_pixels(0.0);
+        //view_bounds.y_min = Twips::from_pixels(0.0);
+        transform_stack.push(&crate::transform::Transform {
+            matrix: mx,
+            ..Default::default()
+        });
+
+
+        let mut render_context = RenderContext {
+            renderer: renderer,
+            library: library,
+            transform_stack: &mut transform_stack,
+            view_bounds,
+            clip_depth_stack: vec![],
+            allow_mask: true,
+            gc_context: gc_context
+        };
+
+        // TODO: should be able to pass in transform-disabling, as well as render not only self but children too
+        self.render_self_unproxied(&mut render_context);
+
+        let bm = renderer.end_frame_offscreen().unwrap();
+        let mut bmd = match bm.data {
+            BitmapFormat::Rgb(x) => x,
+            BitmapFormat::Rgba(x) => x,
+        };
+
+        //for i in 400..bmd.len() {
+        //    bmd[(i as isize -400) as usize] += bmd[i];
+        //}
+        //for i in 400..(bmd.len()/4) {
+        //    bmd[i*4+3] /= 2;
+        //}
+        let mut accum = 0_u8;
+        for i in 0..(bmd.len()/4) {
+            accum = u8::saturating_add(accum, bmd[i*4+3]/20);
+            accum = u8::saturating_sub(accum, 128/20);
+
+            if bmd[i*4 + 3] == 0 {
+                bmd[i*4+3] = accum;
+            }
+
+        }
+
+        let mut write = self.0.write(gc_context);
+
+        //let mut file = File::create(format!("file-{:#?}.rgba", self.as_ptr())).unwrap();
+        //file.write_all(&bmd);
+
+        match opbm {
+            Some(bmh) => {
+                let nbmh = renderer
+                    .update_texture(bmh, bm.width, bm.height, bmd)
+                    .unwrap();
+                write.proxy_bitmap = Some(nbmh);
+            }
+            None => {
+                let nbmh = renderer
+                    .register_bitmap_raw(bm.width, bm.height, bmd)
+                    .unwrap();
+                write.proxy_bitmap = Some(nbmh);
+            }
+        };
+
+    }
+
+
+    fn render_self_unproxied(&self, context: &mut RenderContext<'_, 'gc, '_>) {
+        context.renderer.render_shape(
+            self.0.read().static_data.render_handle,
+            context.transform_stack.transform(),
+        );
+    }
 }
 
 impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
@@ -82,105 +194,13 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
 
     fn run_frame(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
 
-
-
-        let mut write = self.0.write(context.gc_context);
-        let opbm = write.proxy_bitmap;
-        write.proxy_bitmap = None;
-        drop(write);
-
-
-
-        let mut view_bounds = self.world_bounds();
-        // let mut view_bounds = BoundingBox::default();
-
-        // view_bounds.set_width(Twips::from_pixels(512.0));
-        // view_bounds.set_height(Twips::from_pixels(512.0));
-
-
-        //context.renderer.set_offscreen_viewport_dimensions(view_bounds.width().to_pixels() as u32,
-        //view_bounds.height().to_pixels() as u32);
-
-        context.renderer.set_offscreen_viewport_dimensions(173, 179);
-
-
-        context
-            .renderer
-            .begin_frame_offscreen(Color::from_rgb(0, 0));
-
-
-
-        let mut transform_stack = crate::transform::TransformStack::new();
-        let mut mx = self.local_to_global_matrix();
-        mx.tx -= view_bounds.x_min;
-        mx.ty -= view_bounds.y_min;
-
-        view_bounds.set_x(Twips::from_pixels(0.0));
-        view_bounds.set_y(Twips::from_pixels(0.0));
-
-        //view_bounds.x_min = Twips::from_pixels(0.0);
-        //view_bounds.y_min = Twips::from_pixels(0.0);
-        transform_stack.push(&crate::transform::Transform {
-            matrix: mx,
-            ..Default::default()
-        });
-
-
-        let mut render_context = RenderContext {
-            renderer: context.renderer,
-            library: &context.library,
-            transform_stack: &mut transform_stack,
-            view_bounds,
-            clip_depth_stack: vec![],
-            allow_mask: true,
-        };
-
-        self.render(&mut render_context, false);
-
-        let bm = context.renderer.end_frame_offscreen().unwrap();
-        let mut bmd = match bm.data {
-            BitmapFormat::Rgb(x) => x,
-            BitmapFormat::Rgba(x) => x,
-        };
-
-        //for i in 400..bmd.len() {
-        //    bmd[(i as isize -400) as usize] += bmd[i];
-        //}
-        for i in 400..(bmd.len()/4) {
-            bmd[i*4+3] /= 2;
-        }
-        let mut write = self.0.write(context.gc_context);
-
-        //let mut file = File::create(format!("file-{:#?}.rgba", self.as_ptr())).unwrap();
-        //file.write_all(&bmd);
-
-        match opbm {
-            Some(bmh) => {
-                let nbmh = context
-                    .renderer
-                    .update_texture(bmh, bm.width, bm.height, bmd)
-                    .unwrap();
-                write.proxy_bitmap = Some(nbmh);
-            }
-            None => {
-                let nbmh = context
-                    .renderer
-                    .register_bitmap_raw(bm.width, bm.height, bmd)
-                    .unwrap();
-                write.proxy_bitmap = Some(nbmh);
-            }
-        };
     }
 
-    fn render_self(&self, context: &mut RenderContext<'_, 'gc>) {
+    fn render_self(&self, context: &mut RenderContext<'_, 'gc, '_>) {
+
+        self.update_proxy_bitmap(context.renderer, context.library, context.gc_context);
 
         let read = self.0.read();
-
-        context.renderer.render_shape(
-            self.0.read().static_data.render_handle,
-            context.transform_stack.transform(),
-        );
-
         match read.proxy_bitmap {
             Some(bmh) => {
                 println!("rendering bitmap");
@@ -192,12 +212,7 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
                     .render_bitmap(bmh, &tx, false);
             }
             None => {
-                // println!("rendering for real");
-
-                // context.renderer.render_shape(
-                //     self.0.read().static_data.render_handle,
-                //     context.transform_stack.transform(),
-                // );
+                self.render_self_unproxied(context);
             }
         }
 

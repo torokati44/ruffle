@@ -1782,6 +1782,8 @@ impl<'gc> TDisplayObject<'gc> for MovieClip<'gc> {
             drop(mc);
         }
 
+
+        /*
         context
             .renderer
             .begin_frame_offscreen(Color::from_rgb(0, 0));
@@ -1805,6 +1807,7 @@ impl<'gc> TDisplayObject<'gc> for MovieClip<'gc> {
             view_bounds,
             clip_depth_stack: vec![],
             allow_mask: true,
+            gc_context: context.gc_context
         };
 
         self.render(&mut render_context, true);
@@ -1846,6 +1849,7 @@ impl<'gc> TDisplayObject<'gc> for MovieClip<'gc> {
                 write.proxy_bitmap = Some(nbmh);
             }
         };
+        */
     }
 
     fn run_frame_scripts(self, context: &mut UpdateContext<'_, 'gc, '_>) {
