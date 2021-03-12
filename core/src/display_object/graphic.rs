@@ -128,15 +128,26 @@ impl<'gc> Graphic<'gc> {
         //for i in 400..(bmd.len()/4) {
         //    bmd[i*4+3] /= 2;
         //}
-        let mut accum = 0_u8;
+        let mut accum_r = 0.0f32;
+        let mut accum_g = 0.0f32;
+        let mut accum_b = 0.0f32;
+        let mut accum_a = 0.0f32;
         for i in 0..(bmd.len()/4) {
-            accum = u8::saturating_add(accum, bmd[i*4+3]/20);
-            accum = u8::saturating_sub(accum, 128/20);
+            accum_r *= 0.95;
+            accum_g *= 0.95;
+            accum_b *= 0.95;
+            accum_a *= 0.95;
 
-            if bmd[i*4 + 3] == 0 {
-                bmd[i*4+3] = accum;
-            }
+            accum_r += bmd[i*4 + 0] as f32 * 0.05;
+            accum_g += bmd[i*4 + 1] as f32 * 0.05;
+            accum_b += bmd[i*4 + 2] as f32 * 0.05;
+            accum_a += bmd[i*4 + 3] as f32 * 0.05;
 
+
+            bmd[i*4 + 0] = accum_r as u8;
+            bmd[i*4 + 1] = accum_g as u8;
+            bmd[i*4 + 2] = accum_b as u8;
+            bmd[i*4 + 3] = accum_a as u8;
         }
 
         let mut write = self.0.write(gc_context);
