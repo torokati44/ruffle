@@ -1376,7 +1376,16 @@ fn set_filters<'gc>(
     value: Value<'gc>,
 ) -> Result<(), Error<'gc>> {
     // TODO: store
-    println!("setting filters: {:#?}", value);
+    let filters = value.coerce_to_object(activation);
+
+
+    for i in 0..filters.length() {
+        let filter = filters.array_element(i).coerce_to_object(activation);
+        if let Some(ds_filter) = filter.as_drop_shadow_filter_object() {
+            this.set_filters(vec![ds_filter]);
+        }
+    }
+
     Ok(())
 }
 

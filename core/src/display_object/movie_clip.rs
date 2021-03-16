@@ -43,7 +43,7 @@ use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
-use swf::extensions::ReadSwfExt;
+use swf::{DropShadowFilter, extensions::ReadSwfExt};
 use swf::{FillStyle, FrameLabelData, LineStyle, Tag};
 
 type FrameNumber = u16;
@@ -61,6 +61,7 @@ enum NextFrame {
     Same,
 }
 
+
 /// A movie clip is a display object with its own timeline that runs independently of the root timeline.
 /// The SWF19 spec calls this "Sprite" and the SWF tag defines it is "DefineSprite".
 /// However, in AVM2, Sprite is a separate display object, and MovieClip is a subclass of Sprite.
@@ -69,6 +70,10 @@ enum NextFrame {
 #[derive(Clone, Debug, Collect, Copy)]
 #[collect(no_drop)]
 pub struct MovieClip<'gc>(GcCell<'gc, MovieClipData<'gc>>);
+
+#[derive(Clone, Debug, Collect)]
+#[collect(no_drop)]
+pub struct Filter(swf::Filter);
 
 #[derive(Clone, Debug, Collect)]
 #[collect(no_drop)]
@@ -94,6 +99,8 @@ pub struct MovieClipData<'gc> {
     use_hand_cursor: bool,
     last_queued_script_frame: Option<FrameNumber>,
     queued_script_frame: Option<FrameNumber>,
+    #[collect(require_static)]
+    filters: Vec<Filter>,
 }
 
 impl<'gc> MovieClip<'gc> {
@@ -122,6 +129,7 @@ impl<'gc> MovieClip<'gc> {
                 use_hand_cursor: true,
                 last_queued_script_frame: None,
                 queued_script_frame: None,
+                filters: Vec::new(),
             },
         ))
     }
@@ -155,6 +163,7 @@ impl<'gc> MovieClip<'gc> {
                 use_hand_cursor: true,
                 last_queued_script_frame: None,
                 queued_script_frame: None,
+                filters: Vec::new(),
             },
         ))
     }
@@ -191,6 +200,7 @@ impl<'gc> MovieClip<'gc> {
                 use_hand_cursor: true,
                 last_queued_script_frame: None,
                 queued_script_frame: None,
+                filters: Vec::new()
             },
         ))
     }
@@ -218,6 +228,14 @@ impl<'gc> MovieClip<'gc> {
         self.0
             .write(gc_context)
             .replace_with_movie(gc_context, movie)
+    }
+
+    pub fn set_filters(
+        &mut self,
+        gc_context: MutationContext<'gc, '_>,
+        filters : Vec<Filter>
+    ) {
+        self.0.write(gc_context).filters = filters;
     }
 
     pub fn preload(
@@ -1900,13 +1918,13 @@ impl<'gc> TDisplayObject<'gc> for MovieClip<'gc> {
         let read = self.0.read();
         match read.proxy_bitmap {
             Some(bmh) => {
-                println!("rendering bitmap");
+                //println!("rendering bitmap");
                 context
                     .renderer
                     .render_bitmap(bmh, &read.base.transform, false);
             }
             None => {
-                println!("rendering for real");
+                //println!("rendering for real");
                 read.drawing.render(context);
             }
         }
