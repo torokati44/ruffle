@@ -1047,7 +1047,6 @@ impl<'gc> MovieClip<'gc> {
         let tag_stream_start = mc.static_data.swf.as_ref().as_ptr() as u64;
         let data = mc.static_data.swf.clone();
         let mut reader = data.read_from(mc.tag_stream_pos);
-        let mut has_stream_block = false;
         let mut end_tag_encountered = false;
         drop(mc);
 
@@ -1072,10 +1071,7 @@ impl<'gc> MovieClip<'gc> {
             TagCode::RemoveObject2 if run_display_actions => self.remove_object(context, reader, 2),
             TagCode::SetBackgroundColor => self.set_background_color(context, reader),
             TagCode::StartSound => self.start_sound_1(context, reader),
-            TagCode::SoundStreamBlock => {
-                has_stream_block = true;
-                self.sound_stream_block(context, reader)
-            }
+            TagCode::SoundStreamBlock => self.sound_stream_block(context, reader),
             TagCode::End => {
                 end_tag_encountered = true;
                 Ok(())
@@ -1097,11 +1093,6 @@ impl<'gc> MovieClip<'gc> {
 
         self.0.write(context.gc_context).tag_stream_pos =
             reader.get_ref().as_ptr() as u64 - tag_stream_start;
-
-        // If we are playing a streaming sound, there should(?) be a `SoundStreamBlock` on each frame.
-        if !has_stream_block {
-            self.0.write(context.gc_context).stop_audio_stream(context);
-        }
 
         let frame_id = self.0.read().current_frame;
         self.0.write(context.gc_context).queued_script_frame = Some(frame_id);
