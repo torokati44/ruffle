@@ -418,7 +418,10 @@ impl RenderBackend for WebCanvasRenderBackend {
         self.viewport_width = width;
         self.viewport_height = height;
     }
-
+    fn set_offscreen_viewport_dimensions(&mut self, width: u32, height: u32) {
+        self.viewport_width = width;
+        self.viewport_height = height;
+    }
     fn register_shape(
         &mut self,
         shape: DistilledShape,
@@ -536,6 +539,15 @@ impl RenderBackend for WebCanvasRenderBackend {
 
     fn end_frame(&mut self) {
         // Noop
+    }
+
+    fn begin_frame_offscreen(&mut self, _clear: Color) {
+        // TODO
+    }
+
+    fn end_frame_offscreen(&mut self) -> Option<ruffle_core::backend::render::Bitmap> {
+        // TODO
+        None
     }
 
     fn render_bitmap(&mut self, bitmap: BitmapHandle, transform: &Transform, _smoothing: bool) {

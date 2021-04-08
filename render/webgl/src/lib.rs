@@ -915,6 +915,15 @@ impl RenderBackend for WebGlRenderBackend {
         }
     }
 
+    fn begin_frame_offscreen(&mut self, _clear: Color) {
+        // TODO
+    }
+
+    fn end_frame_offscreen(&mut self) -> Option<ruffle_core::backend::render::Bitmap> {
+        // TODO
+        None
+    }
+
     fn render_bitmap(&mut self, bitmap: BitmapHandle, transform: &Transform, smoothing: bool) {
         self.set_stencil_state();
         if let Some(bitmap) = self.textures.get(bitmap.0) {

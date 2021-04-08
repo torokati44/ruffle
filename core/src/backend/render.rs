@@ -8,6 +8,7 @@ use swf::Matrix;
 
 pub trait RenderBackend: Downcast {
     fn set_viewport_dimensions(&mut self, width: u32, height: u32);
+    fn set_offscreen_viewport_dimensions(&mut self, width: u32, height: u32);
     fn register_shape(
         &mut self,
         shape: DistilledShape,
@@ -45,6 +46,9 @@ pub trait RenderBackend: Downcast {
     fn activate_mask(&mut self);
     fn deactivate_mask(&mut self);
     fn pop_mask(&mut self);
+
+    fn begin_frame_offscreen(&mut self, clear: Color);
+    fn end_frame_offscreen(&mut self) -> Option<Bitmap>;
 
     fn get_bitmap_pixels(&mut self, bitmap: BitmapHandle) -> Option<Bitmap>;
     fn register_bitmap_raw(
@@ -96,6 +100,7 @@ impl Default for NullRenderer {
 
 impl RenderBackend for NullRenderer {
     fn set_viewport_dimensions(&mut self, _width: u32, _height: u32) {}
+    fn set_offscreen_viewport_dimensions(&mut self, _width: u32, _height: u32) {}
     fn register_shape(
         &mut self,
         _shape: DistilledShape,
@@ -161,6 +166,11 @@ impl RenderBackend for NullRenderer {
     fn activate_mask(&mut self) {}
     fn deactivate_mask(&mut self) {}
     fn pop_mask(&mut self) {}
+
+    fn begin_frame_offscreen(&mut self, _clear: Color) {}
+    fn end_frame_offscreen(&mut self) -> Option<Bitmap> {
+        None
+    }
 
     fn get_bitmap_pixels(&mut self, _bitmap: BitmapHandle) -> Option<Bitmap> {
         None
