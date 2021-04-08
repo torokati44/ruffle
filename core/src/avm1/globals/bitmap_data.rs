@@ -1,14 +1,20 @@
 //! flash.display.BitmapData object
 
-use crate::avm1::error::Error;
 use crate::avm1::function::{Executable, FunctionObject};
 use crate::avm1::object::bitmap_data::{BitmapDataObject, ChannelOptions, Color};
 use crate::avm1::property::Attribute;
 use crate::avm1::{activation::Activation, object::bitmap_data::BitmapData};
 use crate::avm1::{Object, TObject, Value};
 use crate::character::Character;
+use crate::context::RenderContext;
 use crate::display_object::TDisplayObject;
+use crate::prelude::BoundingBox;
+use crate::transform::Transform;
+use crate::{avm1::error::Error, prelude::ColorTransform};
 use gc_arena::{GcCell, MutationContext};
+use swf::{Matrix, Twips};
+
+use super::{color_transform::object_to_color_transform, matrix::object_to_matrix};
 
 pub fn constructor<'gc>(
     activation: &mut Activation<'_, 'gc, '_>,
@@ -465,6 +471,7 @@ pub fn noise<'gc>(
     Ok((-1).into())
 }
 
+use std::io::Write;
 pub fn apply_filter<'gc>(
     _activation: &mut Activation<'_, 'gc, '_>,
     _this: Object<'gc>,
@@ -474,14 +481,124 @@ pub fn apply_filter<'gc>(
     Ok((-1).into())
 }
 
+use crate::display_object::DisplayObject;
+
 pub fn draw<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+    activation: &mut Activation<'_, 'gc, '_>,
     this: Object<'gc>,
-    _args: &[Value<'gc>],
+    args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
-            log::warn!("BitmapData.draw - not yet implemented");
+            /*
+            public draw(source:Object, [matrix:Matrix],
+                [colorTransform:ColorTransform], [blendMode:Object],
+                [clipRect:Rectangle], [smooth:Boolean]) : Void
+                */
+
+            let matrix = args
+                .get(1)
+                .map(|o| o.coerce_to_object(activation))
+                .map(|o| object_to_matrix(o, activation).unwrap_or(Matrix::default()))
+                .unwrap_or(Matrix::default());
+
+            let color_transform = args
+                .get(2)
+                .map(|o| o.coerce_to_object(activation))
+                .map(|o| {
+                    object_to_color_transform(o, activation).unwrap_or(ColorTransform::default())
+                })
+                .unwrap_or(ColorTransform::default());
+
+            let clip_rect = args.get(4).map(|o| o.coerce_to_object(activation));
+
+            //println!("clip_rect: {:#?}", clip_rect);
+            println!("matrix: {:#?}", matrix);
+
+            if let Some(mut source) = args
+                .get(0)
+                .unwrap_or(&Value::Undefined)
+                .coerce_to_object(activation)
+                .as_display_object()
+            {
+                let bmd = bitmap_data.bitmap_data();
+                let mut write = bmd.write(activation.context.gc_context);
+                println!("bmd size: {} {}", write.width(), write.height());
+
+                let mut transform_stack = crate::transform::TransformStack::new();
+
+                let mut view_bounds = BoundingBox::default();
+                view_bounds.set_x(Twips::from_pixels(0.0));
+                view_bounds.set_y(Twips::from_pixels(0.0));
+                view_bounds.set_width(Twips::from_pixels(write.width() as f64));
+                view_bounds.set_height(Twips::from_pixels(write.height() as f64));
+
+                activation
+                    .context
+                    .renderer
+                    //.set_offscreen_viewport_dimensions(write.width(), write.height())
+                    .set_offscreen_viewport_dimensions(320, 320);
+
+                println!("source: {:#?}", source);
+                match source {
+                    DisplayObject::MovieClip(mc) => {
+                        println!("tf: {:#?}", mc.transform());
+                    }
+                    _ => {}
+                }
+                activation
+                    .context
+                    .renderer
+                    .begin_frame_offscreen(swf::Color::from_rgb(0, 0));
+
+                let mut render_context = RenderContext {
+                    renderer: activation.context.renderer,
+                    library: &activation.context.library,
+                    transform_stack: &mut transform_stack,
+                    view_bounds,
+                    clip_depth_stack: vec![],
+                    allow_mask: true,
+                };
+
+                source.render_with_transform(
+                    &mut render_context,
+                    &Transform {
+                        matrix,
+                        color_transform,
+                    },
+                );
+
+                let bm = activation.context.renderer.end_frame_offscreen();
+
+                match bm {
+                    Some(bm) => match bm.data {
+                        crate::backend::render::BitmapFormat::Rgba(d) => {
+                            println!("rendered size: {} {}", bm.width, bm.height);
+                            println!("write size: {} {}", write.width(), write.height());
+                            let mut file =
+                                std::fs::File::create("drawn.rgba").expect("create failed");
+                            file.write_all(&d).expect("write failed");
+
+                            for y in 0..bm.height.min(write.height()) {
+                                for x in 0..bm.width.min(write.width()) {
+                                    let ind = (x + y * bm.width) * 4;
+                                    let r = d[ind as usize];
+                                    let g = d[ind as usize + 1usize];
+                                    let b = d[ind as usize + 2usize];
+                                    let a = d[ind as usize + 3usize];
+
+                                    let nc = Color::argb(a, r, g, b);
+                                    let oc = write.get_pixel_raw(x, y).unwrap();
+                                    write.set_pixel32_raw(x, y, oc.blend_over(&nc));
+                                }
+                            }
+                        }
+                        _ => {}
+                    },
+                    None => {}
+                };
+            }
+
             return Ok(Value::Undefined);
         }
     }
