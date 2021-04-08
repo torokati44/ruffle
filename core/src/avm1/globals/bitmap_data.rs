@@ -8,6 +8,7 @@ use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{Object, TObject, Value};
 use crate::bitmap::bitmap_data::{BitmapData, ChannelOptions, Color};
 use crate::character::Character;
+use crate::bitmap::filters::*;
 use crate::display_object::TDisplayObject;
 use gc_arena::{GcCell, MutationContext};
 
@@ -565,8 +566,19 @@ pub fn apply_filter<'gc>(
 
                     match obj {
                         Object::BlurFilterObject(filter_object) => {
-                            let _blur_filter = filter_object.as_blur_filter_object().unwrap();
-                            log::warn!("BitmapData.applyFilter(): BlurFilter not yet implemented");
+                            let blur_filter = filter_object.as_blur_filter_object().unwrap();
+
+                            apply_blur(
+                                &mut bitmap_data
+                                    .bitmap_data()
+                                    .write(activation.context.gc_context),
+                                &mut src_clone,
+                                (src_min_x, src_min_y, src_width, src_height),
+                                (dest_x, dest_y),
+                                blur_filter.quality(),
+                                blur_filter.blur_x(),
+                                blur_filter.blur_y(),
+                            );
                         }
                         Object::BevelFilterObject(filter_object) => {
                             let _bevel_filter = filter_object.as_bevel_filter_object().unwrap();
