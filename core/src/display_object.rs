@@ -917,14 +917,19 @@ pub trait TDisplayObject<'gc>:
     fn render_self(&self, _context: &mut RenderContext<'_, 'gc>) {}
 
     fn render(&self, context: &mut RenderContext<'_, 'gc>) {
+        self.render_with_transform(context, &*self.transform());
+    }
+
+    fn render_with_transform(&self, context: &mut RenderContext<'_, 'gc>, transform: &Transform) {
         if self.maskee().is_some() {
             return;
         }
-        context.transform_stack.push(&*self.transform());
+        context.transform_stack.push(transform);
 
         let mask = self.masker();
         let mut mask_transform = crate::transform::Transform::default();
         if let Some(m) = mask {
+            // does the transform parameter matter here?
             mask_transform.matrix = self.global_to_local_matrix();
             mask_transform.matrix *= m.local_to_global_matrix();
             context.renderer.push_mask();
