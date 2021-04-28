@@ -6,12 +6,12 @@ use crate::backend::video::{
 };
 use generational_arena::Arena;
 use swf::{VideoCodec, VideoDeblocking};
-use vp6_dec_rs::VP6State;
+use vp6_dec_rs::Vp6State;
 
 /// A single preloaded video stream.
 pub enum VideoStream {
     /// A VP6 video stream, with or without alpha channel.
-    Vp6(VP6State, Option<BitmapHandle>),
+    Vp6(Vp6State, Option<BitmapHandle>),
 }
 
 /// Software video backend that proxies to CPU-only codec implementations that
@@ -45,10 +45,10 @@ impl VideoBackend for SoftwareVideoBackend {
         match codec {
             VideoCodec::Vp6 => Ok(self
                 .streams
-                .insert(VideoStream::Vp6(VP6State::new(false), None))),
+                .insert(VideoStream::Vp6(Vp6State::new(false), None))),
             VideoCodec::Vp6WithAlpha => Ok(self
                 .streams
-                .insert(VideoStream::Vp6(VP6State::new(true), None))),
+                .insert(VideoStream::Vp6(Vp6State::new(true), None))),
             _ => Err(format!("Unsupported video codec type {:?}", codec).into()),
         }
     }
@@ -94,6 +94,7 @@ impl VideoBackend for SoftwareVideoBackend {
         match stream {
             VideoStream::Vp6(state, last_bitmap) => {
                 let (rgba, (width, height)) = state.decode(encoded_frame.data);
+                println!("{} x {}", width, height);
 
                 let handle = if let Some(lb) = last_bitmap {
                     renderer.update_texture(*lb, width as u32, height as u32, rgba)?
