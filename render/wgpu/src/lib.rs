@@ -52,7 +52,7 @@ pub struct Descriptors {
 impl Descriptors {
     pub fn new(device: wgpu::Device, queue: wgpu::Queue) -> Result<Self, Error> {
         // TODO: Allow this to be set from command line/settings file.
-        let msaa_sample_count = 4;
+        let msaa_sample_count = 1;
 
         let bitmap_samplers = BitmapSamplers::new(&device);
         let globals = Globals::new(&device);
