@@ -49,7 +49,7 @@ impl SwapChainTarget {
     pub fn new(surface: wgpu::Surface, size: (u32, u32), device: &wgpu::Device) -> Self {
         let swap_chain_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
-            format: wgpu::TextureFormat::Bgra8Unorm,
+            format: wgpu::TextureFormat::Bgra8UnormSrgb,
             width: size.0,
             height: size.1,
             present_mode: wgpu::PresentMode::Mailbox,
@@ -129,7 +129,7 @@ impl TextureTarget {
             depth_or_array_layers: 1,
         };
         let texture_label = create_debug_label!("Render target texture");
-        let format = wgpu::TextureFormat::Bgra8Unorm;
+        let format = wgpu::TextureFormat::Bgra8UnormSrgb;
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: texture_label.as_deref(),
             size,
