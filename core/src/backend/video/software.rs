@@ -38,17 +38,17 @@ impl VideoBackend for SoftwareVideoBackend {
     fn register_video_stream(
         &mut self,
         _num_frames: u32,
-        _size: (u16, u16),
+        size: (u16, u16),
         codec: VideoCodec,
         _filter: VideoDeblocking,
     ) -> Result<VideoStreamHandle, Error> {
         match codec {
             VideoCodec::Vp6 => Ok(self
                 .streams
-                .insert(VideoStream::Vp6(Vp6State::new(false), None))),
+                .insert(VideoStream::Vp6(Vp6State::new(false, size), None))),
             VideoCodec::Vp6WithAlpha => Ok(self
                 .streams
-                .insert(VideoStream::Vp6(Vp6State::new(true), None))),
+                .insert(VideoStream::Vp6(Vp6State::new(true, size), None))),
             _ => Err(format!("Unsupported video codec type {:?}", codec).into()),
         }
     }
@@ -64,13 +64,29 @@ impl VideoBackend for SoftwareVideoBackend {
             .ok_or("Unregistered video stream")?;
 
         match stream {
-            VideoStream::Vp6(_state, _last_bitmap) => {
+            VideoStream::Vp6(state, _last_bitmap) => {
                 // Luckily the very first bit of the encoded frames is exactly
                 // this flag, so we don't have to bother asking any "proper"
                 // decoder or parser.
                 Ok(
                     if !encoded_frame.data.is_empty() && (encoded_frame.data[0] & 0b_1000_0000) == 0
                     {
+                        // based on: https://wiki.multimedia.cx/index.php/On2_VP6
+                        let marker = encoded_frame.data[0] & 0b_0000_0001;
+                        let version2 = encoded_frame.data[1] & 0b_0000_0110;
+                        let has_offset = marker == 1 || version2 == 0;
+
+                        let macroblock_height = encoded_frame.data[ if has_offset { 4 } else { 2 } ];
+                        let macroblock_width = encoded_frame.data[ if has_offset { 5 } else { 3 } ];
+
+                        let coded_width = 16 * macroblock_width as u16;
+                        let coded_height = 16 * macroblock_height as u16;
+
+                        let dw = (state.bounds.0 as i16 - coded_width as i16) as i8;
+                        let dh = (state.bounds.1 as i16 - coded_height as i16) as i8;
+
+                        state.set_adjustment(dw, dh);
+
                         FrameDependency::None
                     } else {
                         FrameDependency::Past
