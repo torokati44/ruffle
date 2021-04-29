@@ -76,6 +76,7 @@ impl VideoBackend for SoftwareVideoBackend {
                         let version2 = encoded_frame.data[1] & 0b_0000_0110;
                         let has_offset = marker == 1 || version2 == 0;
 
+                        // yes, height comes first
                         let macroblock_height = encoded_frame.data[ if has_offset { 4 } else { 2 } ];
                         let macroblock_width = encoded_frame.data[ if has_offset { 5 } else { 3 } ];
 
@@ -85,6 +86,7 @@ impl VideoBackend for SoftwareVideoBackend {
                         let dw = (state.bounds.0 as i16 - coded_width as i16) as i8;
                         let dh = (state.bounds.1 as i16 - coded_height as i16) as i8;
 
+                        println!("{:} {:}", dw, dh);
                         state.set_adjustment(dw, dh);
 
                         FrameDependency::None
@@ -110,7 +112,6 @@ impl VideoBackend for SoftwareVideoBackend {
         match stream {
             VideoStream::Vp6(state, last_bitmap) => {
                 let (rgba, (width, height)) = state.decode(encoded_frame.data);
-                println!("{} x {}", width, height);
 
                 let handle = if let Some(lb) = last_bitmap {
                     renderer.update_texture(*lb, width as u32, height as u32, rgba)?
