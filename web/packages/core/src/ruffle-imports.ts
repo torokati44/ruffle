@@ -38,3 +38,25 @@ export function getAudioOutputTimestamp(context: AudioContext): number {
     const timestamp = context.getOutputTimestamp?.();
     return timestamp?.contextTime ?? context.currentTime - context.baseLatency;
 }
+
+/**
+ * Copies interleaved audio data into the given audio channel.
+ *
+ * @internal
+ */
+export function copyToAudioBufferInterleaved(
+    audioBuffer: AudioBuffer,
+    interleavedData: ArrayLike<number>
+): void {
+    const numSamples = audioBuffer.length;
+    const leftBuffer = audioBuffer.getChannelData(0);
+    const rightBuffer = audioBuffer.getChannelData(1);
+    let i = 0;
+    let sample = 0;
+    while (sample < numSamples) {
+        leftBuffer[sample] = interleavedData[i];
+        rightBuffer[sample] = interleavedData[i + 1];
+        sample++;
+        i += 2;
+    }
+}
