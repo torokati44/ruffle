@@ -1,8 +1,97 @@
 use crate::avm1::object::bitmap_data::{BitmapData, Color};
 
+fn convolve(
+    source_bitmap: &BitmapData,
+    dest_bitmap: &mut BitmapData,
+    src_rect: (i32, i32, i32, i32),
+    dest_point: (i32, i32),
+    radius: usize,
+    kernel: &Vec<f64>,
+    delta: (i32, i32)
+) {
+    let (src_min_x, src_min_y, src_width, src_height) = src_rect;
+    let r = radius as i32;
+    for y in src_min_x..(src_min_y + src_height) {
+        for x in src_min_x..(src_min_x + src_width) {
+            let (mut new_r, mut new_g, mut new_b, mut new_a) = (0.0, 0.0, 0.0, 0.0);
+
+            for (i, coeff) in kernel.iter().enumerate() {
+
+                let xadj = x + (i as i32 - r) * delta.0;
+                let yadj = y + (i as i32 - r) * delta.1;
+
+                if source_bitmap.is_point_in_bounds(xadj, yadj) {
+                    let s = source_bitmap.get_pixel32(xadj, yadj);
+                    new_r += s.red() as f64 * coeff;
+                    new_g += s.green() as f64 * coeff;
+                    new_b += s.blue() as f64 * coeff;
+                    new_a += s.alpha() as f64 * coeff;
+                }
+            }
+
+            dest_bitmap.set_pixel32(x - src_min_x + dest_point.0, y - src_min_y + dest_point.1, Color::argb(new_a.round() as u8, new_r.round() as u8, new_g.round() as u8, new_b.round() as u8))
+        }
+    }
+}
+
+
+fn convolve_x(
+    source_bitmap: &BitmapData,
+    dest_bitmap: &mut BitmapData,
+    src_rect: (i32, i32, i32, i32),
+    dest_point: (i32, i32),
+    radius: usize,
+    kernel: &Vec<f64>,
+) {
+    convolve(
+        source_bitmap,
+        dest_bitmap,
+        src_rect,
+        dest_point,
+        radius,
+        kernel,
+        (1, 0)
+    )
+}
+
+
+fn convolve_y(
+    source_bitmap: &BitmapData,
+    dest_bitmap: &mut BitmapData,
+    src_rect: (i32, i32, i32, i32),
+    dest_point: (i32, i32),
+    radius: usize,
+    kernel: &Vec<f64>,
+) {
+    convolve(
+        source_bitmap,
+        dest_bitmap,
+        src_rect,
+        dest_point,
+        radius,
+        kernel,
+        (0, 1)
+    )
+}
+
+fn make_kernel(strength: f64) -> (i32, Vec<f64>) {
+    // this is an integer, telling how many _additional_ pixels are gathered _on each side_
+    let radius = ((strength - 1.0) / 2.0).ceil() as i32;
+
+    let kernel_size = radius as usize * 2 + 1;
+    let mut coeffs = vec![1.0 / strength; kernel_size];
+
+    let edges = (strength / 2.0 - 0.5).fract() / strength;
+    if edges != 0.0 {
+        coeffs[0] = edges;
+        coeffs[kernel_size-1] = edges;
+    }
+    println!("{:?}", (radius, &coeffs, &coeffs.iter().fold(0.0, |a, b| a+b)));
+    (radius, coeffs)
+}
 
 pub fn apply_blur(
-    self_bitmap : &mut BitmapData,
+    self_bitmap: &mut BitmapData,
     source_bitmap: &mut BitmapData,
     src_rect: (i32, i32, i32, i32),
     dest_point: (i32, i32),
@@ -10,83 +99,36 @@ pub fn apply_blur(
     blur_x: f64,
     blur_y: f64,
 ) {
-    let blur_x_odd = (blur_x / 2.0).floor() as i32 * 2 + 1;
-    let blur_y_odd = (blur_y / 2.0).floor() as i32 * 2 + 1;
+    // TODO: quality 0 or both blur params <=1 -> only copy
+    let (radius_x, kernel_x) = make_kernel(blur_x);
+    let (radius_y, kernel_y) = make_kernel(blur_y);
+
 
     let (src_min_x, src_min_y, src_width, src_height) = src_rect;
 
-    let mut temp = source_bitmap.clone();
-    let tw = temp.width() as i32;
+    let mut temp = BitmapData::default();
+    temp.init_pixels(
+        src_width as u32 + 2 * radius_x as u32,
+        src_height as u32 + 2 * radius_y as u32,
+        self_bitmap.transparency(),
+        0,
+    );
 
-    for _iter in 0..quality {
-        // x, source -> temp
-        for y in src_min_x..(src_min_y + src_height) {
-            for x in src_min_x..(src_min_x + src_width) {
-                if temp.is_point_in_bounds(x as i32, y as i32) {
-                    let mut r = 0i32;
-                    let mut g = 0i32;
-                    let mut b = 0i32;
-                    let mut a = 0i32;
+    // x, source -> temp
+    convolve_x(source_bitmap, &mut temp, src_rect, (radius_x, radius_y), radius_x as usize, &kernel_x);
 
-                    for ix in x as i32 - (blur_x_odd / 2)..x as i32 + (blur_x_odd / 2) + 1 {
-                        if source_bitmap.is_point_in_bounds(ix as i32, y as i32) {
-                            let source_color =
-                                temp.pixels.get((ix + y as i32 * tw) as usize).unwrap();
-                            r += source_color.red() as i32;
-                            g += source_color.green() as i32;
-                            b += source_color.blue() as i32;
-                            a += source_color.alpha() as i32;
-                        }
-                    }
+    if quality > 1 {
+        let mut temp2 = temp.clone();
 
-                    r /= blur_x_odd;
-                    g /= blur_x_odd;
-                    b /= blur_x_odd;
-                    a /= blur_x_odd;
-
-                    temp.set_pixel32_raw(
-                        x as u32,
-                        y as u32,
-                        Color::argb(a as u8, r as u8, g as u8, b as u8),
-                    );
-                }
-            }
-        }
-
-        // y, temp -> source
-        for y in src_min_x..(src_min_y + src_height) {
-            for x in src_min_x..(src_min_x + src_width) {
-                if source_bitmap.is_point_in_bounds(x as i32, y as i32) {
-                    let mut r = 0i32;
-                    let mut g = 0i32;
-                    let mut b = 0i32;
-                    let mut a = 0i32;
-
-                    for iy in y as i32 - (blur_y_odd / 2)..y as i32 + (blur_y_odd / 2) + 1 {
-                        if temp.is_point_in_bounds(x as i32, iy as i32) {
-                            let source_color =
-                                temp.pixels.get((x as i32 + iy * tw) as usize).unwrap();
-                            r += source_color.red() as i32;
-                            g += source_color.green() as i32;
-                            b += source_color.blue() as i32;
-                            a += source_color.alpha() as i32;
-                        }
-                    }
-
-                    r /= blur_y_odd;
-                    g /= blur_y_odd;
-                    b /= blur_y_odd;
-                    a /= blur_y_odd;
-
-                    source_bitmap.set_pixel32_raw(
-                        x as u32,
-                        y as u32,
-                        Color::argb(a as u8, r as u8, g as u8, b as u8),
-                    );
-                }
-            }
+        for _iter in 1..quality {
+            //y, temp -> temp2
+            convolve_y(&temp, &mut temp2, (0, 0, src_width + 2*radius_x, src_height + 2*radius_y), (0, 0), radius_y as usize, &kernel_y);
+            //x, temp2 -> temp
+            convolve_x(&temp2, &mut temp, (0, 0, src_width + 2*radius_x , src_height + 2*radius_y), (0, 0), radius_x as usize, &kernel_x);
         }
     }
 
-    self_bitmap.copy_pixels(source_bitmap, src_rect, dest_point, None);
+    // y, temp -> dest
+    convolve_y(&temp, self_bitmap, (0, 0, src_width+2*radius_x, src_height+2*radius_y), (dest_point.0-radius_x, dest_point.1-radius_y), radius_y as usize, &kernel_y);
+
 }
