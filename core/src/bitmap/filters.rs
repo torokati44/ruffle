@@ -21,7 +21,7 @@ fn convolve(
                 let yadj = y + (i as i32 - r) * delta.1;
 
                 if source_bitmap.is_point_in_bounds(xadj, yadj) {
-                    let s = source_bitmap.get_pixel32(xadj, yadj);
+                    let s = source_bitmap.get_pixel_raw(xadj as _, yadj as _).unwrap();
                     new_r += s.red() as f64 * coeff;
                     new_g += s.green() as f64 * coeff;
                     new_b += s.blue() as f64 * coeff;
@@ -29,7 +29,9 @@ fn convolve(
                 }
             }
 
-            dest_bitmap.set_pixel32(x - src_min_x + dest_point.0, y - src_min_y + dest_point.1, Color::argb(new_a.round() as u8, new_r.round() as u8, new_g.round() as u8, new_b.round() as u8))
+            if dest_bitmap.is_point_in_bounds(x - src_min_x + dest_point.0, y - src_min_y + dest_point.1) {
+                dest_bitmap.set_pixel32_raw((x - src_min_x + dest_point.0) as u32, (y - src_min_y + dest_point.1) as u32, Color::argb(new_a as u8, new_r as u8, new_g as u8, new_b as u8))
+            }
         }
     }
 }
@@ -86,7 +88,9 @@ fn make_kernel(strength: f64) -> (i32, Vec<f64>) {
         coeffs[0] = edges;
         coeffs[kernel_size-1] = edges;
     }
-    println!("{:?}", (radius, &coeffs, &coeffs.iter().fold(0.0, |a, b| a+b)));
+
+    assert!((&coeffs.iter().fold(0.0, |a, b| a+b) - 1.0).abs() < 0.0001);
+
     (radius, coeffs)
 }
 
