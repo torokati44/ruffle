@@ -21,7 +21,7 @@ fn convolve(
                 let yadj = y + (i as i32 - r) * delta.1;
 
                 if source_bitmap.is_point_in_bounds(xadj, yadj) {
-                    let s = source_bitmap.get_pixel_raw(xadj as _, yadj as _).unwrap();
+                    let s = source_bitmap.get_pixel32(xadj as _, yadj as _);
                     new_r += s.red() as f64 * coeff;
                     new_g += s.green() as f64 * coeff;
                     new_b += s.blue() as f64 * coeff;
@@ -30,7 +30,7 @@ fn convolve(
             }
 
             if dest_bitmap.is_point_in_bounds(x - src_min_x + dest_point.0, y - src_min_y + dest_point.1) {
-                dest_bitmap.set_pixel32_raw((x - src_min_x + dest_point.0) as u32, (y - src_min_y + dest_point.1) as u32, Color::argb(new_a as u8, new_r as u8, new_g as u8, new_b as u8))
+                dest_bitmap.set_pixel32(x - src_min_x + dest_point.0 , y - src_min_y + dest_point.1, Color::argb(new_a as u8, new_r as u8, new_g as u8, new_b as u8))
             }
         }
     }
