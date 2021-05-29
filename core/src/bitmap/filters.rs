@@ -107,7 +107,12 @@ pub fn apply_blur(
     let (radius_x, kernel_x) = make_kernel(blur_x);
     let (radius_y, kernel_y) = make_kernel(blur_y);
 
+    println!("kernel_x: {:?}", kernel_x);
+    println!("kernel_y: {:?}", kernel_y);
 
+    // TODO: maybe optimize for odd blur sizes. that way, the kernel is always of the shape:
+    // [0.25, 0.5, 0.25], or [0.125, 0.25, 0.25, 0.25, 0.125], etc
+    // TODO: also, I think PoT sizes can be optimized somehow?
     let (src_min_x, src_min_y, src_width, src_height) = src_rect;
 
     let mut temp = BitmapData::default();
