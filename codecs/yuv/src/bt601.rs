@@ -23,63 +23,14 @@ fn sample_chroma_for_luma(
     let width = chroma_width as i32;
     let height = chroma_height as i32;
 
-    let sample_00;
-    let sample_01;
-    let sample_10;
-    let sample_11;
+    let chroma_x = (luma_x as i32 - 1) / 2;
+    let chroma_y = (luma_y as i32 - 1) / 2;
 
-    if clamp {
-        let chroma_x = if luma_x == 0 {
-            -1
-        } else {
-            (luma_x as i32 - 1) / 2
-        };
-        let chroma_y = if luma_y == 0 {
-            -1
-        } else {
-            (luma_y as i32 - 1) / 2
-        };
-
-        unsafe {
-            sample_00 = *chroma
-                .get_unchecked(clamped_index(width, height, chroma_x, chroma_y)) as u16;
-            sample_10 = *chroma
-                .get_unchecked(clamped_index(width, height, chroma_x + 1, chroma_y)) as u16;
-            sample_01 = *chroma
-                .get_unchecked(clamped_index(width, height, chroma_x, chroma_y + 1)) as u16;
-            sample_11 = *chroma
-                .get_unchecked(clamped_index(width, height, chroma_x + 1, chroma_y + 1)) as u16;
-        }
-    } else {
-        let chroma_x = (luma_x as i32 - 1) / 2;
-        let chroma_y = (luma_y as i32 - 1) / 2;
-
-        let base = unclamped_index(width, chroma_x, chroma_y);
-        unsafe {
-            sample_00 = *chroma.get_unchecked(base) as u16;
-            sample_10 = *chroma.get_unchecked(base + 1) as u16;
-            sample_01 = *chroma.get_unchecked(base + chroma_width) as u16;
-            sample_11 = *chroma.get_unchecked(base + chroma_width + 1) as u16;
-        }
+    let base = unclamped_index(width, chroma_x, chroma_y);
+    unsafe {
+        *chroma.get_unchecked(base)
     }
 
-    let interp_left = luma_x % 2 != 0;
-    let interp_top = luma_y % 2 != 0;
-
-    let mut sample: u16 = 0;
-    sample += sample_00 * if interp_left { 3 } else { 1 };
-    sample += sample_10 * if interp_left { 1 } else { 3 };
-
-    sample += sample_01 * if interp_left { 3 } else { 1 };
-    sample += sample_11 * if interp_left { 1 } else { 3 };
-
-    sample += sample_00 * if interp_top { 3 } else { 1 };
-    sample += sample_01 * if interp_top { 1 } else { 3 };
-
-    sample += sample_10 * if interp_top { 3 } else { 1 };
-    sample += sample_11 * if interp_top { 1 } else { 3 };
-
-    ((sample + 8) / 16) as u8
 }
 
 fn yuv_to_rgb(yuv: (f32, f32, f32)) -> (f32, f32, f32) {
