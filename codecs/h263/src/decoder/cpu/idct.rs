@@ -63,20 +63,28 @@ const BASIS_TABLE_SIMD: [[f32x4; 2]; 8] = [
     [ f32x4::from_array([0.19509023, -0.55557,     0.83146936, -0.9807852,  ]), f32x4::from_array([ 0.98078525, -0.83147013,  0.55557114, -0.19508967, ]), ],
 ];
 
+
 /// Performs a one-dimensional IDCT on the input, using some lookup tables
 /// for the scaling of the DC component, and for the cosine values to be used.
-fn idct_1d_simd(input: &[f32; 8], output: &mut [f32; 8]) {
+fn idct_1d_simd(input: &[i16; 8], output: &mut [i16; 8]) {
     let mut output_0 = f32x4::splat(0.0);
     let mut output_1 = f32x4::splat(0.0);
 
     for freq in 0..8 {
-        let inp = f32x4::splat(input[freq]);
+        let inp = f32x4::splat(input[freq].into());
         output_0 += inp * BASIS_TABLE_SIMD[freq][0];
         output_1 += inp * BASIS_TABLE_SIMD[freq][1];
     }
 
-    output[0..4].copy_from_slice(&output_0.to_array());
-    output[4..8].copy_from_slice(&output_1.to_array());
+    let oa0 = output_0.round().to_array();
+    let oa1 = output_1.round().to_array();
+
+    for i in 0..4 {
+        output[i] = oa0[i] as i16;
+    }
+    for i in 0..4 {
+        output[4+i] = oa1[i] as i16;
+    }
 }
 
 /// Performs a one-dimensional IDCT on the input, using some lookup tables
@@ -106,7 +114,7 @@ fn idct_1d(input: &[f32; 8], output: &mut [f32; 8]) {
 /// step can happen simultaneously. Otherwise, you should provide an array of
 /// zeroes.
 pub fn idct_channel(
-    block_levels: &[[[f32; 8]; 8]],
+    block_levels: &[[[i16; 8]; 8]],
     output: &mut [u8],
     blk_per_line: usize,
     output_samples_per_line: usize,
@@ -116,8 +124,8 @@ pub fn idct_channel(
 
     // Taking advantage of the separability of the 2D IDCT, and
     // decomposing it into two subsequent orthogonal series of 1D IDCTs.
-    let mut idct_intermediate: [[f32; 8]; 8] = [[0.0; 8]; 8];
-    let mut idct_output: [[f32; 8]; 8] = [[0.0; 8]; 8];
+    let mut idct_intermediate: [[i16; 8]; 8] = [[0i16; 8]; 8];
+    let mut idct_output: [[i16; 8]; 8] = [[0i16; 8]; 8];
 
     for y_base in 0..blk_height {
         for x_base in 0..blk_per_line {
@@ -126,7 +134,7 @@ pub fn idct_channel(
                 continue;
             }
 
-            let block = &block_levels[block_id];
+            let mut block = &block_levels[block_id];
 
             for row in 0..8 {
                 idct_1d_simd(&block[row], &mut idct_output[row]);
@@ -154,6 +162,7 @@ pub fn idct_channel(
                         continue;
                     }
 
+                    let idct = *idct as f32;
                     let clipped_idct =
                         min(255, max(-256, (idct / 4.0 + idct.signum() * 0.5) as i16));
                     let mocomp_pixel = output[x + (y * output_samples_per_line)] as u16 as i16;

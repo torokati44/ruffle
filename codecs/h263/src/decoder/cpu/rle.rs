@@ -81,7 +81,7 @@ const DEZIGZAG_MAPPING: [(u8, u8); 64] = [
 /// levels array is reused, you must reinitialize it again.
 pub fn inverse_rle(
     encoded_block: &Block,
-    levels: &mut [[[f32; 8]; 8]],
+    levels: &mut [[[i16; 8]; 8]],
     pos: (usize, usize),
     blk_per_line: usize,
     quant: u8,
@@ -109,8 +109,7 @@ pub fn inverse_rle(
         block[zig_x as usize][zig_y as usize] = min(
             2047,
             max(-2048, tcoef.level.signum() * (dequantized_level + parity)),
-        )
-        .into();
+        );
         zigzag_index += 1;
     }
 }

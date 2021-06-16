@@ -174,11 +174,11 @@ impl H263State {
             let mut next_decoded_picture =
                 DecodedPicture::new(next_picture, format).ok_or(Error::PictureFormatInvalid)?;
 
-            let mut luma_levels = vec![[[0.0; 8]; 8]; level_dimensions.0 * level_dimensions.1 / 64];
+            let mut luma_levels = vec![[[0i16; 8]; 8]; level_dimensions.0 * level_dimensions.1 / 64];
             let mut chroma_b_levels =
-                vec![[[0.0; 8]; 8]; level_dimensions.0 * level_dimensions.1 / 4 / 64];
+                vec![[[0i16; 8]; 8]; level_dimensions.0 * level_dimensions.1 / 4 / 64];
             let mut chroma_r_levels =
-                vec![[[0.0; 8]; 8]; level_dimensions.0 * level_dimensions.1 / 4 / 64];
+                vec![[[0i16; 8]; 8]; level_dimensions.0 * level_dimensions.1 / 4 / 64];
 
             loop {
                 let mb = decode_macroblock(
