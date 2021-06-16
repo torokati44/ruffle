@@ -13,39 +13,27 @@ use crate::types::{MacroblockType, MotionVector};
 /// equivalent to, say OpenGL `GL_CLAMP_TO_EDGE` behavior.)
 ///
 /// Pixel array data is read as a row-major (x + y*width) array.
-fn read_sample(pixel_array: &[u8], samples_per_row: usize, pos: (isize, isize)) -> u8 {
+fn read_sample(pixel_array: &[u8], samples_per_row: usize, height: usize, pos: (isize, isize)) -> u8 {
     let (x, y) = pos;
 
-    let x = if x < 0 {
-        0
-    } else if x >= samples_per_row as isize {
-        samples_per_row.saturating_sub(1)
-    } else {
-        x as usize
-    };
+    let x = x.clamp(0, (samples_per_row as isize).saturating_sub(1)) as usize;
+    let y = y.clamp(0, (height as isize).saturating_sub(1)) as usize;
 
-    let height = pixel_array.len() / samples_per_row;
-
-    let y = if y < 0 {
-        0
-    } else if y >= height as isize {
-        height.saturating_sub(1)
-    } else {
-        y as usize
-    };
+    let index = x + (y * samples_per_row);
+    assert!(index < pixel_array.len());
 
     pixel_array
-        .get(x + (y * samples_per_row))
+        .get(index)
         .copied()
         .unwrap_or(0)
 }
 
 /// Linear interpolation between two values by 0 or 50%.
-fn lerp(sample_a: u8, sample_b: u8, middle: bool) -> u8 {
+fn lerp(sample_a: u16, sample_b: u16, middle: bool) -> u16 {
     if middle {
-        ((sample_a as u16 + sample_b as u16 + 1) / 2) as u8
+        ((sample_a + sample_b + 1) / 2) as u16
     } else {
-        sample_a
+        sample_a as u16
     }
 }
 
@@ -77,28 +65,34 @@ fn gather_block(
                 continue;
             }
 
-            let sample_0_0 = read_sample(pixel_array, samples_per_row, (u, v));
-            let sample_1_0 = read_sample(pixel_array, samples_per_row, (u + 1, v));
-            let sample_0_1 = read_sample(pixel_array, samples_per_row, (u, v + 1));
-            let sample_1_1 = read_sample(pixel_array, samples_per_row, (u + 1, v + 1));
+            let sample_0_0 = read_sample(pixel_array, samples_per_row, array_height, (u, v));
+
+            if !x_interp && !y_interp {
+                target[pos.0 + i + ((pos.1 + j) * samples_per_row)] = sample_0_0;
+                continue;
+            }
+
+            let sample_1_0 = read_sample(pixel_array, samples_per_row, array_height, (u + 1, v)) as u16;
+            let sample_0_1 = read_sample(pixel_array, samples_per_row, array_height, (u, v + 1)) as u16;
+            let sample_1_1 = read_sample(pixel_array, samples_per_row, array_height, (u + 1, v + 1)) as u16;
 
             if x_interp && y_interp {
                 // special case to only round once
 
                 let sample = ((sample_0_0 as u16
-                    + sample_1_0 as u16
-                    + sample_0_1 as u16
-                    + sample_1_1 as u16
+                    + sample_1_0
+                    + sample_0_1
+                    + sample_1_1
                     + 2) // for proper rounding
                     / 4) as u8;
 
                 target[pos.0 + i + ((pos.1 + j) * samples_per_row)] = sample;
             } else {
-                let sample_mid_0 = lerp(sample_0_0, sample_1_0, x_interp);
+                let sample_mid_0 = lerp(sample_0_0 as u16, sample_1_0, x_interp);
                 let sample_mid_1 = lerp(sample_0_1, sample_1_1, x_interp);
 
                 target[pos.0 + i + ((pos.1 + j) * samples_per_row)] =
-                    lerp(sample_mid_0, sample_mid_1, y_interp);
+                    lerp(sample_mid_0, sample_mid_1, y_interp) as u8;
             }
         }
     }
