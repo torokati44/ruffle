@@ -67,16 +67,11 @@ fn gather_block(
     let y = pos.1 as isize + y_delta as isize;
     let array_height = pixel_array.len() / samples_per_row;
 
-    for (i, u) in (x..x + 8).enumerate() {
-        if (pos.0 + i) >= samples_per_row {
-            continue;
-        }
+    let block_rows = (samples_per_row - pos.0).clamp(0, 8) as isize;
+    let block_cols = (array_height - pos.1).clamp(0, 8) as isize;
 
-        for (j, v) in (y..y + 8).enumerate() {
-            if (pos.1 + j) >= array_height {
-                continue;
-            }
-
+    for (i, u) in (x..x + block_rows).enumerate() {
+        for (j, v) in (y..y + block_cols).enumerate() {
             let sample_0_0 = read_sample(pixel_array, samples_per_row, (u, v));
 
             if !x_interp && !y_interp {
