@@ -65,8 +65,9 @@ fn gather_block(
 
     if !x_interp && !y_interp {
         for (j, v) in (y..y + block_rows).enumerate() {
+            let row_base = ((pos.1 + j) * samples_per_row; // TODO
             for (i, u) in (x..x + block_cols).enumerate() {
-                target[pos.0 + i + ((pos.1 + j) * samples_per_row)] =
+                target[pos.0 + i)] =
                     read_sample(pixel_array, samples_per_row, array_height, (u, v));
             }
         }
