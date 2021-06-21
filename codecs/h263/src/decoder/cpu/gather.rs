@@ -19,6 +19,8 @@ fn read_sample(
     num_rows: usize,
     pos: (isize, isize),
 ) -> u8 {
+    debug_assert!(samples_per_row * num_rows == pixel_array.len());
+
     let (x, y) = pos;
 
     let x = x.clamp(0, samples_per_row.saturating_sub(1) as isize) as usize;
@@ -26,7 +28,7 @@ fn read_sample(
 
     let index = x + (y * samples_per_row);
 
-    assert!(index < pixel_array.len());
+    debug_assert!(index < pixel_array.len());
 
     unsafe { *pixel_array.get_unchecked(index) }
 }
