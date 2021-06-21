@@ -24,10 +24,11 @@ fn read_sample(
     let x = x.clamp(0, samples_per_row.saturating_sub(1) as isize) as usize;
     let y = y.clamp(0, num_rows.saturating_sub(1) as isize) as usize;
 
-    pixel_array
-        .get(x + (y * samples_per_row))
-        .copied()
-        .unwrap_or(0)
+    let index = x + (y * samples_per_row);
+
+    assert!(index < pixel_array.len());
+
+    unsafe { *pixel_array.get_unchecked(index) }
 }
 
 /// Linear interpolation between two values by 0 or 50%.
