@@ -520,6 +520,7 @@ pub enum WarpingDisplacementAccuracy {
 
 /// ITU-T Recommendation H.263 (01/2005), 5.1.23 `DBQUANT`
 #[derive(Debug)]
+#[allow(clippy::enum_variant_names)]
 pub enum BPictureQuantizer {
     FiveFourths,
     SixFourths,
