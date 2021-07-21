@@ -3259,7 +3259,10 @@ impl<'gc, 'a> MovieClipData<'gc> {
             num_frames,
         );
 
-        movie_clip.preload(context);
+        let mut is_finished = false;
+        while !is_finished {
+            is_finished = movie_clip.preload(context);
+        }
 
         context
             .library
