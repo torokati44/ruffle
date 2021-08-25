@@ -516,9 +516,11 @@ impl Player {
             while frame < max_frames_per_tick && self.frame_accumulator >= frame_time {
                 let timer = Instant::now();
                 self.run_frame();
-                let elapsed = timer.elapsed().as_millis() as f64;
+                let elapsed = timer.elapsed().as_nanos() as f64 / 1000_000.0;
 
                 self.add_frame_timing(elapsed);
+
+                log::trace!("run_frame() took {:} ms", elapsed);
 
                 self.frame_accumulator -= frame_time;
                 frame += 1;
