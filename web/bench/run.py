@@ -16,6 +16,7 @@ import http.server
 import socketserver
 
 import wget
+import numpy as np
 import matplotlib.pyplot as plt
 from playwright.sync_api import sync_playwright
 
@@ -79,6 +80,9 @@ with sync_playwright() as p:
 
 for d in data:
     plt.plot(data[d], label=d)
+    print("AVG run_frame duration for loop", d, "=", np.mean(data[d][10:]), "ms")
+print("(excluding the first few frames)")
+
 plt.ylim(bottom=0)
 plt.grid()
 plt.title("Duration of run_frame in some loops")
