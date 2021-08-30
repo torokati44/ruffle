@@ -717,7 +717,7 @@ fn create_gradient_pipeline(
     ShapePipeline { mask_pipelines }
 }
 
-fn mask_render_state(state: MaskState) -> (wgpu::StencilState, wgpu::ColorWrite) {
+fn mask_render_state(state: MaskState) -> (wgpu::StencilState, wgpu::ColorWrites) {
     let (stencil_state, color_write) = match state {
         MaskState::NoMask => (
             wgpu::StencilFaceState {
@@ -726,7 +726,7 @@ fn mask_render_state(state: MaskState) -> (wgpu::StencilState, wgpu::ColorWrite)
                 depth_fail_op: wgpu::StencilOperation::Keep,
                 pass_op: wgpu::StencilOperation::Keep,
             },
-            wgpu::ColorWrite::ALL,
+            wgpu::ColorWrites::ALL,
         ),
         MaskState::DrawMaskStencil => (
             wgpu::StencilFaceState {
@@ -735,7 +735,7 @@ fn mask_render_state(state: MaskState) -> (wgpu::StencilState, wgpu::ColorWrite)
                 depth_fail_op: wgpu::StencilOperation::Keep,
                 pass_op: wgpu::StencilOperation::IncrementClamp,
             },
-            wgpu::ColorWrite::empty(),
+            wgpu::ColorWrites::empty(),
         ),
         MaskState::DrawMaskedContent => (
             wgpu::StencilFaceState {
@@ -744,7 +744,7 @@ fn mask_render_state(state: MaskState) -> (wgpu::StencilState, wgpu::ColorWrite)
                 depth_fail_op: wgpu::StencilOperation::Keep,
                 pass_op: wgpu::StencilOperation::Keep,
             },
-            wgpu::ColorWrite::ALL,
+            wgpu::ColorWrites::ALL,
         ),
         MaskState::ClearMaskStencil => (
             wgpu::StencilFaceState {
@@ -753,7 +753,7 @@ fn mask_render_state(state: MaskState) -> (wgpu::StencilState, wgpu::ColorWrite)
                 depth_fail_op: wgpu::StencilOperation::Keep,
                 pass_op: wgpu::StencilOperation::DecrementClamp,
             },
-            wgpu::ColorWrite::empty(),
+            wgpu::ColorWrites::empty(),
         ),
     };
 
