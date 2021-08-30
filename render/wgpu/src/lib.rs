@@ -247,11 +247,11 @@ impl WgpuRenderBackend<SwapChainTarget> {
     pub fn for_window<W: HasRawWindowHandle>(
         window: &W,
         size: (u32, u32),
-        backend: wgpu::BackendBit,
+        backend: wgpu::Backends,
         power_preference: wgpu::PowerPreference,
         trace_path: Option<&Path>,
     ) -> Result<Self, Error> {
-        if wgpu::BackendBit::SECONDARY.contains(backend) {
+        if wgpu::Backends::SECONDARY.contains(backend) {
             log::warn!(
                 "{} graphics backend support may not be fully supported.",
                 format_list(&get_backend_names(backend), "and")
@@ -274,11 +274,11 @@ impl WgpuRenderBackend<SwapChainTarget> {
 impl WgpuRenderBackend<TextureTarget> {
     pub fn for_offscreen(
         size: (u32, u32),
-        backend: wgpu::BackendBit,
+        backend: wgpu::Backends,
         power_preference: wgpu::PowerPreference,
         trace_path: Option<&Path>,
     ) -> Result<Self, Error> {
-        if wgpu::BackendBit::SECONDARY.contains(backend) {
+        if wgpu::Backends::SECONDARY.contains(backend) {
             log::warn!(
                 "{} graphics backend support may not be fully supported.",
                 format_list(&get_backend_names(backend), "and")
@@ -352,7 +352,7 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
     }
 
     pub fn build_descriptors(
-        backend: wgpu::BackendBit,
+        backend: wgpu::Backends,
         instance: wgpu::Instance,
         surface: Option<&wgpu::Surface>,
         power_preference: wgpu::PowerPreference,
