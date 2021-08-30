@@ -137,7 +137,7 @@ impl TextureTarget {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format,
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT | wgpu::TextureUsage::COPY_SRC,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
         });
         let buffer_label = create_debug_label!("Render target buffer");
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -201,7 +201,7 @@ impl RenderTarget for TextureTarget {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: self.format,
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT | wgpu::TextureUsage::COPY_SRC,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
         });
 
         let buffer_label = create_debug_label!("Render target buffer");

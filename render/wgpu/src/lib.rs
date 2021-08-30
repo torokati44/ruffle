@@ -308,7 +308,7 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
             sample_count: descriptors.msaa_sample_count,
             dimension: wgpu::TextureDimension::D2,
             format: target.format(),
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         });
         let frame_buffer_view = frame_buffer.create_view(&Default::default());
 
@@ -320,7 +320,7 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
             sample_count: descriptors.msaa_sample_count,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Depth24PlusStencil8,
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         });
 
         let depth_texture_view = depth_texture.create_view(&Default::default());
@@ -618,7 +618,7 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::Rgba8Unorm,
-                usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             });
 
         self.descriptors.queue.write_texture(
@@ -713,7 +713,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
                 sample_count: self.descriptors.msaa_sample_count,
                 dimension: wgpu::TextureDimension::D2,
                 format: self.target.format(),
-                usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             });
         self.frame_buffer_view = frame_buffer.create_view(&Default::default());
 
@@ -732,7 +732,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
                 sample_count: self.descriptors.msaa_sample_count,
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::Depth24PlusStencil8,
-                usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             });
         self.depth_texture_view = depth_texture.create_view(&Default::default());
         self.descriptors.globals.set_resolution(width, height);
