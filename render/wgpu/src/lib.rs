@@ -626,6 +626,7 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
                 texture: &texture,
                 mip_level: 0,
                 origin: Default::default(),
+                aspect: wgpu::TextureAspect::All
             },
             &data,
             wgpu::ImageDataLayout {
@@ -1221,6 +1222,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
                 texture,
                 mip_level: 0,
                 origin: Default::default(),
+                aspect: wgpu::TextureAspect::All,
             },
             &rgba,
             wgpu::ImageDataLayout {

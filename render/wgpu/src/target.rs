@@ -246,6 +246,7 @@ impl RenderTarget for TextureTarget {
                 texture: &self.texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
             },
             wgpu::ImageCopyBuffer {
                 buffer: &self.buffer,
