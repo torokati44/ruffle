@@ -915,12 +915,12 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
                     .pipeline_for(self.mask_state),
             );
             frame.render_pass.set_push_constants(
-                wgpu::ShaderStage::VERTEX,
+                wgpu::ShaderStages::VERTEX,
                 0,
                 bytemuck::cast_slice(&[Transforms { world_matrix }]),
             );
             frame.render_pass.set_push_constants(
-                wgpu::ShaderStage::FRAGMENT,
+                wgpu::ShaderStages::FRAGMENT,
                 std::mem::size_of::<Transforms>() as u32,
                 bytemuck::cast_slice(&[ColorAdjustments::from(transform.color_transform)]),
             );
@@ -1028,12 +1028,12 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
             }
 
             frame.render_pass.set_push_constants(
-                wgpu::ShaderStage::VERTEX,
+                wgpu::ShaderStages::VERTEX,
                 0,
                 bytemuck::cast_slice(&[Transforms { world_matrix }]),
             );
             frame.render_pass.set_push_constants(
-                wgpu::ShaderStage::FRAGMENT,
+                wgpu::ShaderStages::FRAGMENT,
                 std::mem::size_of::<Transforms>() as u32,
                 bytemuck::cast_slice(&[ColorAdjustments::from(transform.color_transform)]),
             );
@@ -1095,12 +1095,12 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
         );
 
         frame.render_pass.set_push_constants(
-            wgpu::ShaderStage::VERTEX,
+            wgpu::ShaderStages::VERTEX,
             0,
             bytemuck::cast_slice(&[Transforms { world_matrix }]),
         );
         frame.render_pass.set_push_constants(
-            wgpu::ShaderStage::FRAGMENT,
+            wgpu::ShaderStages::FRAGMENT,
             std::mem::size_of::<Transforms>() as u32,
             bytemuck::cast_slice(&[ColorAdjustments {
                 mult_color,

@@ -77,7 +77,7 @@ impl Pipelines {
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStage::VERTEX,
+                        visibility: wgpu::ShaderStages::VERTEX,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
@@ -87,7 +87,7 @@ impl Pipelines {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Texture {
                             multisampled: false,
                             sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -116,7 +116,7 @@ impl Pipelines {
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStage::VERTEX,
+                        visibility: wgpu::ShaderStages::VERTEX,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
@@ -126,7 +126,7 @@ impl Pipelines {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
@@ -217,11 +217,11 @@ fn create_color_pipelines(
         bind_group_layouts: &[globals_layout],
         push_constant_ranges: &[
             wgpu::PushConstantRange {
-                stages: wgpu::ShaderStage::VERTEX,
+                stages: wgpu::ShaderStages::VERTEX,
                 range: 0..transforms_size,
             },
             wgpu::PushConstantRange {
-                stages: wgpu::ShaderStage::FRAGMENT,
+                stages: wgpu::ShaderStages::FRAGMENT,
                 range: transforms_size..transforms_size + colors_size,
             },
         ],
@@ -390,11 +390,11 @@ fn create_bitmap_pipeline(
         bind_group_layouts: &[globals_layout, bitmap_bind_layout, sampler_layout],
         push_constant_ranges: &[
             wgpu::PushConstantRange {
-                stages: wgpu::ShaderStage::VERTEX,
+                stages: wgpu::ShaderStages::VERTEX,
                 range: 0..64,
             },
             wgpu::PushConstantRange {
-                stages: wgpu::ShaderStage::FRAGMENT,
+                stages: wgpu::ShaderStages::FRAGMENT,
                 range: 64..96,
             },
         ],
@@ -561,11 +561,11 @@ fn create_gradient_pipeline(
         bind_group_layouts: &[globals_layout, gradient_bind_layout],
         push_constant_ranges: &[
             wgpu::PushConstantRange {
-                stages: wgpu::ShaderStage::VERTEX,
+                stages: wgpu::ShaderStages::VERTEX,
                 range: 0..64,
             },
             wgpu::PushConstantRange {
-                stages: wgpu::ShaderStage::FRAGMENT,
+                stages: wgpu::ShaderStages::FRAGMENT,
                 range: 64..96,
             },
         ],
