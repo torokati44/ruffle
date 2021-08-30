@@ -36,11 +36,11 @@ pub struct SwapChainTarget {
 }
 
 #[derive(Debug)]
-pub struct SwapChainTargetFrame(wgpu::SwapChainFrame);
+pub struct SwapChainTargetFrame(wgpu::SurfaceFrame, wgpu::TextureView);
 
 impl RenderTargetFrame for SwapChainTargetFrame {
     fn view(&self) -> &wgpu::TextureView {
-        &self.0.output.view
+        &self.1
     }
 }
 
@@ -53,7 +53,7 @@ impl SwapChainTarget {
             height: size.1,
             present_mode: wgpu::PresentMode::Mailbox,
         };
-        let swap_chain = device.create_swap_chain(&surface, &swap_chain_desc);
+        surface.configure(device, &surface_config);
         Self {
             window_surface: surface,
             surface_config: surface_config,
@@ -82,10 +82,14 @@ impl RenderTarget for SwapChainTarget {
         self.surface_config.height
     }
 
-    fn get_next_texture(&mut self) -> Result<Self::Frame, wgpu::SwapChainError> {
-        self.swap_chain
+    fn get_next_texture(&mut self) -> Result<Self::Frame, wgpu::SurfaceError> {
+
+        self.window_surface
             .get_current_frame()
-            .map(SwapChainTargetFrame)
+            .map(|f| {
+                let v = f.output.texture.create_view(&Default::default());
+                SwapChainTargetFrame(f, v)
+            })
     }
 
     fn submit<I: IntoIterator<Item = wgpu::CommandBuffer>>(

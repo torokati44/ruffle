@@ -834,11 +834,8 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
             .globals
             .update_uniform(&self.descriptors.device, &mut frame_data.0);
 
-        let (color_view, resolve_target) = if self.descriptors.msaa_sample_count >= 2 {
-            (&self.frame_buffer_view, Some(frame_data.1.view()))
-        } else {
-            (frame_data.1.view(), None)
-        };
+        let (color_view, resolve_target) =
+            (&self.frame_buffer_view, Some(frame_data.1.view()));
 
         let render_pass = frame_data.0.begin_render_pass(&wgpu::RenderPassDescriptor {
             color_attachments: &[wgpu::RenderPassColorAttachment {
