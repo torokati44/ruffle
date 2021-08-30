@@ -39,7 +39,6 @@ impl Pipelines {
                     wgpu::ShaderModuleDescriptor {
                         label: Some($($token)*),
                         source: wgpu::util::make_spirv(include_bytes!($($token)*)),
-                        flags: wgpu::ShaderFlags::empty(),
                     }
                 }
             };
