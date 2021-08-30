@@ -19,7 +19,7 @@ pub trait RenderTarget: Debug + 'static {
 
     fn height(&self) -> u32;
 
-    fn get_next_texture(&mut self) -> Result<Self::Frame, wgpu::SwapChainError>;
+    fn get_next_texture(&mut self) -> Result<Self::Frame, wgpu::SurfaceError>;
 
     fn submit<I: IntoIterator<Item = wgpu::CommandBuffer>>(
         &self,
@@ -32,8 +32,7 @@ pub trait RenderTarget: Debug + 'static {
 #[derive(Debug)]
 pub struct SwapChainTarget {
     window_surface: wgpu::Surface,
-    swap_chain_desc: wgpu::SwapChainDescriptor,
-    swap_chain: wgpu::SwapChain,
+    surface_config: wgpu::SurfaceConfiguration
 }
 
 #[derive(Debug)]
@@ -47,8 +46,8 @@ impl RenderTargetFrame for SwapChainTargetFrame {
 
 impl SwapChainTarget {
     pub fn new(surface: wgpu::Surface, size: (u32, u32), device: &wgpu::Device) -> Self {
-        let swap_chain_desc = wgpu::SwapChainDescriptor {
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+        let surface_config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: wgpu::TextureFormat::Bgra8UnormSrgb,
             width: size.0,
             height: size.1,
@@ -57,8 +56,7 @@ impl SwapChainTarget {
         let swap_chain = device.create_swap_chain(&surface, &swap_chain_desc);
         Self {
             window_surface: surface,
-            swap_chain_desc,
-            swap_chain,
+            surface_config: surface_config,
         }
     }
 }
@@ -67,21 +65,21 @@ impl RenderTarget for SwapChainTarget {
     type Frame = SwapChainTargetFrame;
 
     fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
-        self.swap_chain_desc.width = width;
-        self.swap_chain_desc.height = height;
-        self.swap_chain = device.create_swap_chain(&self.window_surface, &self.swap_chain_desc);
+        self.surface_config.width = width;
+        self.surface_config.height = height;
+        self.window_surface.configure(device, &self.surface_config);
     }
 
     fn format(&self) -> wgpu::TextureFormat {
-        self.swap_chain_desc.format
+        self.surface_config.format
     }
 
     fn width(&self) -> u32 {
-        self.swap_chain_desc.width
+        self.surface_config.width
     }
 
     fn height(&self) -> u32 {
-        self.swap_chain_desc.height
+        self.surface_config.height
     }
 
     fn get_next_texture(&mut self) -> Result<Self::Frame, wgpu::SwapChainError> {
@@ -225,7 +223,7 @@ impl RenderTarget for TextureTarget {
         self.size.height
     }
 
-    fn get_next_texture(&mut self) -> Result<Self::Frame, wgpu::SwapChainError> {
+    fn get_next_texture(&mut self) -> Result<Self::Frame, wgpu::SurfaceError> {
         Ok(TextureTargetFrame(
             self.texture.create_view(&Default::default()),
         ))
