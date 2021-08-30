@@ -144,7 +144,7 @@ impl TextureTarget {
             label: buffer_label.as_deref(),
             size: (buffer_dimensions.padded_bytes_per_row.get() as u64
                 * buffer_dimensions.height as u64),
-            usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::MAP_READ,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         });
         Self {
@@ -208,7 +208,7 @@ impl RenderTarget for TextureTarget {
         self.buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: buffer_label.as_deref(),
             size: width as u64 * height as u64 * 4,
-            usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::MAP_READ,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         });
     }

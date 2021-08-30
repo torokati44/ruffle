@@ -55,7 +55,7 @@ pub fn get_backend_names(backends: wgpu::Backends) -> Vec<&'static str> {
 pub fn create_buffer_with_data(
     device: &wgpu::Device,
     data: &[u8],
-    usage: wgpu::BufferUsage,
+    usage: wgpu::BufferUsages,
     label: Option<String>,
 ) -> wgpu::Buffer {
     device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

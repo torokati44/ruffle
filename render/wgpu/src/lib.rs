@@ -407,14 +407,14 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
             let vertex_buffer = create_buffer_with_data(
                 &self.descriptors.device,
                 bytemuck::cast_slice(&vertices),
-                wgpu::BufferUsage::VERTEX,
+                wgpu::BufferUsages::VERTEX,
                 create_debug_label!("Shape {} ({}) vbo", shape_id, draw.draw_type.name()),
             );
 
             let index_buffer = create_buffer_with_data(
                 &self.descriptors.device,
                 bytemuck::cast_slice(&draw.indices),
-                wgpu::BufferUsage::INDEX,
+                wgpu::BufferUsages::INDEX,
                 create_debug_label!("Shape {} ({}) ibo", shape_id, draw.draw_type.name()),
             );
 
@@ -438,7 +438,7 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
                     let tex_transforms_ubo = create_buffer_with_data(
                         &self.descriptors.device,
                         bytemuck::cast_slice(&[texture_transform]),
-                        wgpu::BufferUsage::UNIFORM,
+                        wgpu::BufferUsages::UNIFORM,
                         create_debug_label!(
                             "Shape {} draw {} textransforms ubo transfer buffer",
                             shape_id,
@@ -449,7 +449,7 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
                     let gradient_ubo = create_buffer_with_data(
                         &self.descriptors.device,
                         bytemuck::cast_slice(&[GradientUniforms::from(gradient)]),
-                        wgpu::BufferUsage::STORAGE,
+                        wgpu::BufferUsages::STORAGE,
                         create_debug_label!(
                             "Shape {} draw {} gradient ubo transfer buffer",
                             shape_id,
@@ -524,7 +524,7 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
                     let tex_transforms_ubo = create_buffer_with_data(
                         &self.descriptors.device,
                         bytemuck::cast_slice(&[texture_transform]),
-                        wgpu::BufferUsage::UNIFORM,
+                        wgpu::BufferUsages::UNIFORM,
                         create_debug_label!(
                             "Shape {} draw {} textransforms ubo transfer buffer",
                             shape_id,
@@ -1259,14 +1259,14 @@ fn create_quad_buffers(device: &wgpu::Device) -> (wgpu::Buffer, wgpu::Buffer, wg
     let vbo = create_buffer_with_data(
         device,
         bytemuck::cast_slice(&vertices),
-        wgpu::BufferUsage::VERTEX,
+        wgpu::BufferUsages::VERTEX,
         create_debug_label!("Quad vbo"),
     );
 
     let ibo = create_buffer_with_data(
         device,
         bytemuck::cast_slice(&indices),
-        wgpu::BufferUsage::INDEX,
+        wgpu::BufferUsages::INDEX,
         create_debug_label!("Quad ibo"),
     );
 
@@ -1280,7 +1280,7 @@ fn create_quad_buffers(device: &wgpu::Device) -> (wgpu::Buffer, wgpu::Buffer, wg
                 [0.0, 0.0, 0.0, 1.0],
             ],
         }]),
-        wgpu::BufferUsage::UNIFORM,
+        wgpu::BufferUsages::UNIFORM,
         create_debug_label!("Quad tex transforms"),
     );
 
