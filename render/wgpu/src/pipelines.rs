@@ -54,7 +54,7 @@ impl Pipelines {
 
         let vertex_buffers_description = [wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as u64,
-            step_mode: wgpu::InputStepMode::Vertex,
+            step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &vertex_attr_array![
                 0 => Float32x2,
                 1 => Float32x4,
