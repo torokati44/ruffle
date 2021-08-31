@@ -47,27 +47,27 @@ def print_args(msg):
                     #print("finished")
                     finished = True
 
-baselines = {
-#    37 : 7.7692,
-#    7311 : 41.8308,
-#    4145 : 21.8407,
-#    437 : 38.5978,
-#    1650 : 6.4385,
-#    2139 : 13.1418,
-    4023 : 9.5341,
-    3664 : 45.7593,
-#    3946 : 42.4044,
-    4449 : 43.7198,
-#    7081 : 44.2165,
-#    7711 : 42.444,
-}
+loops = [
+#    37,
+#    7311,
+#    4145,
+#    437,
+#    1650,
+#    2139,
+#    4023,
+    3664,
+#    3946,
+    4449,
+    7081,
+#    7711
+]
 
 data = {}
-for l in baselines:
+for l in loops:
    data[l] = []
 
 with sync_playwright() as p:
-    for l in baselines:
+    for l in loops:
         cur_loop = l
 
         if not os.path.exists("z0r-de_" + str(l) + ".swf"):
@@ -91,23 +91,17 @@ with sync_playwright() as p:
 
         browser.close()
 
-
-speedups = []
-
 #print("AVG run_frame duration for loops (excluding the first few frames):")
 for d in data:
     plt.plot(data[d], label=d)
 
-    avg = np.mean(data[d][10:])
-    speedup = avg / baselines[d]
-    speedups.append(speedup)
+    avg = np.mean(data[d][20:])
 
     #print("   ", d, ":", round(avg, 4), "\t# in ms,", str(round(speedup * 100.0, 2)) + "%% of baseline")
-    print(str(d) + "_avgtime:", round(avg, 4))
-    print(str(d) + "_speedup:", str(round(speedup * 100.0, 2)))
+    print(d, "_avgtime:", round(avg, 4))
 
+print("mean : ", np.mean(list(data.values()))) # this only works because each element is of same length
 #print("(excluding the first few frames)")
-print("overall_speedup:", str(round((np.mean(speedups) - 1.0) * 100.0, 2)))
 
 """
 plt.ylim(bottom=0)
