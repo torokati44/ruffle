@@ -115,7 +115,7 @@ impl<T: Pod> UniformBuffer<T> {
         let buffer_label = create_debug_label!("Dynamic buffer");
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: buffer_label.as_deref(),
-            usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             size: Self::BLOCK_SIZE.into(),
             mapped_at_creation: false,
         });
