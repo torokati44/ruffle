@@ -16,15 +16,19 @@
         container.appendChild(player);
         const queryString = window.location.search;
         const urlParams = new URLSearchParams(queryString);
+        player.style["max-width"] = "100%";
+        player.style["max-height"] = "100%";
+
         player.load("z0r-de_" + urlParams.get("loop") + ".swf").then(function() {
             console.log("go");
-        })
+        });
+
     });
 </script>
 
     </head>
     <body>
-        <div id="container" style="width: 800px; height: 600px">
+        <div id="container" style="width: 1920px; height: 800px">
             <!-- <embed id="player" scale="default" type="application/x-shockwave-flash" src= width="100%" height="100%" loop="0"></embed> -->
         </div>
     </body>
