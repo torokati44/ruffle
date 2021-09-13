@@ -33,6 +33,13 @@ module.exports = (_env, _argv) => {
     return {
         mode,
         entry: "./js/ruffle.js",
+        module: {
+            rules: [{
+                parser: {
+                    worker: ["worklet.addModule()", "..."]
+                }
+            }]
+        },
         output: {
             path: path.resolve(__dirname, "dist"),
             filename: "ruffle.js",

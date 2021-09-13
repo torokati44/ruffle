@@ -475,11 +475,15 @@ impl Ruffle {
         parent
             .append_child(&canvas.clone().into())
             .into_js_result()?;
-        let audio: Box<dyn AudioBackend> = if let Ok(audio) = audio::WebAudioBackend::new() {
-            Box::new(audio)
-        } else {
-            log::error!("Unable to create audio backend. No audio will be played.");
-            Box::new(NullAudioBackend::new())
+        let audio: Box<dyn AudioBackend> = match audio::WebAudioBackend::new().await {
+            Ok(audio) => Box::new(audio),
+            Err(e) => {
+                log::error!(
+                    "Unable to create audio backend:\n{}\nNo audio will be played.",
+                    e
+                );
+                Box::new(NullAudioBackend::new())
+            }
         };
         let navigator = Box::new(navigator::WebNavigatorBackend::new(
             allow_script_access,

@@ -58,8 +58,8 @@ features = ["h263", "vp6", "screenvideo", "serde", "symphonia", "wasm-bindgen"]
 version = "0.3.50"
 features = [
     "AddEventListenerOptions", "AudioBuffer", "AudioBufferSourceNode", "AudioParam", "AudioProcessingEvent", "AudioContext", "AudioDestinationNode",
-    "AudioNode", "CanvasRenderingContext2d", "ChannelMergerNode", "ChannelSplitterNode", "CssStyleDeclaration", "Document",
-    "Element", "Event", "EventTarget", "GainNode", "Gpu", "HtmlCanvasElement", "HtmlElement", "HtmlImageElement", "MouseEvent",
-    "Navigator", "Node", "Performance", "PointerEvent", "ScriptProcessorNode", "UiEvent", "Window", "Location", "HtmlFormElement",
+    "AudioNode", "AudioWorklet", "AudioWorkletNode", "AudioWorkletNodeOptions", "CanvasRenderingContext2d", "ChannelMergerNode", "ChannelSplitterNode", "CssStyleDeclaration",
+    "Document", "Element", "Event", "EventTarget", "GainNode", "Gpu", "HtmlCanvasElement", "HtmlElement", "HtmlImageElement", "MessagePort", "MouseEvent",
+    "Navigator", "Node", "Performance", "PointerEvent", "ScriptProcessorNode", "UiEvent", "Url", "Window", "Location", "HtmlFormElement",
     "KeyboardEvent", "Path2d", "CanvasGradient", "CanvasPattern", "SvgMatrix", "SvgsvgElement", "Response", "Request", "RequestInit",
     "Blob", "BlobPropertyBag", "Storage", "WheelEvent", "ImageData"]

@@ -60,3 +60,12 @@ export function copyToAudioBufferInterleaved(
         i += 2;
     }
 }
+
+/**
+ * Yeah
+ *
+ * @returns URL
+ */
+export function buildAudioWorklet(worklet: AudioWorklet): Promise<void> {
+    return worklet.addModule(new URL("./audio.js", import.meta.url));
+}
