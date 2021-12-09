@@ -2,7 +2,12 @@
  * Conditional ruffle loader
  */
 
-import init, { Ruffle } from "../pkg/ruffle_web";
+import {
+    bulkMemory,
+    simd,
+    saturatedFloatToInt,
+    signExtensions,
+} from "wasm-feature-detect";
 import { setPolyfillsOnLoad } from "./js-polyfills";
 import { publicPath } from "./public-path";
 import { Config } from "./config";
@@ -27,13 +32,43 @@ async function fetchRuffle(config: Config): Promise<typeof Ruffle> {
     // libraries, if needed.
     setPolyfillsOnLoad();
 
+    const extensionsSupported: boolean = (
+        await Promise.all([
+            bulkMemory(),
+            simd(),
+            saturatedFloatToInt(),
+            signExtensions(),
+        ])
+    ).every(Boolean);
+
+    if (extensionsSupported) {
+        console.log(
+            "All necessary WASM extensions are available, using the more optimized WASM module"
+        );
+    } else {
+        console.log(
+            "Some WASM extensions are NOT available, falling back to the basic WASM module"
+        );
+    }
+
     __webpack_public_path__ = publicPath(config);
+
+    // Note: The argument passed to import() has to be a simple string literal,
+    // otherwise some bundler will get confused and won't include the module?
+    const { default: init, Ruffle } = await (extensionsSupported
+        ? import("../pkg/ruffle_web")
+        : import("../pkg/ruffle_web_noext"));
+
     await init();
 
     return Ruffle;
 }
 
-let lastLoaded: Promise<typeof Ruffle> | null = null;
+type Ruffle =
+    | typeof import("../pkg/ruffle_web")["Ruffle"]
+    | typeof import("../pkg/ruffle_web_noext")["Ruffle"];
+
+let lastLoaded: Promise<Ruffle> | null = null;
 
 /**
  * Obtain an instance of `Ruffle`.
@@ -44,7 +79,7 @@ let lastLoaded: Promise<typeof Ruffle> | null = null;
  * @returns A ruffle constructor that may be used to create new Ruffle
  * instances.
  */
-export function loadRuffle(config: Config): Promise<typeof Ruffle> {
+export function loadRuffle(config: Config): Promise<Ruffle> {
     if (lastLoaded == null) {
         lastLoaded = fetchRuffle(config);
     }
