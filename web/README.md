@@ -83,6 +83,7 @@ In this project, you may run the following commands to build all packages:
     -   Output will be available in the `dist/` of each package (for example, `./packages/selfhosted/dist`),
         save for the extension which is directory `build/`.
     -   You may also use `npm run build:debug` to disable Webpack optimizations and activate the (extremely verbose) ActionScript debugging output.
+    -   For quicker testing, `npm run build:testing` is also available, which only builds a single wasm binary.
 
 From here, you may follow the instructions to [use Ruffle on your website](packages/selfhosted/README.md),
 or run a demo locally with `npm run demo`.

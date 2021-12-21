@@ -73,7 +73,7 @@ jobs:
         shell: bash -l {0}
         run: |
           npm run bootstrap
-          npm run build
+          npm run build:testing
 
       - name: Check formatting
         working-directory: web

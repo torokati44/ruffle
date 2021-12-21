@@ -35,6 +35,7 @@
         "bootstrap": "npm install && lerna bootstrap --hoist",
         "build": "lerna run build --stream",
         "build:debug": "cross-env NODE_ENV=development CARGO_FEATURES=avm_debug npm run build",
+        "build:testing": "lerna run build:testing --stream",
         "demo": "lerna run --scope ruffle-demo serve --stream",
         "test": "lerna run test --stream",
         "docs": "lerna run docs --stream",
