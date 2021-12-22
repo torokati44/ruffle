@@ -10,7 +10,7 @@
     ],
     "scripts": {
         "build": "npm run build:cargo && npm run build:wasm-bindgen && npm run build:wasm-opt && npm run build:cargo_noext && npm run build:wasm-bindgen_noext && npm run build:wasm-opt_noext && npm run build:ts",
-        "build:testing": "npm run build:cargo_noext && npm run build:wasm-bindgen_noext && npm run build:wasm-opt_noext && shx cp ./pkg/ruffle_web_noext_bg.wasm ./pkg/ruffle_web_bg.wasm && shx cp ./pkg/ruffle_web_noext.js ./pkg/ruffle_web.js && npm run build:ts",
+        "build:testing": "npm run build:cargo_noext && npm run build:wasm-bindgen_noext && npm run build:wasm-opt_noext && shx cp ./pkg/ruffle_web_noext_bg.wasm ./pkg/ruffle_web_bg.wasm && shx cp ./pkg/ruffle_web_noext_bg.wasm.d.ts ./pkg/ruffle_web_bg.wasm.d.ts && shx cp ./pkg/ruffle_web_noext.js ./pkg/ruffle_web.js && npm run build:ts",
 
         "//": "# Unfortunately, we have to set $RUSTFLAGS here, instead of in .cargo/config.toml (for example), because it's not possible to specify them per-profile; see cargo issue #7878. Enabling 'build-std' would also be great, but it's not stable yet.",
 
