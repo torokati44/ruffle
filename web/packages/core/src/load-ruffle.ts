@@ -57,7 +57,7 @@ async function fetchRuffle(config: Config): Promise<typeof Ruffle> {
     // otherwise some bundler will get confused and won't include the module?
     const { default: init, Ruffle } = await (extensionsSupported
         ? import("../pkg/ruffle_web")
-        : import("../pkg/ruffle_web_noext"));
+        : import("../pkg/ruffle_web_vanilla"));
 
     await init();
 
@@ -66,7 +66,7 @@ async function fetchRuffle(config: Config): Promise<typeof Ruffle> {
 
 type Ruffle =
     | typeof import("../pkg/ruffle_web")["Ruffle"]
-    | typeof import("../pkg/ruffle_web_noext")["Ruffle"];
+    | typeof import("../pkg/ruffle_web_vanilla")["Ruffle"];
 
 let lastLoaded: Promise<Ruffle> | null = null;
 

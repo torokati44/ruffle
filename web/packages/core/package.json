@@ -9,8 +9,13 @@
         "pkg/"
     ],
     "scripts": {
-        "build": "npm run build:cargo && npm run build:wasm-bindgen && npm run build:wasm-opt && npm run build:cargo_noext && npm run build:wasm-bindgen_noext && npm run build:wasm-opt_noext && npm run build:ts",
-        "build:testing": "npm run build:cargo_noext && npm run build:wasm-bindgen_noext && npm run build:wasm-opt_noext && shx cp ./pkg/ruffle_web_noext_bg.wasm ./pkg/ruffle_web_bg.wasm && shx cp ./pkg/ruffle_web_noext_bg.wasm.d.ts ./pkg/ruffle_web_bg.wasm.d.ts && shx cp ./pkg/ruffle_web_noext.js ./pkg/ruffle_web.js && npm run build:ts",
+        "build": "npm run build:ruffle_web && npm run build:ruffle_web_vanilla && npm run build:ts",
+
+        "build:ruffle_web": "npm run build:cargo && npm run build:wasm-bindgen && npm run build:wasm-opt",
+        "build:ruffle_web_vanilla": "node -e \"((process.env.GITHUB_WORKFLOW == 'Release Nightly') || (process.env.RUFFLE_REALVANILLA)) ? process.exit(0) : process.exit(1)\" && npm run build:ruffle_web_vanilla_real || npm run build:ruffle_web_vanilla_fake",
+
+        "build:ruffle_web_vanilla_real": "echo \"Making real vanilla module\" && npm run build:cargo_vanilla && npm run build:wasm-bindgen_vanilla && npm run build:wasm-opt_vanilla",
+        "build:ruffle_web_vanilla_fake": "echo \"Making fake vanilla module\" && shx cp ./pkg/ruffle_web_bg.wasm ./pkg/ruffle_web_vanilla_bg.wasm && shx cp ./pkg/ruffle_web_bg.wasm.d.ts ./pkg/ruffle_web_vanilla_bg.wasm.d.ts && shx cp ./pkg/ruffle_web.js ./pkg/ruffle_web_vanilla.js && shx cp ./pkg/ruffle_web.d.ts ./pkg/ruffle_web_vanilla.d.ts",
 
         "//": "# Unfortunately, we have to set $RUSTFLAGS here, instead of in .cargo/config.toml (for example), because it's not possible to specify them per-profile; see cargo issue #7878. Enabling 'build-std' would also be great, but it's not stable yet.",
 
@@ -18,9 +23,9 @@
         "build:wasm-bindgen": "wasm-bindgen ../../../target/wasm32-unknown-unknown/release/ruffle_web.wasm --target web --out-dir ./pkg --out-name ruffle_web",
         "build:wasm-opt": "wasm-opt -o ./pkg/ruffle_web_bg.wasm -O -g ./pkg/ruffle_web_bg.wasm || npm run build:wasm-opt-failed",
 
-        "build:cargo_noext": "cross-env-shell RUSTFLAGS=\"--cfg=web_sys_unstable_apis\" \"cargo build --release --target wasm32-unknown-unknown --features \\\"$CARGO_FEATURES\\\"\"",
-        "build:wasm-bindgen_noext": "wasm-bindgen ../../../target/wasm32-unknown-unknown/release/ruffle_web.wasm --target web --out-dir ./pkg --out-name ruffle_web_noext",
-        "build:wasm-opt_noext": "wasm-opt -o ./pkg/ruffle_web_noext_bg.wasm -O -g ./pkg/ruffle_web_noext_bg.wasm || npm run build:wasm-opt-failed",
+        "build:cargo_vanilla": "cross-env-shell RUSTFLAGS=\"--cfg=web_sys_unstable_apis\" \"cargo build --release --target wasm32-unknown-unknown --features \\\"$CARGO_FEATURES\\\"\"",
+        "build:wasm-bindgen_vanilla": "wasm-bindgen ../../../target/wasm32-unknown-unknown/release/ruffle_web.wasm --target web --out-dir ./pkg --out-name ruffle_web_vanilla",
+        "build:wasm-opt_vanilla": "wasm-opt -o ./pkg/ruffle_web_vanilla_bg.wasm -O -g ./pkg/ruffle_web_vanilla_bg.wasm || npm run build:wasm-opt-failed",
 
         "build:wasm-opt-failed": "echo 'NOTE: Since wasm-opt could not be found (or it failed), the resulting module might not perform that well, but it should still work.' && echo ; [ \"$CI\" != true ] # > nul",
 
