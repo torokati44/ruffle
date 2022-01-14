@@ -18,6 +18,7 @@ pub struct Vp6Decoder {
     bitreader: VP6BR,
     init_called: bool,
     last_frame: Option<NABufferRef<NAVideoBuffer<u8>>>,
+    frame: DecodedFrame
 }
 
 impl Vp6Decoder {
@@ -40,6 +41,7 @@ impl Vp6Decoder {
             bitreader: VP6BR::new(),
             init_called: false,
             last_frame: None,
+            frame: Default::default()
         }
     }
 }
@@ -62,7 +64,7 @@ impl VideoDecoder for Vp6Decoder {
         )
     }
 
-    fn decode_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<DecodedFrame, Error> {
+    fn decode_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<&DecodedFrame, Error> {
         // If this is the first frame, the decoder needs to be initialized.
 
         if !self.init_called {
@@ -214,11 +216,13 @@ impl VideoDecoder for Vp6Decoder {
         height = usize::min(height, bounds.1 as usize);
         rgba.truncate(width * height * 4);
 
-        Ok(DecodedFrame {
+        self.frame = DecodedFrame {
             width: width as u16,
             height: height as u16,
             rgba,
-        })
+        };
+
+        Ok(&self.frame)
     }
 }
 

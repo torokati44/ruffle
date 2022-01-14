@@ -145,5 +145,5 @@ trait VideoDecoder {
     ///
     /// The decoded frame should be returned. An `Error` can be returned if
     /// a drawable bitmap can not be produced.
-    fn decode_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<DecodedFrame, Error>;
+    fn decode_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<&DecodedFrame, Error>;
 }

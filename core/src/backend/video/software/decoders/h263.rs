@@ -5,11 +5,11 @@ use h263_rs::{DecoderOption, H263State, PictureTypeCode};
 use h263_rs_yuv::bt601::yuv420_to_rgba;
 
 /// H263 video decoder.
-pub struct H263Decoder(H263State);
+pub struct H263Decoder(H263State, DecodedFrame);
 
 impl H263Decoder {
     pub fn new() -> Self {
-        Self(H263State::new(DecoderOption::SORENSON_SPARK_BITSTREAM))
+        Self(H263State::new(DecoderOption::SORENSON_SPARK_BITSTREAM), Default::default())
     }
 }
 
@@ -29,7 +29,7 @@ impl VideoDecoder for H263Decoder {
         }
     }
 
-    fn decode_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<DecodedFrame, Error> {
+    fn decode_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<&DecodedFrame, Error> {
         let mut reader = H263Reader::from_source(encoded_frame.data());
 
         self.0.decode_next_picture(&mut reader)?;
@@ -46,11 +46,8 @@ impl VideoDecoder for H263Decoder {
         let chroma_width = picture.chroma_samples_per_row();
         let (y, b, r) = picture.as_yuv();
         let rgba = yuv420_to_rgba(y, b, r, width.into(), chroma_width);
-        Ok(DecodedFrame {
-            width,
-            height,
-            rgba,
-        })
+
+        Ok(&self.1)
     }
 }
 

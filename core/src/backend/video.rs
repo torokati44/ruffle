@@ -33,6 +33,7 @@ impl<'a> EncodedFrame<'a> {
 }
 
 /// A decoded frame of video in RGBA format.
+#[derive(Default)]
 struct DecodedFrame {
     width: u16,
     height: u16,

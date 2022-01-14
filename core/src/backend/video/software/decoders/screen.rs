@@ -15,7 +15,8 @@ pub struct ScreenVideoDecoder {
 
     tile: Vec<u8>, // acts as a scratch buffer
 
-    last_frame: Option<Vec<u8>>,
+    last_frame: Option<Vec<u8>>, // BGR, upside down, used for following frames
+    rgba_frame: DecodedFrame // the same as above, but RGBA
 }
 
 struct ByteReader<'a> {
@@ -62,6 +63,7 @@ impl ScreenVideoDecoder {
             block_h: 0,
             tile: vec![],
             last_frame: None,
+            rgba_frame: Default::default(),
         }
     }
 
@@ -125,7 +127,7 @@ impl VideoDecoder for ScreenVideoDecoder {
         }
     }
 
-    fn decode_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<DecodedFrame, Error> {
+    fn decode_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<&DecodedFrame, Error> {
         let is_keyframe = encoded_frame.data[0] >> 4 == 1;
 
         if !is_keyframe && self.last_frame.is_none() {
@@ -183,11 +185,12 @@ impl VideoDecoder for ScreenVideoDecoder {
 
         self.last_frame = Some(data);
 
-        Ok(DecodedFrame {
+        self.rgba_frame = DecodedFrame {
             width: w as u16,
             height: h as u16,
             rgba,
-        })
+        };
+        Ok(&self.rgba_frame)
     }
 }
 
