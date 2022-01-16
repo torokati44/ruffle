@@ -741,6 +741,66 @@ impl WebAudioBackend {
         audio_data: &[u8],
         _num_sample_frames: u32,
     ) -> AudioBufferPtr {
+        let mut start_index = 0;
+        for (i, v) in audio_data.windows(4).enumerate() {
+            if (v[0] != 0xFF) || ((v[1] & 0xF0) != 0xF0) {
+                continue;
+            }
+
+            let bitrate_index = v[3] >> 4;
+            let samplerate_index = (v[3] >> 2) & 0b11;
+            let padding = v[3] & 0b1;
+
+            let bitrate = 1000 * match bitrate_index {
+                0b0000 => 0, // "free" bitrate index, unsupported
+                0b0001	 => 	32,
+                0b0010	 => 	40,
+                0b0011	 => 	48,
+                0b0100	 => 	56,
+                0b0101	 => 	64,
+                0b0110	 => 	80,
+                0b0111	 => 	96,
+                0b1000	 => 	112,
+                0b1001	 => 	128,
+                0b1010	 => 	160,
+                0b1011	 => 	192,
+                0b1100	 => 	224,
+                0b1101	 => 	256,
+                0b1110	 => 	320,
+                0b1111	 => 	0, // "bad" bitrate index
+                _        =>     unreachable!()
+            };
+
+            let samplerate = match samplerate_index {
+                0b00 => 44100,
+                0b01 =>	48000,
+                0b10 =>	32000,
+                0b11 =>	0, // reserved
+                _ => unreachable!()
+            };
+
+            // source: www.multiweb.cz/twoinches/MP3inside.htm
+            let frame_length = ((144.0 * bitrate as f64 / samplerate as f64) + padding as f64).floor() as usize;
+
+            let next_frame_offset = i + frame_length;
+
+            if next_frame_offset == audio_data.len() {
+                log::warn!("next frame index is {:}, at end of data", next_frame_offset);
+                start_index = i;
+                break;
+            }
+            if bitrate != 0 && samplerate != 0 && audio_data.len() > (next_frame_offset + 1) && audio_data[next_frame_offset] == 0xFF
+                && (audio_data[next_frame_offset + 1] & 0xF0 == 0xF0)
+            {
+                log::warn!("next frame index is {:}, at next frame beginning", next_frame_offset);
+                start_index = i;
+                break;
+            }
+        }
+
+        log::warn!("startindex is: {:}", start_index);
+
+
         // We use the Web decodeAudioData API to decode MP3 data.
         // TODO: Is it possible we finish loading before the MP3 is decoding?
         let audio_buffer = self
@@ -755,7 +815,7 @@ impl WebAudioBackend {
         // - We don't mutate `data_array`
         // - Since we clone the buffer, its lifetime is correctly disconnected from `audio_data`
         let array_buffer = {
-            let data_array = unsafe { js_sys::Uint8Array::view(audio_data) };
+            let data_array = unsafe { js_sys::Uint8Array::view(&audio_data[start_index..]) };
             data_array.buffer().slice_with_end(
                 data_array.byte_offset(),
                 data_array.byte_offset() + data_array.byte_length(),
