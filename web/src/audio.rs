@@ -735,6 +735,8 @@ impl WebAudioBackend {
         Ok(Rc::new(RefCell::new(audio_buffer)))
     }
 
+
+
     fn decompress_mp3_to_audio_buffer(
         &mut self,
         format: &swf::SoundFormat,
@@ -743,44 +745,107 @@ impl WebAudioBackend {
     ) -> AudioBufferPtr {
         let mut start_index = 0;
         for (i, v) in audio_data.windows(4).enumerate() {
+
+            // 0xFF 0xF3 0xD0 0x64 => 470
+            // 0xFF 0xF3 0xD2 0x64 => 471
+
+
             if (v[0] != 0xFF) || ((v[1] & 0xF0) != 0xF0) {
                 continue;
             }
 
-            let bitrate_index = v[3] >> 4;
-            let samplerate_index = (v[3] >> 2) & 0b11;
-            let padding = v[3] & 0b1;
 
-            let bitrate = 1000 * match bitrate_index {
-                0b0000 => 0, // "free" bitrate index, unsupported
-                0b0001	 => 	32,
-                0b0010	 => 	40,
-                0b0011	 => 	48,
-                0b0100	 => 	56,
-                0b0101	 => 	64,
-                0b0110	 => 	80,
-                0b0111	 => 	96,
-                0b1000	 => 	112,
-                0b1001	 => 	128,
-                0b1010	 => 	160,
-                0b1011	 => 	192,
-                0b1100	 => 	224,
-                0b1101	 => 	256,
-                0b1110	 => 	320,
-                0b1111	 => 	0, // "bad" bitrate index
-                _        =>     unreachable!()
-            };
+// This is a straight-up port of https://hydrogenaud.io/index.php?topic=85125.msg747716#msg747716
+fn decode_header(hdr: &[u8]) -> usize {
+    // MPEG versions - use [version]
+        let mpeg_versions = [ 25, 0, 2, 1 ];
 
-            let samplerate = match samplerate_index {
-                0b00 => 44100,
-                0b01 =>	48000,
-                0b10 =>	32000,
-                0b11 =>	0, // reserved
-                _ => unreachable!()
-            };
+    // Layers - use [layer]
+        let mpeg_layers = [ 0, 3, 2, 1 ];
+
+    // Bitrates - use [version][layer][bitrate]
+     let mpeg_bitrates = [
+      [ // Version 2.5
+        [ 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0 ], // Reserved
+        [ 0,   8,  16,  24,  32,  40,  48,  56,  64,  80,  96, 112, 128, 144, 160, 0 ], // Layer 3
+        [ 0,   8,  16,  24,  32,  40,  48,  56,  64,  80,  96, 112, 128, 144, 160, 0 ], // Layer 2
+        [ 0,  32,  48,  56,  64,  80,  96, 112, 128, 144, 160, 176, 192, 224, 256, 0 ]  // Layer 1
+       ],
+      [ // Reserved
+        [ 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0 ], // Invalid
+        [ 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0 ], // Invalid
+        [ 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0 ], // Invalid
+        [ 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0 ]  // Invalid
+        ],
+      [ // Version 2
+        [ 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0 ], // Reserved
+        [ 0,   8,  16,  24,  32,  40,  48,  56,  64,  80,  96, 112, 128, 144, 160, 0 ], // Layer 3
+        [ 0,   8,  16,  24,  32,  40,  48,  56,  64,  80,  96, 112, 128, 144, 160, 0 ], // Layer 2
+        [ 0,  32,  48,  56,  64,  80,  96, 112, 128, 144, 160, 176, 192, 224, 256, 0 ]  // Layer 1
+      ],
+      [ // Version 1
+        [ 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0 ], // Reserved
+        [ 0,  32,  40,  48,  56,  64,  80,  96, 112, 128, 160, 192, 224, 256, 320, 0 ], // Layer 3
+        [ 0,  32,  48,  56,  64,  80,  96, 112, 128, 160, 192, 224, 256, 320, 384, 0 ], // Layer 2
+        [ 0,  32,  64,  96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 0 ], // Layer 1
+      ]
+     ];
+
+    // Sample rates - use [version][srate]
+        let mpeg_srates = [
+        [ 11025, 12000,  8000, 0 ], // MPEG 2.5
+        [     0,     0,     0, 0 ], // Reserved
+        [ 22050, 24000, 16000, 0 ], // MPEG 2
+        [ 44100, 48000, 32000, 0 ]  // MPEG 1
+        ];
+
+    // Samples per frame - use [version][layer]
+    let mpeg_frame_samples = [
+    //    Rsvd     3     2     1  < Layer  v Version
+        [    0,  576, 1152,  384 ], //       2.5
+        [    0,    0,    0,    0 ], //       Reserved
+        [    0,  576, 1152,  384 ], //       2
+        [    0, 1152, 1152,  384 ]  //       1
+    ];
+
+    // Slot size (MPEG unit of measurement) - use [layer]
+    let mpeg_slot_size = [ 0, 1, 1, 4 ]; // Rsvd, 3, 2, 1
+
+
+        // Quick validity check
+        if ( ( (hdr[0] & 0xFF) != 0xFF)
+          || ( (hdr[1] & 0xE0) != 0xE0)   // 3 sync bits
+          || ( (hdr[1] & 0x18) == 0x08)   // Version rsvd
+          || ( (hdr[1] & 0x06) == 0x00)   // Layer rsvd
+          || ( (hdr[2] & 0xF0) == 0xF0)   // Bitrate rsvd
+        ) {
+            return 0;
+        }
+
+        // Data to be extracted from the header
+        let   ver = ((hdr[1] & 0x18) >> 3) as usize;   // Version index
+        let   lyr = ((hdr[1] & 0x06) >> 1) as usize;   // Layer index
+        let   pad = (hdr[2] & 0x02) >> 1;   // Padding? 0/1
+        let   brx = ((hdr[2] & 0xf0) >> 4) as usize;   // Bitrate index
+        let   srx = ((hdr[2] & 0x0c) >> 2) as usize;   // SampRate index
+
+        // Lookup real values of these fields
+        let  bitrate   = mpeg_bitrates[ver][lyr][brx] * 1000;
+        let  samprate  = mpeg_srates[ver][srx];
+        let  samples   = mpeg_frame_samples[ver][lyr];
+        let   slot_size = mpeg_slot_size[lyr];
+
+        // In-between calculations
+        let     bps       = samples as f32 / 8.0;
+        let     fsize     = ( (bps * bitrate as f32) / samprate as f32 )
+                            + ( if (pad > 0) { slot_size as f32  } else { 0.0 } );
+
+        // Frame sizes are truncated integers
+        fsize as usize
+    }
 
             // source: www.multiweb.cz/twoinches/MP3inside.htm
-            let frame_length = ((144.0 * bitrate as f64 / samplerate as f64) + padding as f64).floor() as usize;
+            let frame_length = decode_header(&v);
 
             let next_frame_offset = i + frame_length;
 
@@ -789,7 +854,7 @@ impl WebAudioBackend {
                 start_index = i;
                 break;
             }
-            if bitrate != 0 && samplerate != 0 && audio_data.len() > (next_frame_offset + 1) && audio_data[next_frame_offset] == 0xFF
+            if frame_length > 0 && audio_data.len() > (next_frame_offset + 1) && audio_data[next_frame_offset] == 0xFF
                 && (audio_data[next_frame_offset + 1] & 0xF0 == 0xF0)
             {
                 log::warn!("next frame index is {:}, at next frame beginning", next_frame_offset);
