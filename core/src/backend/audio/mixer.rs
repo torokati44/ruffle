@@ -565,12 +565,12 @@ impl EventSoundStream {
         skip_sample_frames: u16,
     ) -> Self {
         let skip_sample_frames: u32 = skip_sample_frames.into();
-        let sample_divisor = 44100 / u32::from(decoder.sample_rate());
+        let sample_divisor = 44100.0 / f64::from(decoder.sample_rate());
         let start_sample_frame =
-            settings.in_sample.unwrap_or(0) / sample_divisor + skip_sample_frames;
+            (settings.in_sample.unwrap_or(0) as f64 / sample_divisor) as u32 + skip_sample_frames;
         let end_sample_frame = settings
             .out_sample
-            .map(|n| n / sample_divisor)
+            .map(|n| (n as f64 / sample_divisor) as u32)
             .unwrap_or(num_sample_frames)
             + skip_sample_frames;
 
