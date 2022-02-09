@@ -127,7 +127,7 @@ pub mod symphonia {
     impl Mp3Decoder {
         const SAMPLE_BUFFER_DURATION: u64 = 4096;
 
-        pub fn new<R: 'static + Read + Send>(reader: R) -> Result<Self, Error> {
+        pub fn new<R: 'static + Read + Send + Sync>(reader: R) -> Result<Self, Error> {
             let source = Box::new(io::ReadOnlySource::new(reader)) as Box<dyn io::MediaSource>;
             let source = io::MediaSourceStream::new(source, Default::default());
             let reader = SymphoniaMp3Reader::try_new(source, &Default::default())?;
@@ -151,7 +151,7 @@ pub mod symphonia {
             })
         }
 
-        pub fn new_seekable<R: 'static + AsRef<[u8]> + Send>(
+        pub fn new_seekable<R: 'static + AsRef<[u8]> + Send + Sync>(
             reader: Cursor<R>,
         ) -> Result<Self, Error> {
             let source = Box::new(reader) as Box<dyn io::MediaSource>;

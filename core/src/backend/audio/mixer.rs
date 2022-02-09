@@ -273,7 +273,7 @@ impl AudioMixer {
     ///
     /// This is used for cases where there is no custom envelope or looping on the sound instance.
     /// Otherwise, `AudioMixer::make_stream_from_event_sound` should be used.
-    fn make_stream_from_simple_event_sound<R: 'static + std::io::Read + Send>(
+    fn make_stream_from_simple_event_sound<R: 'static + std::io::Read + Send + Sync>(
         &self,
         format: &swf::SoundFormat,
         data_stream: R,

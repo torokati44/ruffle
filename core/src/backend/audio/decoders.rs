@@ -31,7 +31,7 @@ pub trait Decoder: Iterator<Item = [i16; 2]> {
 }
 
 /// Instantiate a decoder for the compression that the sound data uses.
-pub fn make_decoder<R: 'static + Send + Read>(
+pub fn make_decoder<R: 'static + Send + Read + Sync>(
     format: &SoundFormat,
     data: R,
 ) -> Result<Box<dyn Send + Decoder>, Error> {
