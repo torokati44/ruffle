@@ -233,7 +233,15 @@ pub mod symphonia {
                 formats::SeekMode::Accurate,
                 formats::SeekTo::TimeStamp { track_id: 0, ts: 0 },
             );
-            self.cur_sample = self.sample_buf.len();
+            let track = self.reader.default_track().unwrap();
+            let codec_params = track.codec_params.clone();
+            self.sample_buf = audio::SampleBuffer::new(
+                Self::SAMPLE_BUFFER_DURATION,
+                audio::SignalSpec::new(self.sample_rate.into(), codec_params.channels.unwrap()),
+            );
+            self.cur_sample = 0; // self.sample_buf.len();
+            self.stream_ended = false;
+            self.next_frame();
         }
     }
 
