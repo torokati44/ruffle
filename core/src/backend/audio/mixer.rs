@@ -27,6 +27,8 @@ pub struct AudioMixer {
 
     /// The sample rate of the output stream in Hz.
     output_sample_rate: u32,
+
+    master_volume: f32,
 }
 
 type Error = Box<dyn std::error::Error>;
@@ -154,6 +156,7 @@ impl AudioMixer {
             sound_instances: Arc::new(Mutex::new(Arena::new())),
             num_output_channels,
             output_sample_rate,
+            master_volume: 1.0,
         }
     }
 
@@ -162,6 +165,7 @@ impl AudioMixer {
         AudioMixerProxy {
             sound_instances: Arc::clone(&self.sound_instances),
             num_output_channels: self.num_output_channels,
+            master_volume: 1.0
         }
     }
 
@@ -177,6 +181,7 @@ impl AudioMixer {
     {
         let mut sound_instances = self.sound_instances.lock().unwrap();
         Self::mix_audio::<T>(
+            self.master_volume,
             &mut sound_instances,
             self.num_output_channels,
             output_buffer,
@@ -316,6 +321,7 @@ impl AudioMixer {
     /// Refill the output buffer by stepping through all active sounds
     /// and mixing in their output.
     fn mix_audio<'a, T>(
+        master_volume: f32,
         sound_instances: &mut Arena<SoundInstance>,
         num_channels: u8,
         mut output_buffer: &mut [T],
@@ -351,7 +357,12 @@ impl AudioMixer {
                 }
             }
 
-            for (buf_sample, output_sample) in buf_frame.iter_mut().zip(output_frame.iter()) {
+            let final_frame: Stereo<T> = [
+                Sample::mul_amp(output_frame[0], master_volume.to_sample()).to_sample(),
+                Sample::mul_amp(output_frame[1], master_volume.to_sample()).to_sample(),
+            ];
+
+            for (buf_sample, output_sample) in buf_frame.iter_mut().zip(final_frame.iter()) {
                 *buf_sample = output_sample.to_sample();
             }
         }
@@ -517,6 +528,8 @@ pub struct AudioMixerProxy {
 
     /// The number of channels in the output stream. Must be 1 or 2.
     num_output_channels: u8,
+
+    master_volume: f32,
 }
 
 impl AudioMixerProxy {
@@ -532,6 +545,7 @@ impl AudioMixerProxy {
     {
         let mut sound_instances = self.sound_instances.lock().unwrap();
         AudioMixer::mix_audio::<T>(
+            self.master_volume,
             &mut sound_instances,
             self.num_output_channels,
             output_buffer,
