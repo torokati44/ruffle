@@ -326,7 +326,6 @@ impl Iterator for StreamTagReader {
             if found {
                 break Some(self.current_audio_data.clone());
             } else if compression != AudioCompression::Mp3
-                || self.mp3_samples_buffered <= 0
                 || reader.get_ref().is_empty()
             {
                 break None;
