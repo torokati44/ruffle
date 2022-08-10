@@ -321,6 +321,39 @@ pub fn set_y<'gc>(
     Ok(Value::Undefined)
 }
 
+
+/// Implements `z`'s getter.
+pub fn z<'gc>(
+    _activation: &mut Activation<'_, 'gc, '_>,
+    this: Option<Object<'gc>>,
+    _args: &[Value<'gc>],
+) -> Result<Value<'gc>, Error> {
+    if let Some(dobj) = this.and_then(|this| this.as_display_object()) {
+        //return Ok(dobj.y().into());
+    }
+
+    Ok(Value::Undefined)
+}
+
+/// Implements `z`'s setter.
+pub fn set_z<'gc>(
+    activation: &mut Activation<'_, 'gc, '_>,
+    this: Option<Object<'gc>>,
+    args: &[Value<'gc>],
+) -> Result<Value<'gc>, Error> {
+    if let Some(dobj) = this.and_then(|this| this.as_display_object()) {
+        let new_y = args
+            .get(0)
+            .cloned()
+            .unwrap_or(Value::Undefined)
+            .coerce_to_number(activation)?;
+
+        //dobj.set_y(activation.context.gc_context, new_y);
+    }
+
+    Ok(Value::Undefined)
+}
+
 /// Implements `rotation`'s getter.
 pub fn rotation<'gc>(
     activation: &mut Activation<'_, 'gc, '_>,
@@ -617,9 +650,15 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
         ("scaleY", Some(scale_y), Some(set_scale_y)),
         ("width", Some(width), Some(set_width)),
         ("scaleX", Some(scale_x), Some(set_scale_x)),
+        ("scaleY", Some(z), Some(set_z)),
+        ("scaleZ", Some(z), Some(set_z)),
         ("x", Some(x), Some(set_x)),
         ("y", Some(y), Some(set_y)),
+        ("z", Some(z), Some(set_z)),
         ("rotation", Some(rotation), Some(set_rotation)),
+        ("rotationX", Some(z), Some(set_z)),
+        ("rotationY", Some(z), Some(set_z)),
+        ("rotationZ", Some(z), Some(set_z)),
         ("name", Some(name), Some(set_name)),
         ("parent", Some(parent), None),
         ("root", Some(root), None),
