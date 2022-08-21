@@ -8,6 +8,10 @@ package flash.geom {
 		}
 		native function init(object:DisplayObject):void;
 
+		public var perspectiveProjection : PerspectiveProjection = new PerspectiveProjection();
+		//public function get perspectiveProjection():PerspectiveProjection {}
+		//public function set perspectiveProjection(value:PerspectiveProjection):void {}
+
 		public native function get colorTransform():ColorTransform;
 		public native function set colorTransform(value: ColorTransform):void;
 		public native function get matrix():Matrix;
