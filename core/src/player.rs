@@ -396,8 +396,6 @@ impl Player {
             stage.build_matrices(&mut activation.context);
         });
 
-        self.preload(&mut ExecutionLimit::none());
-
         if self.swf.is_action_script_3() && self.warn_on_unsupported_content {
             self.ui.display_unsupported_message();
         }
@@ -1334,7 +1332,7 @@ impl Player {
     /// Returns true if all preloading work has completed. Clients that want to
     /// simulate a particular load condition or stress chunked loading may use
     /// this in lieu of an unlimited execution limit.
-    fn preload(&mut self, limit: &mut ExecutionLimit) -> bool {
+    pub fn preload(&mut self, limit: &mut ExecutionLimit) -> bool {
         self.mutate_with_update_context(|context| {
             let root = context.stage.root_clip();
             let mut did_finish = root.as_movie_clip().unwrap().preload(context, limit);
@@ -1348,6 +1346,12 @@ impl Player {
     }
 
     pub fn run_frame(&mut self) {
+        let frame_time = Duration::from_nanos((750_000_000.0 / self.frame_rate) as u64);
+
+        self.preload(&mut ExecutionLimit::with_max_actions_and_time(
+            10000, frame_time,
+        ));
+
         self.update(|context| {
             if context.is_action_script_3() {
                 run_all_phases_avm2(context);
@@ -1356,6 +1360,7 @@ impl Player {
             }
             context.update_sounds();
         });
+
         self.needs_render = true;
     }
 
