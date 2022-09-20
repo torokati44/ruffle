@@ -186,6 +186,11 @@ struct App {
     player: Arc<Mutex<Player>>,
 }
 
+
+use egui_wgpu::winit::Painter;
+use egui_winit::State;
+use winit::event_loop::{EventLoopWindowTarget};
+
 impl App {
     fn new(opt: Opt) -> Result<Self, Error> {
         let path = match opt.input_path.as_ref() {
@@ -305,6 +310,28 @@ impl App {
         let mut minimized = false;
         let mut fullscreen_down = false;
 
+
+        let ctx = egui::Context::default();
+
+        let mut state = State::new(&self.event_loop);
+        let mut painter = Painter::new(
+            wgpu::Backends::all(),
+            wgpu::PowerPreference::LowPower,
+            wgpu::DeviceDescriptor {
+                label: None,
+                features: wgpu::Features::default(),
+                limits: wgpu::Limits::default(),
+            },
+            wgpu::PresentMode::Fifo,
+            1,
+        );
+
+        unsafe { painter.set_window(Some(&self.window)) };
+
+        let mut egui_demo_windows = egui_demo_lib::DemoWindows::default();
+
+
+
         // Poll UI events.
         self.event_loop
             .run(move |event, _window_target, control_flow| {
@@ -373,10 +400,31 @@ impl App {
 
                     // Render
                     winit::event::Event::RedrawRequested(_) => {
+
+                        let raw_input = state.take_egui_input(&self.window);
+
+
                         // Don't render when minimized to avoid potential swap chain errors in `wgpu`.
                         if !minimized {
                             self.player.lock().unwrap().render();
                         }
+
+                        let full_output = ctx.run(raw_input, |ctx| {
+                            egui_demo_windows.ui(ctx);
+                        });
+                        state.handle_platform_output(&self.window, &ctx, full_output.platform_output);
+
+                        painter.paint_and_update_textures(
+                            state.pixels_per_point(),
+                            egui::Rgba::default(),
+                            &ctx.tessellate(full_output.shapes),
+                            &full_output.textures_delta,
+                        );
+
+                        if full_output.repaint_after.is_zero() {
+                            self.window.request_redraw();
+                        }
+
                     }
 
                     winit::event::Event::WindowEvent { event, .. } => match event {
@@ -395,6 +443,7 @@ impl App {
                                 height: size.height,
                                 scale_factor: viewport_scale_factor,
                             });
+                            painter.on_window_resized(size.width, size.height);
                             self.window.request_redraw();
                         }
                         WindowEvent::CursorMoved { position, .. } => {
