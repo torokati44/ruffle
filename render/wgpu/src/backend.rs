@@ -1,6 +1,6 @@
 use crate::mesh::{Draw, Mesh};
 use crate::surface::Surface;
-use crate::target::RenderTargetFrame;
+use crate::target::{RenderTargetFrame, RenderCallbackParams};
 use crate::target::TextureTarget;
 use crate::uniform_buffer::BufferStorage;
 use crate::{
@@ -251,6 +251,46 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
     pub fn device(&self) -> &wgpu::Device {
         &self.descriptors.device
     }
+
+
+    pub fn submit_frame_with_callback(&mut self, clear: Color, commands: CommandList, callback: Box<dyn FnOnce(RenderCallbackParams)>) {
+        let frame_output = match self.target.get_next_texture() {
+            Ok(frame) => frame,
+            Err(e) => {
+                log::warn!("Couldn't begin new render frame: {}", e);
+                // Attempt to recreate the swap chain in this case.
+                self.target.resize(
+                    &self.descriptors.device,
+                    self.target.width(),
+                    self.target.height(),
+                );
+                return;
+            }
+        };
+
+        let command_buffers = self.surface.draw_commands(
+            frame_output.view(),
+            wgpu::Color {
+                r: f64::from(clear.r) / 255.0,
+                g: f64::from(clear.g) / 255.0,
+                b: f64::from(clear.b) / 255.0,
+                a: f64::from(clear.a) / 255.0,
+            },
+            &self.descriptors,
+            &mut self.globals,
+            &mut self.uniform_buffers_storage,
+            &self.meshes,
+            &self.bitmap_registry,
+            commands,
+        );
+
+        self.target.submit(
+            &self.descriptors.device,
+            &self.descriptors.queue,
+            command_buffers,
+            frame_output, callback
+        );
+    }
 }
 
 impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
@@ -318,43 +358,9 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
         handle
     }
 
+
     fn submit_frame(&mut self, clear: Color, commands: CommandList) {
-        let frame_output = match self.target.get_next_texture() {
-            Ok(frame) => frame,
-            Err(e) => {
-                log::warn!("Couldn't begin new render frame: {}", e);
-                // Attempt to recreate the swap chain in this case.
-                self.target.resize(
-                    &self.descriptors.device,
-                    self.target.width(),
-                    self.target.height(),
-                );
-                return;
-            }
-        };
-
-        let command_buffers = self.surface.draw_commands(
-            frame_output.view(),
-            wgpu::Color {
-                r: f64::from(clear.r) / 255.0,
-                g: f64::from(clear.g) / 255.0,
-                b: f64::from(clear.b) / 255.0,
-                a: f64::from(clear.a) / 255.0,
-            },
-            &self.descriptors,
-            &mut self.globals,
-            &mut self.uniform_buffers_storage,
-            &self.meshes,
-            &self.bitmap_registry,
-            commands,
-        );
-
-        self.target.submit(
-            &self.descriptors.device,
-            &self.descriptors.queue,
-            command_buffers,
-            frame_output,
-        );
+        self.submit_frame_with_callback(clear, commands, Box::new(|p| {}))
     }
 
     fn get_bitmap_pixels(&mut self, bitmap: BitmapHandle) -> Option<Bitmap> {
@@ -578,6 +584,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
             &self.descriptors.queue,
             command_buffers,
             frame_output,
+            Box::new(|p| {})
         );
 
         // Capture with premultiplied alpha, which is what we use for all textures

@@ -26,6 +26,7 @@ pub trait RenderTarget: Debug + 'static {
         queue: &wgpu::Queue,
         command_buffers: I,
         frame: Self::Frame,
+        external_render_callback:  Box<dyn FnOnce(RenderCallbackParams)>,
     );
 }
 
@@ -102,7 +103,9 @@ impl RenderTarget for SwapChainTarget {
         queue: &wgpu::Queue,
         command_buffers: I,
         frame: Self::Frame,
-    ) {
+        external_render_callback:  Box<dyn FnOnce(RenderCallbackParams)>
+    )
+    {
         queue.submit(command_buffers);
         frame.texture.present();
     }
@@ -221,6 +224,17 @@ impl TextureTarget {
     }
 }
 
+#[derive(Debug)]
+pub struct RenderCallbackParams<'a> {
+    pub device: &'a wgpu::Device,
+    pub queue: &'a wgpu::Queue,
+    pub command_encoder: &'a mut wgpu::CommandEncoder,
+    //pub texture_view: &'a wgpu::TextureView,
+    //pub surface_format: wgpu::TextureFormat,
+    //pub msaa_sample_count: u32,
+}
+
+
 impl RenderTarget for TextureTarget {
     type Frame = TextureTargetFrame;
 
@@ -253,7 +267,23 @@ impl RenderTarget for TextureTarget {
         queue: &wgpu::Queue,
         command_buffers: I,
         _frame: Self::Frame,
-    ) {
+        external_render_callback: Box<dyn FnOnce(RenderCallbackParams)>
+    )
+    {
+        queue.submit(command_buffers);
+
+
+        let label = create_debug_label!("Render target transfer encoder");
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: label.as_deref(),
+        });
+
+        external_render_callback(RenderCallbackParams {
+            device,
+            queue,
+            command_encoder: &mut encoder,
+        });
+
         let label = create_debug_label!("Render target transfer encoder");
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: label.as_deref(),
@@ -275,6 +305,6 @@ impl RenderTarget for TextureTarget {
             },
             self.size,
         );
-        queue.submit(command_buffers.into_iter().chain(Some(encoder.finish())));
+        queue.submit(Some(encoder.finish()));
     }
 }
