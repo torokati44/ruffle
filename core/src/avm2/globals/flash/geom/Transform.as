@@ -15,5 +15,7 @@ package flash.geom {
 
 		public native function get concatenatedColorTransform():ColorTransform;
 		public native function get concatenatedMatrix():Matrix;
+
+		public var perspectiveProjection : PerspectiveProjection = new PerspectiveProjection();
 	}
 }
