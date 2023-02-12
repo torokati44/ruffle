@@ -498,13 +498,27 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
 
     #[instrument(level = "debug", skip_all)]
     fn register_bitmap(&mut self, bitmap: Bitmap) -> Result<BitmapHandle, BitmapError> {
+
+        let mut bitmap = bitmap.to_rgba();
+
+        tracing::warn!("max texture dimension: {}", self.descriptors.limits.max_texture_dimension_2d);
+
         if bitmap.width() > self.descriptors.limits.max_texture_dimension_2d
             || bitmap.height() > self.descriptors.limits.max_texture_dimension_2d
         {
-            return Err(BitmapError::TooLarge);
+            let rgba = image::RgbaImage::from_raw(
+                bitmap.width(),
+                bitmap.height(),
+                bitmap.data().to_vec()
+            ).unwrap();
+            let mut image = image::DynamicImage::ImageRgba8(rgba);
+            let w = u32::min(bitmap.width(), self.descriptors.limits.max_texture_dimension_2d);
+            let h = u32::min(bitmap.height(), self.descriptors.limits.max_texture_dimension_2d);
+
+            image = image.resize_exact(w, h, image::imageops::FilterType::Triangle);
+            bitmap = Bitmap::new(w, h, ruffle_render::bitmap::BitmapFormat::Rgba, image.into_bytes())
         }
 
-        let bitmap = bitmap.to_rgba();
         let extent = wgpu::Extent3d {
             width: bitmap.width(),
             height: bitmap.height(),
