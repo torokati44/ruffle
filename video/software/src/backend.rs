@@ -82,19 +82,19 @@ impl VideoBackend for SoftwareVideoBackend {
             renderer.update_texture(
                 &bitmap,
                 Bitmap::new(
-                    frame.width.into(),
-                    frame.height.into(),
+                    frame.width(),
+                    frame.height(),
                     BitmapFormat::Rgba,
-                    frame.rgba,
+                    frame.data().to_vec(),
                 ),
             )?;
             bitmap
         } else {
             let bitmap = Bitmap::new(
-                frame.width.into(),
-                frame.height.into(),
+                frame.width(),
+                frame.height(),
                 BitmapFormat::Rgba,
-                frame.rgba,
+                frame.data().to_vec(),
             );
             renderer.register_bitmap(bitmap)?
         };
@@ -102,8 +102,8 @@ impl VideoBackend for SoftwareVideoBackend {
 
         Ok(BitmapInfo {
             handle,
-            width: frame.width,
-            height: frame.height,
+            width: frame.width() as u16,
+            height: frame.height() as u16,
         })
     }
 }
