@@ -3476,6 +3476,7 @@ dependencies = [
  "flate2",
  "gc-arena",
  "gif",
+ "h263-rs-yuv",
  "jpeg-decoder",
  "lyon",
  "png",
