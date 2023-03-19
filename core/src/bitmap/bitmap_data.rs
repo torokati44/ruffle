@@ -1310,9 +1310,12 @@ impl<'gc> BitmapData<'gc> {
             DirtyState::CpuModified => {
                 if let Err(e) = renderer.update_texture(
                     &handle,
-                    self.width(),
-                    self.height(),
-                    self.pixels_rgba(),
+                    Bitmap::new(
+                        self.width(),
+                        self.height(),
+                        BitmapFormat::Rgba,
+                        self.pixels_rgba(),
+                    ),
                 ) {
                     tracing::error!("Failed to update dirty bitmap {:?}: {:?}", handle, e);
                 }

@@ -1056,28 +1056,27 @@ impl RenderBackend for WebGlRenderBackend {
         })))
     }
 
-    fn update_texture(
-        &mut self,
-        handle: &BitmapHandle,
-        width: u32,
-        height: u32,
-        rgba: Vec<u8>,
-    ) -> Result<(), BitmapError> {
+    fn update_texture(&mut self, handle: &BitmapHandle, bitmap: Bitmap) -> Result<(), BitmapError> {
         let texture = &as_registry_data(handle).texture;
 
         self.gl.bind_texture(Gl::TEXTURE_2D, Some(texture));
+
+        let (format, bitmap) = match bitmap.format() {
+            BitmapFormat::Rgb | BitmapFormat::Yuv420p => (Gl::RGB, bitmap.to_rgb()),
+            BitmapFormat::Rgba | BitmapFormat::Yuva420p => (Gl::RGBA, bitmap.to_rgba()),
+        };
 
         self.gl
             .tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_u8_array(
                 Gl::TEXTURE_2D,
                 0,
-                Gl::RGBA as i32,
-                width as i32,
-                height as i32,
+                format as i32,
+                bitmap.width() as i32,
+                bitmap.height() as i32,
                 0,
-                Gl::RGBA,
+                format,
                 Gl::UNSIGNED_BYTE,
-                Some(&rgba),
+                Some(bitmap.data()),
             )
             .into_js_result()
             .map_err(|e| BitmapError::JavascriptError(e.into()))?;

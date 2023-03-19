@@ -75,13 +75,7 @@ impl RenderBackend for NullRenderer {
         Ok(BitmapHandle(Arc::new(NullBitmapHandle)))
     }
 
-    fn update_texture(
-        &mut self,
-        _bitmap: &BitmapHandle,
-        _width: u32,
-        _height: u32,
-        _rgba: Vec<u8>,
-    ) -> Result<(), Error> {
+    fn update_texture(&mut self, _handle: &BitmapHandle, _bitmap: Bitmap) -> Result<(), Error> {
         Ok(())
     }
 

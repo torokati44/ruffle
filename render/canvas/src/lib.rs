@@ -5,9 +5,7 @@ use ruffle_render::backend::null::NullBitmapSource;
 use ruffle_render::backend::{
     Context3D, Context3DCommand, RenderBackend, ShapeHandle, ShapeHandleImpl, ViewportDimensions,
 };
-use ruffle_render::bitmap::{
-    Bitmap, BitmapFormat, BitmapHandle, BitmapHandleImpl, BitmapSource, SyncHandle,
-};
+use ruffle_render::bitmap::{Bitmap, BitmapHandle, BitmapHandleImpl, BitmapSource, SyncHandle};
 use ruffle_render::color_transform::ColorTransform;
 use ruffle_render::commands::{CommandHandler, CommandList};
 use ruffle_render::error::Error;
@@ -482,16 +480,9 @@ impl RenderBackend for WebCanvasRenderBackend {
         Ok(BitmapHandle(Arc::new(bitmap_data)))
     }
 
-    fn update_texture(
-        &mut self,
-        handle: &BitmapHandle,
-        width: u32,
-        height: u32,
-        rgba: Vec<u8>,
-    ) -> Result<(), Error> {
+    fn update_texture(&mut self, handle: &BitmapHandle, bitmap: Bitmap) -> Result<(), Error> {
         let data = as_bitmap_data(handle);
-        data.update_pixels(Bitmap::new(width, height, BitmapFormat::Rgba, rgba))
-            .map_err(Error::JavascriptError)?;
+        data.update_pixels(bitmap).map_err(Error::JavascriptError)?;
         Ok(())
     }
 
