@@ -12,7 +12,7 @@ use crate::tag_utils::{SwfMovie, SwfSlice};
 use crate::vminterface::{AvmObject, Instantiator};
 use core::fmt;
 use gc_arena::{Collect, GcCell, MutationContext};
-use ruffle_render::bitmap::BitmapInfo;
+use ruffle_render::bitmap::{Bitmap, BitmapInfo};
 use ruffle_render::commands::CommandHandler;
 use ruffle_render::quality::StageQuality;
 use ruffle_video::error::Error;
@@ -264,9 +264,47 @@ impl<'gc> Video<'gc> {
 
         drop(read);
 
+        let mut frame = None;
         for fr in sweep_from..=frame_id {
-            self.seek_internal(context, fr)
+            frame = Some(self.seek_internal(context, fr));
         }
+
+        match frame {
+            Some(Ok(bitmap)) => {
+                let mut write = self.0.write(context.gc_context);
+
+                let width = bitmap.width();
+                let height = bitmap.height();
+
+                let handle = if let Some((_fid, bitmapinfo)) = write.decoded_frame.clone() {
+                    let res = context.renderer.update_texture(&bitmapinfo.handle, bitmap);
+                    if let Err(err) = res {
+                        Err(err)
+                    } else {
+                        Ok(bitmapinfo)
+                    }
+                } else {
+                    context
+                        .renderer
+                        .register_bitmap(bitmap)
+                        .map(|handle| BitmapInfo {
+                            handle,
+                            width: width as u16,
+                            height: height as u16,
+                        })
+                };
+
+                let handle = handle.unwrap();
+
+                write.decoded_frame = Some((frame_id, handle));
+            }
+            Some(Err(e)) => {
+                tracing::error!("Got error when seeking to video frame {}: {}", frame_id, e)
+            }
+            None => tracing::error!("Got no frame when seeking to video frame {}", frame_id),
+        }
+
+        //Ok(handle)
     }
 
     /// Decode a single frame of video.
@@ -274,17 +312,21 @@ impl<'gc> Video<'gc> {
     /// This function makes no attempt to ensure that the proposed seek is
     /// valid, hence the fact that it's not `pub`. To do a seek that accounts
     /// for keyframes, see `Video.seek`.
-    fn seek_internal(self, context: &mut UpdateContext<'_, 'gc>, frame_id: u32) {
-        let read = self.0.read();
-        let source = read.source;
-        let stream = if let VideoStream::Instantiated(stream) = &read.stream {
+    fn seek_internal(
+        self,
+        context: &mut UpdateContext<'_, 'gc>,
+        frame_id: u32,
+    ) -> Result<Bitmap, Error> {
+        let write = self.0.write(context.gc_context);
+        let source = write.source;
+        let stream = if let VideoStream::Instantiated(stream) = &write.stream {
             stream
         } else {
             tracing::error!("Attempted to seek uninstantiated video stream.");
-            return;
+            return Err(Error::VideoStreamIsNotRegistered); // TODO
         };
-
-        let res = match &*source.read() {
+        let srcr = source.read();
+        match &*srcr {
             VideoSource::Swf {
                 movie,
                 streamdef,
@@ -296,17 +338,13 @@ impl<'gc> Video<'gc> {
                         data: &movie.data()[*slice_start..*slice_end],
                         frame_id,
                     };
-                    context
+                    let frame = context
                         .video
-                        .decode_video_stream_frame(*stream, encframe, context.renderer)
+                        .decode_video_stream_frame(*stream, encframe)
+                        .unwrap();
+                    Ok(frame)
                 }
-                None => {
-                    if let Some((_old_id, old_frame)) = &read.decoded_frame {
-                        Ok(old_frame.clone())
-                    } else {
-                        Err(Error::SeekingBeforeDecoding(frame_id))
-                    }
-                }
+                None => Err(Error::SeekingBeforeDecoding(frame_id)),
             },
             VideoSource::NetStream { .. } => return,
         };

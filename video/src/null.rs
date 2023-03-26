@@ -3,8 +3,7 @@ use crate::error::Error;
 use crate::frame::{EncodedFrame, FrameDependency};
 use crate::VideoStreamHandle;
 use generational_arena::Arena;
-use ruffle_render::backend::RenderBackend;
-use ruffle_render::bitmap::BitmapInfo;
+use ruffle_render::bitmap::Bitmap;
 use swf::{VideoCodec, VideoDeblocking};
 
 pub struct NullVideoBackend {
@@ -56,8 +55,7 @@ impl VideoBackend for NullVideoBackend {
         &mut self,
         _stream: VideoStreamHandle,
         _encoded_frame: EncodedFrame<'_>,
-        _renderer: &mut dyn RenderBackend,
-    ) -> Result<BitmapInfo, Error> {
+    ) -> Result<Bitmap, Error> {
         Err(Error::DecodingNotSupported)
     }
 }

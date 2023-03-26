@@ -1,7 +1,6 @@
 use crate::decoder::VideoDecoder;
 use generational_arena::Arena;
-use ruffle_render::backend::RenderBackend;
-use ruffle_render::bitmap::{BitmapHandle, BitmapInfo, PixelRegion};
+use ruffle_render::bitmap::Bitmap;
 use ruffle_video::backend::VideoBackend;
 use ruffle_video::error::Error;
 use ruffle_video::frame::{EncodedFrame, FrameDependency};
@@ -70,45 +69,23 @@ impl VideoBackend for SoftwareVideoBackend {
         &mut self,
         stream: VideoStreamHandle,
         encoded_frame: EncodedFrame<'_>,
-        renderer: &mut dyn RenderBackend,
-    ) -> Result<BitmapInfo, Error> {
+    ) -> Result<Bitmap, Error> {
         let stream = self
             .streams
             .get_mut(stream)
             .ok_or(Error::VideoStreamIsNotRegistered)?;
 
-        let frame = stream.decoder.decode_frame(encoded_frame)?;
-
-        let w = frame.width();
-        let h = frame.height();
-
-        let handle = if let Some(bitmap) = stream.bitmap.clone() {
-            renderer.update_texture(&bitmap, frame, PixelRegion::for_whole_size(w, h))?;
-            bitmap
-        } else {
-            renderer.register_bitmap(frame)?
-        };
-        stream.bitmap = Some(handle.clone());
-
-        Ok(BitmapInfo {
-            handle,
-            width: w as u16,
-            height: h as u16,
-        })
+        stream.decoder.decode_frame(encoded_frame)
     }
 }
 
 /// A single preloaded video stream.
 pub struct VideoStream {
-    bitmap: Option<BitmapHandle>,
     decoder: Box<dyn VideoDecoder>,
 }
 
 impl VideoStream {
     fn new(decoder: Box<dyn VideoDecoder>) -> Self {
-        Self {
-            decoder,
-            bitmap: None,
-        }
+        Self { decoder }
     }
 }

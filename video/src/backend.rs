@@ -1,8 +1,7 @@
 use crate::error::Error;
 use crate::frame::{EncodedFrame, FrameDependency};
 use crate::VideoStreamHandle;
-use ruffle_render::backend::RenderBackend;
-use ruffle_render::bitmap::BitmapInfo;
+use ruffle_render::bitmap::Bitmap;
 use swf::{VideoCodec, VideoDeblocking};
 
 /// A backend that provides access to some number of video decoders.
@@ -63,6 +62,5 @@ pub trait VideoBackend {
         &mut self,
         stream: VideoStreamHandle,
         encoded_frame: EncodedFrame<'_>,
-        renderer: &mut dyn RenderBackend,
-    ) -> Result<BitmapInfo, Error>;
+    ) -> Result<Bitmap, Error>;
 }
