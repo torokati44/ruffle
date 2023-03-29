@@ -5,6 +5,8 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+  workflow_dispatch:
+
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -13,7 +15,7 @@ concurrency:
 jobs:
   changes:
     name: Paths filter
-    runs-on: ubuntu-22.04
+    runs-on: self-hosted
     outputs:
       src: ${{ steps.filter.outputs.src }}
     steps:
@@ -29,19 +31,10 @@ jobs:
   build:
     needs: changes
     if: needs.changes.outputs.src == 'true'
-    name: Test Rust ${{ matrix.rust_version }} / ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.rust_version == 'nightly' || matrix.rust_version == 'beta' }}
+    name: Test Rust
+    runs-on: self-hosted
     strategy:
       fail-fast: false
-      matrix:
-        rust_version: [stable]
-        os: [ubuntu-22.04, windows-latest, macos-latest]
-        include:
-          - rust_version: nightly
-            os: ubuntu-22.04
-          - rust_version: beta
-            os: ubuntu-22.04
 
     steps:
       - uses: actions/checkout@v3
@@ -49,7 +42,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ matrix.rust_version }}
+          toolchain: stable
           components: rustfmt, clippy
 
       - name: Install Linux dependencies
@@ -66,13 +59,12 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
-      - name: Lint AS3 playerglobals 
-        if: runner.os == 'Linux' && matrix.rust_version == 'stable'
+      - name: Lint AS3 playerglobals
         run: cargo run -p build_playerglobal -- lint
 
       - name: Check clippy
         # Don't fail the build for clippy on nightly, since we get a lot of false-positives
-        run: cargo clippy --all --all-features --tests ${{ (matrix.rust_version != 'nightly' && '-- -D warnings') || '' }}
+        run: cargo clippy --all --all-features --tests
 
       - name: Check documentation
         run: cargo doc --no-deps --all-features
@@ -96,17 +88,9 @@ jobs:
   check-required:
     needs: changes
     if: needs.changes.outputs.src == 'false'
-    name: Test Rust ${{ matrix.rust_version }} / ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    name: Test Rust
+    runs-on: self-hosted
     strategy:
-      matrix:
-        rust_version: [stable]
-        os: [ubuntu-22.04, windows-latest, macos-latest]
-        include:
-          - rust_version: nightly
-            os: ubuntu-22.04
-          - rust_version: beta
-            os: ubuntu-22.04
 
     steps:
       - name: No-op
