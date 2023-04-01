@@ -12,7 +12,7 @@ use crate::tag_utils::{SwfMovie, SwfSlice};
 use crate::vminterface::{AvmObject, Instantiator};
 use core::fmt;
 use gc_arena::{Collect, GcCell, MutationContext};
-use ruffle_render::bitmap::{Bitmap, BitmapInfo};
+use ruffle_render::bitmap::{Bitmap, BitmapInfo, PixelRegion};
 use ruffle_render::commands::CommandHandler;
 use ruffle_render::quality::StageQuality;
 use ruffle_video::error::Error;
@@ -277,7 +277,11 @@ impl<'gc> Video<'gc> {
                 let height = bitmap.height();
 
                 let handle = if let Some((_fid, bitmapinfo)) = write.decoded_frame.clone() {
-                    let res = context.renderer.update_texture(&bitmapinfo.handle, bitmap);
+                    let res = context.renderer.update_texture(
+                        &bitmapinfo.handle,
+                        bitmap,
+                        PixelRegion::for_whole_size(width, height),
+                    );
                     if let Err(err) = res {
                         Err(err)
                     } else {
@@ -346,16 +350,7 @@ impl<'gc> Video<'gc> {
                 }
                 None => Err(Error::SeekingBeforeDecoding(frame_id)),
             },
-            VideoSource::NetStream { .. } => return,
-        };
-
-        drop(read);
-
-        match res {
-            Ok(bitmap) => {
-                self.0.write(context.gc_context).decoded_frame = Some((frame_id, bitmap));
-            }
-            Err(e) => tracing::error!("Got error when seeking to video frame {}: {}", frame_id, e),
+            VideoSource::NetStream { .. } => Err(Error::VideoStreamIsNotRegistered),
         }
     }
 }
