@@ -33,6 +33,7 @@ JPEXS ffdec and a regular hex editor, like this:
    big-endian number
  - Both the tag length and the overall file length were increased
    by 3 plus the length of the alpha frame data
+ - The codec field of the DefineVideoStream tag was changed to 5
  - Finally, a background color tag was added at the beginning
    in ffdec to better show transparency
 
