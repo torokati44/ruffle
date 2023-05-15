@@ -17,6 +17,7 @@ flate2 = "1.0.26"
 smallvec = { version = "1.10.0", features = ["union"] }
 downcast-rs = "1.2.0"
 lyon = { version = "1.0.1", optional = true }
+tiny-skia-path = { version = "0.11.1", optional = true }
 thiserror = "1.0"
 wasm-bindgen = { version = "=0.2.87", optional = true }
 gc-arena = { workspace = true }
@@ -44,6 +45,6 @@ approx = "0.5.1"
 
 [features]
 default = []
-tessellator = ["lyon"]
+tessellator = ["lyon", "tiny-skia-path"]
 web = ["wasm-bindgen"]
 wgpu = ["dep:wgpu"]
