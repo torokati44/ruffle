@@ -139,15 +139,16 @@ impl GuiController {
 
     pub fn render(&mut self, movie: Option<&MovieView>) {
         let mut raw_input = self.egui_winit.take_egui_input(&self.window);
+        let ws = self.window.inner_size();
 
-        if self.window.inner_size() != self.last_size {
+        if ws != self.last_size {
             self.surface.configure(
                 &self.descriptors.device,
                 &wgpu::SurfaceConfiguration {
                     usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
                     format: self.surface_format,
-                    width: self.window.inner_size().width,
-                    height: self.window.inner_size().height,
+                    width: ws.width,
+                    height: ws.height,
                     present_mode: Default::default(),
                     alpha_mode: Default::default(),
                     view_formats: Default::default(),
@@ -156,11 +157,11 @@ impl GuiController {
             raw_input.screen_rect = Some(Rect::from_min_size(
                 Pos2::ZERO,
                 Vec2::new(
-                    self.window.inner_size().width as f32,
-                    self.window.inner_size().height as f32,
+                    ws.width as f32,
+                    ws.height as f32,
                 ),
             ));
-            self.last_size = self.window.inner_size();
+            self.last_size = ws;
         }
         let surface_texture = self
             .surface
@@ -180,7 +181,7 @@ impl GuiController {
         );
         let clipped_primitives = self.egui_ctx.tessellate(full_output.shapes);
 
-        let size = self.window.inner_size();
+        let size = ws;
         let scale_factor = self.window.scale_factor() as f32;
         let screen_descriptor = egui_wgpu::renderer::ScreenDescriptor {
             size_in_pixels: [size.width, size.height],
