@@ -204,13 +204,27 @@ impl ShapeTessellator {
             return;
         }
         let draw_mesh = std::mem::replace(&mut self.lyon_mesh, VertexBuffers::new());
+
+        let mut unique_vertices = Vec::<Vertex>::with_capacity(draw_mesh.indices.len());
+        let mut unique_indices = Vec::<u32>::with_capacity(draw_mesh.indices.len());
+
+        for (i, tri) in draw_mesh.indices.chunks_exact(3).enumerate() {
+            unique_vertices.push(draw_mesh.vertices[tri[0] as usize].clone());
+            unique_vertices.push(draw_mesh.vertices[tri[1] as usize].clone());
+            unique_vertices.push(draw_mesh.vertices[tri[2] as usize].clone());
+
+            unique_indices.push(i as u32 * 3);
+            unique_indices.push(i as u32 * 3 + 1);
+            unique_indices.push(i as u32 * 3 + 2);
+        }
+
         self.mesh.push(Draw {
             draw_type: draw,
             mask_index_count: self
                 .mask_index_count
                 .unwrap_or(draw_mesh.indices.len() as u32),
-            vertices: draw_mesh.vertices,
-            indices: draw_mesh.indices,
+            vertices: unique_vertices,
+            indices: unique_indices,
         });
         self.mask_index_count = None;
     }
