@@ -105,12 +105,18 @@ impl From<&swf::ColorTransform> for ColorAdjustments {
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
 struct PosVertex {
     position: [f32; 2],
+    barycentric: [f32; 3],
 }
 
 impl From<TessVertex> for PosVertex {
     fn from(vertex: TessVertex) -> Self {
         Self {
             position: [vertex.x, vertex.y],
+            barycentric: [
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ][vertex.index as usize]
         }
     }
 }
@@ -120,6 +126,7 @@ impl From<TessVertex> for PosVertex {
 struct PosColorVertex {
     position: [f32; 2],
     color: [f32; 4],
+    barycentric: [f32; 3],
 }
 
 impl From<TessVertex> for PosColorVertex {
@@ -132,6 +139,11 @@ impl From<TessVertex> for PosColorVertex {
                 f32::from(vertex.color.b) / 255.0,
                 f32::from(vertex.color.a) / 255.0,
             ],
+            barycentric: [
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ][vertex.index as usize]
         }
     }
 }
