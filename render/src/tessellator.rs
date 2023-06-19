@@ -202,9 +202,15 @@ impl ShapeTessellator {
         let mut unique_indices = Vec::<u32>::with_capacity(draw_mesh.indices.len());
 
         for (i, tri) in draw_mesh.indices.chunks_exact(3).enumerate() {
-            unique_vertices.push(draw_mesh.vertices[tri[0] as usize].clone());
-            unique_vertices.push(draw_mesh.vertices[tri[1] as usize].clone());
-            unique_vertices.push(draw_mesh.vertices[tri[2] as usize].clone());
+            let mut v0 = draw_mesh.vertices[tri[0] as usize].clone();
+            v0.index = 0;
+            unique_vertices.push(v0);
+            let mut v1 = draw_mesh.vertices[tri[1] as usize].clone();
+            v1.index = 1;
+            unique_vertices.push(v1);
+            let mut v2 = draw_mesh.vertices[tri[2] as usize].clone();
+            v2.index = 2;
+            unique_vertices.push(v2);
 
             unique_indices.push(i as u32 * 3);
             unique_indices.push(i as u32 * 3 + 1);
@@ -269,6 +275,7 @@ pub struct Vertex {
     pub x: f32,
     pub y: f32,
     pub color: swf::Color,
+    pub index: u32
 }
 
 #[derive(Clone, Debug)]
@@ -460,6 +467,7 @@ impl FillVertexConstructor<Vertex> for RuffleVertexCtor {
             x: vertex.position().x,
             y: vertex.position().y,
             color: self.color,
+            index: 0
         }
     }
 }

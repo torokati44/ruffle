@@ -264,33 +264,59 @@ impl Quad {
         let vertices_pos = [
             PosVertex {
                 position: [0.0, 0.0],
+                barycentric: [1.0, 0.0, 0.0],
             },
             PosVertex {
                 position: [1.0, 0.0],
+                barycentric: [0.0, 1.0, 0.0],
             },
             PosVertex {
                 position: [1.0, 1.0],
+                barycentric: [0.0, 0.0, 1.0],
+            },
+            PosVertex {
+                position: [0.0, 0.0],
+                barycentric: [1.0, 0.0, 0.0],
+            },
+            PosVertex {
+                position: [1.0, 1.0],
+                barycentric: [0.0, 0.0, 1.0],
             },
             PosVertex {
                 position: [0.0, 1.0],
+                barycentric: [0.0, 1.0, 0.0],
             },
         ];
         let vertices_pos_color = [
             PosColorVertex {
                 position: [0.0, 0.0],
                 color: [1.0, 1.0, 1.0, 1.0],
+                barycentric: [1.0, 0.0, 0.0],
             },
             PosColorVertex {
                 position: [1.0, 0.0],
                 color: [1.0, 1.0, 1.0, 1.0],
+                barycentric: [0.0, 1.0, 0.0],
             },
             PosColorVertex {
                 position: [1.0, 1.0],
                 color: [1.0, 1.0, 1.0, 1.0],
+                barycentric: [0.0, 0.0, 1.0],
+            },
+            PosColorVertex {
+                position: [0.0, 0.0],
+                color: [1.0, 1.0, 1.0, 1.0],
+                barycentric: [1.0, 0.0, 0.0],
+            },
+            PosColorVertex {
+                position: [1.0, 1.0],
+                color: [1.0, 1.0, 1.0, 1.0],
+                barycentric: [0.0, 1.0, 0.0],
             },
             PosColorVertex {
                 position: [0.0, 1.0],
                 color: [1.0, 1.0, 1.0, 1.0],
+                barycentric: [0.0, 0.0, 1.0],
             },
         ];
         let filter_vertices = [
@@ -310,8 +336,20 @@ impl Quad {
                 position: [0.0, 1.0],
                 uv: [0.0, 1.0],
             },
+            FilterVertex {
+                position: [0.0, 0.0],
+                uv: [0.0, 0.0],
+            },
+            FilterVertex {
+                position: [1.0, 1.0],
+                uv: [1.0, 1.0],
+            },
+            FilterVertex {
+                position: [0.0, 1.0],
+                uv: [0.0, 1.0],
+            },
         ];
-        let indices: [u32; 6] = [0, 1, 2, 0, 2, 3];
+          let indices: [u32; 6] = [0, 1, 2, 3, 4, 5];
 
         let vbo_pos = create_buffer_with_data(
             device,

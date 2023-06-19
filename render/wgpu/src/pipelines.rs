@@ -12,6 +12,7 @@ pub const VERTEX_BUFFERS_DESCRIPTION_POS: [wgpu::VertexBufferLayout; 1] =
         step_mode: wgpu::VertexStepMode::Vertex,
         attributes: &vertex_attr_array![
             0 => Float32x2,
+            1 => Float32x3,
         ],
     }];
 
@@ -22,6 +23,7 @@ pub const VERTEX_BUFFERS_DESCRIPTION_COLOR: [wgpu::VertexBufferLayout; 1] =
         attributes: &vertex_attr_array![
             0 => Float32x2,
             1 => Float32x4,
+            2 => Float32x3,
         ],
     }];
 
