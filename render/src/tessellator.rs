@@ -19,6 +19,114 @@ pub struct ShapeTessellator {
     is_stroke: bool,
 }
 
+fn count_tris_per_vert(vertices: &Vec<Vertex>, indices: &Vec<u32>) -> Vec<u32> {
+    let mut tris_per_vertex = Vec::new();
+    tris_per_vertex.resize(vertices.len(), 0);
+
+    for tri in indices.chunks_exact(3) {
+        if tri[0] == tri[1] || tri[0] == tri[2] || tri[1] == tri[2] {
+            dbg!(&tri);
+            continue;
+        }
+        tris_per_vertex[tri[0] as usize] += 1;
+        tris_per_vertex[tri[1] as usize] += 1;
+        tris_per_vertex[tri[2] as usize] += 1;
+    }
+
+    tris_per_vertex
+}
+
+fn histogram(values: &Vec<u32>) -> Vec<u32> {
+    let mut hist = Vec::new();
+
+    for v in values.iter() {
+        let v = *v as usize;
+        if hist.len() <= v {
+            hist.resize(v + 1, 0);
+        }
+        hist[v] += 1;
+    }
+
+    hist
+}
+
+fn collect_tripoint_neighbors(
+    indices: &mut Vec<u32>,
+    tripoint_index: u32,
+) -> ((usize, usize, usize), Vec<u32>) {
+    let mut triangles = Vec::with_capacity(3);
+
+    for (tri_i, tri) in indices.chunks_exact(3).enumerate() {
+        if tri[0] == tripoint_index || tri[1] == tripoint_index || tri[2] == tripoint_index {
+            triangles.push((tri_i, tri));
+        }
+    }
+
+    if triangles.len() != 3 {
+        return ((0, 0, 0), Vec::new());
+    }
+
+    //dbg!(&triangles);
+
+    let mut neighbors = Vec::with_capacity(6);
+
+    for tri in triangles.iter() {
+        for i in tri.1 {
+            if *i != tripoint_index && !neighbors.contains(i) {
+                neighbors.push(*i);
+            }
+        }
+    }
+
+    //dbg!(&neighbors);
+
+    ((triangles[0].0, triangles[1].0, triangles[2].0), neighbors)
+}
+
+fn eliminate_tripoints(
+    vertices: &mut Vec<Vertex>,
+    indices: &mut Vec<u32>,
+    tris_per_vert: &mut Vec<u32>,
+) -> bool {
+    let mut did_something = false;
+    for i in 0..vertices.len() {
+        if tris_per_vert[i] == 3 {
+            let (neighbor_triangles, neighbor_vertices) =
+                collect_tripoint_neighbors(indices, i as u32);
+
+            if neighbor_vertices.len() == 3 {
+
+                println!("Eliminating tripoint at index {}", i);
+
+                indices[neighbor_triangles.0 * 3] = neighbor_vertices[0];
+                indices[neighbor_triangles.0 * 3 + 1] = neighbor_vertices[1];
+                indices[neighbor_triangles.0 * 3 + 2] = neighbor_vertices[2];
+
+                let last_tri_range = indices.len() - 3..indices.len();
+                let next_last_tri_range = indices.len() - 6..indices.len() - 3;
+
+                indices.copy_within(last_tri_range, neighbor_triangles.1 * 3);
+                indices.copy_within(next_last_tri_range, neighbor_triangles.2 * 3);
+
+                indices.truncate(indices.len() - 6);
+
+                tris_per_vert[neighbor_vertices[0] as usize] -= 1;
+                tris_per_vert[neighbor_vertices[1] as usize] -= 1;
+                tris_per_vert[neighbor_vertices[2] as usize] -= 1;
+
+                tris_per_vert[i] = 0;
+
+                did_something = true;
+            }
+            else {
+                println!("Tripoint at index {} has {} neighbors", i, neighbor_vertices.len());
+            }
+        }
+    }
+
+    did_something
+}
+
 impl ShapeTessellator {
     pub fn new() -> Self {
         Self {
@@ -196,35 +304,66 @@ impl ShapeTessellator {
             // Ignore degenerate fills
             return;
         }
-        let draw_mesh = std::mem::replace(&mut self.lyon_mesh, VertexBuffers::new());
+        let mut draw_mesh = std::mem::replace(&mut self.lyon_mesh, VertexBuffers::new());
 
-        let mut unique_vertices = Vec::<Vertex>::with_capacity(draw_mesh.indices.len());
-        let mut unique_indices = Vec::<u32>::with_capacity(draw_mesh.indices.len());
+        if true {
+            let mut tris_per_vertex = count_tris_per_vert(&draw_mesh.vertices, &draw_mesh.indices);
 
-        for (i, tri) in draw_mesh.indices.chunks_exact(3).enumerate() {
-            let mut v0 = draw_mesh.vertices[tri[0] as usize].clone();
-            v0.index = 0;
-            unique_vertices.push(v0);
-            let mut v1 = draw_mesh.vertices[tri[1] as usize].clone();
-            v1.index = 1;
-            unique_vertices.push(v1);
-            let mut v2 = draw_mesh.vertices[tri[2] as usize].clone();
-            v2.index = 2;
-            unique_vertices.push(v2);
+            //dbg!(&tris_per_vertex);
+            let tpv_hist = histogram(&tris_per_vertex);
+            println!("{:?}", &tpv_hist);
 
-            unique_indices.push(i as u32 * 3);
-            unique_indices.push(i as u32 * 3 + 1);
-            unique_indices.push(i as u32 * 3 + 2);
+            while
+            eliminate_tripoints(
+                &mut draw_mesh.vertices,
+                &mut draw_mesh.indices,
+                &mut tris_per_vertex,
+            ) {
+                println!("NEXT ROUND");
+            }
+
+            //dbg!(&tris_per_vertex);
+
+            let tpv_hist = histogram(&tris_per_vertex);
+            println!("{:?}", &tpv_hist);
+
+            let mut unique_vertices = Vec::<Vertex>::with_capacity(draw_mesh.indices.len());
+            let mut unique_indices = Vec::<u32>::with_capacity(draw_mesh.indices.len());
+
+            for (i, tri) in draw_mesh.indices.chunks_exact(3).enumerate() {
+                let mut v0 = draw_mesh.vertices[tri[0] as usize].clone();
+                v0.index = 0;
+                unique_vertices.push(v0);
+                let mut v1 = draw_mesh.vertices[tri[1] as usize].clone();
+                v1.index = 1;
+                unique_vertices.push(v1);
+                let mut v2 = draw_mesh.vertices[tri[2] as usize].clone();
+                v2.index = 2;
+                unique_vertices.push(v2);
+
+                unique_indices.push(i as u32 * 3);
+                unique_indices.push(i as u32 * 3 + 1);
+                unique_indices.push(i as u32 * 3 + 2);
+            }
+
+            self.mesh.push(Draw {
+                draw_type: draw,
+                mask_index_count: self
+                    .mask_index_count
+                    .unwrap_or(draw_mesh.indices.len() as u32),
+                vertices: unique_vertices,
+                indices: unique_indices,
+            });
+        } else {
+            self.mesh.push(Draw {
+                draw_type: draw,
+                mask_index_count: self
+                    .mask_index_count
+                    .unwrap_or(draw_mesh.indices.len() as u32),
+                vertices: draw_mesh.vertices,
+                indices: draw_mesh.indices,
+            });
         }
-
-        self.mesh.push(Draw {
-            draw_type: draw,
-            mask_index_count: self
-                .mask_index_count
-                .unwrap_or(draw_mesh.indices.len() as u32),
-            vertices: unique_vertices,
-            indices: unique_indices,
-        });
         self.mask_index_count = None;
     }
 }
@@ -275,7 +414,7 @@ pub struct Vertex {
     pub x: f32,
     pub y: f32,
     pub color: swf::Color,
-    pub index: u32
+    pub index: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -467,7 +606,7 @@ impl FillVertexConstructor<Vertex> for RuffleVertexCtor {
             x: vertex.position().x,
             y: vertex.position().y,
             color: self.color,
-            index: 0
+            index: 0,
         }
     }
 }

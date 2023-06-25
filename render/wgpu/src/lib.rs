@@ -120,11 +120,7 @@ impl From<TessVertex> for PosVertex {
     fn from(vertex: TessVertex) -> Self {
         Self {
             position: [vertex.x, vertex.y],
-            barycentric: [
-                [1.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0],
-                [0.0, 0.0, 1.0],
-            ][vertex.index as usize]
+            barycentric: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]][vertex.index as usize],
         }
     }
 }
@@ -147,11 +143,7 @@ impl From<TessVertex> for PosColorVertex {
                 f32::from(vertex.color.b) / 255.0,
                 f32::from(vertex.color.a) / 255.0,
             ],
-            barycentric: [
-                [1.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0],
-                [0.0, 0.0, 1.0],
-            ][vertex.index as usize]
+            barycentric: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]][vertex.index as usize],
         }
     }
 }

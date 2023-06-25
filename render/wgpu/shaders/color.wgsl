@@ -38,7 +38,7 @@ fn main_fragment(in: VertexOutput) -> @location(0) vec4<f32> {
   let d = fwidth(in.barycentric);
   let f = step(d, in.barycentric);
   let edgeFactor = min(min(f.x, f.y), f.z);
-
+  //return in.color;
   return vec4<f32>(min(vec3<f32>(1.0-edgeFactor), in.color.rgb), 1.0-edgeFactor);
 /*
   if(in.barycentric.x < 0.05 || in.barycentric.y < 0.05 || in.barycentric.z < 0.05) {
