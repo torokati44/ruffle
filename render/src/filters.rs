@@ -101,7 +101,7 @@ pub enum DisplacementMapFilterComponent {
     Red,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum DisplacementMapFilterMode {
     Clamp,
     Color,
