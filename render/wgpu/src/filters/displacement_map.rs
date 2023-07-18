@@ -27,7 +27,8 @@ struct DisplacementMapUniform {
     map_height: f32,
     offset_x: i32,
     offset_y: i32,
-    _pad: [f32; 2],
+    viewscale_x: f32,
+    viewscale_y: f32,
 }
 
 pub struct DisplacementMapFilter {
@@ -210,7 +211,8 @@ impl DisplacementMapFilter {
                     map_height: map_texture.texture.height() as f32,
                     offset_x: filter.map_point.0,
                     offset_y: filter.map_point.1,
-                    _pad: [0.0, 0.0],
+                    viewscale_x: filter.viewscale_x,
+                    viewscale_y: filter.viewscale_y,
                 }]),
                 usage: wgpu::BufferUsages::UNIFORM,
             });

@@ -10,8 +10,8 @@ struct Filter {
     map_height: f32,
     offset_x: i32,
     offset_y: i32,
-    _pad1: f32,
-    _pad2: f32,
+    viewscale_x: f32,
+    viewscale_y: f32,
 }
 
 @group(0) @binding(0) var source_texture: texture_2d<f32>;
@@ -86,9 +86,10 @@ fn main_fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         (source_pos.x - f32(filter_args.offset_x)) / filter_args.map_width,
         (source_pos.y - f32(filter_args.offset_y)) / filter_args.map_height,
     );
-    var map = textureSample(map_texture, texture_sampler, map_uv); // wraps if out of bounds
+    let viewscale = vec2<f32>(filter_args.viewscale_x, filter_args.viewscale_y);
+    var map = textureSample(map_texture, texture_sampler, map_uv / viewscale); // wraps if out of bounds
     let components = unpack_components(filter_args.components);
-    let displaced = displace_coordinates(source_pos, map, components, vec2<f32>(f32(filter_args.scale_x), f32(filter_args.scale_y)));
+    let displaced = displace_coordinates(source_pos, map, components, viewscale * vec2<f32>(f32(filter_args.scale_x), f32(filter_args.scale_y)) );
     var displaced_uv = vec2<f32>(
         f32(displaced.x) / f32(filter_args.source_width),
         f32(displaced.y) / f32(filter_args.source_height),
