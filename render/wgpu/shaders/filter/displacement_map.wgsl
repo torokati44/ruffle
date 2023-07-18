@@ -2,22 +2,23 @@ struct Filter {
     color: vec4<f32>,
     components: u32,  // 00000000 00000000 XXXXXXXX YYYYYYYY
     mode: u32,        // 0 wrap, 1 clamp, 2 ignore, 3 color
-    scale_x: i32,
-    scale_y: i32,
+    scale_x: f32,
+    scale_y: f32,
     source_width: f32,
     source_height: f32,
     map_width: f32,
     map_height: f32,
-    offset_x: i32,
-    offset_y: i32,
+    offset_x: f32,
+    offset_y: f32,
     viewscale_x: f32,
     viewscale_y: f32,
 }
 
 @group(0) @binding(0) var source_texture: texture_2d<f32>;
 @group(0) @binding(1) var map_texture: texture_2d<f32>;
-@group(0) @binding(2) var texture_sampler: sampler;
-@group(0) @binding(3) var<uniform> filter_args: Filter;
+@group(0) @binding(2) var source_sampler: sampler;
+@group(0) @binding(3) var map_sampler: sampler;
+@group(0) @binding(4) var<uniform> filter_args: Filter;
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
@@ -64,12 +65,9 @@ fn get_component(map: vec4<f32>, component: u32) -> f32 {
 }
 
 fn displace_coordinates(original: vec2<f32>, map: vec4<f32>, components: vec2<u32>, scale: vec2<f32>) -> vec2<f32> {
-    // [NA] There's a lot of i32/f32 conversion going on here and in get_component.
-    // We want to stick to pixel coordinates for every step of the way until we're actually retrieving textures,
-    // as this filter was originally written for the CPU and did the same thing.
     return vec2<f32>(
-        original.x + (((get_component(map, components.x) - 128.0) * (scale.x)) / 256.0),
-        original.y + (((get_component(map, components.y) - 128.0) * (scale.y)) / 256.0),
+        original.x + (get_component(map, components.x) - 128.0) * scale.x / 256.0,
+        original.y + (get_component(map, components.y) - 128.0) * scale.y / 256.0,
     );
 }
 
@@ -79,20 +77,22 @@ fn main_fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let map_size = vec2<f32>(filter_args.map_width, filter_args.map_height);
 
     var source_pos = vec2<f32>(
-        f32(in.uv.x) * f32(filter_args.source_width),
-        f32(in.uv.y) * f32(filter_args.source_height),
+        in.uv.x * filter_args.source_width,
+        in.uv.y * filter_args.source_height,
     );
     var map_uv = vec2<f32>(
-        (source_pos.x - f32(filter_args.offset_x)) / filter_args.map_width,
-        (source_pos.y - f32(filter_args.offset_y)) / filter_args.map_height,
+        (source_pos.x - filter_args.offset_x) / filter_args.viewscale_x / filter_args.map_width,
+        (source_pos.y - filter_args.offset_y) / filter_args.viewscale_y / filter_args.map_height,
     );
+
     let viewscale = vec2<f32>(filter_args.viewscale_x, filter_args.viewscale_y);
-    var map = textureSample(map_texture, texture_sampler, map_uv / viewscale); // wraps if out of bounds
+
+    var map = textureSample(map_texture, map_sampler, map_uv); // wraps if out of bounds
     let components = unpack_components(filter_args.components);
-    let displaced = displace_coordinates(source_pos, map, components, viewscale * vec2<f32>(f32(filter_args.scale_x), f32(filter_args.scale_y)) );
+    let displaced = displace_coordinates(source_pos, map, components, viewscale * (vec2<f32>(filter_args.scale_x, filter_args.scale_y)));
     var displaced_uv = vec2<f32>(
-        f32(displaced.x) / f32(filter_args.source_width),
-        f32(displaced.y) / f32(filter_args.source_height),
+        displaced.x / filter_args.source_width,
+        displaced.y / filter_args.source_height,
     );
     let out_of_bounds = displaced_uv.x < 0.0 || displaced_uv.x > 1.0 || displaced_uv.y < 0.0 || displaced_uv.y > 1.0;
 
@@ -102,7 +102,7 @@ fn main_fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     } else if (filter_args.mode == 2u && out_of_bounds) { // ignore
         displaced_uv = in.uv;
     }
-    var result = textureSample(source_texture, texture_sampler, displaced_uv);
+    var result = textureSample(source_texture, source_sampler, displaced_uv);
     if (filter_args.mode == 3u && out_of_bounds) { // color
         // the textureSample can't be conditional, so we need to execute it and throw it away in this case
         result = vec4<f32>(filter_args.color.rgb, 1.0) * filter_args.color.a;

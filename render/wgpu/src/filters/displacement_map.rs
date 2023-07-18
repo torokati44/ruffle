@@ -19,14 +19,14 @@ struct DisplacementMapUniform {
     color: [f32; 4],
     components: u32, // 00000000 00000000 XXXXXXXX YYYYYYYY
     mode: u32,       // 0 wrap, 1 clamp, 2 ignore, 3 color
-    scale_x: i32,
-    scale_y: i32,
+    scale_x: f32,
+    scale_y: f32,
     source_width: f32,
     source_height: f32,
     map_width: f32,
     map_height: f32,
-    offset_x: i32,
-    offset_y: i32,
+    offset_x: f32,
+    offset_y: f32,
     viewscale_x: f32,
     viewscale_y: f32,
 }
@@ -69,6 +69,12 @@ impl DisplacementMapFilter {
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
@@ -203,14 +209,14 @@ impl DisplacementMapFilter {
                         DisplacementMapFilterMode::Ignore => 2,
                         DisplacementMapFilterMode::Color => 3,
                     },
-                    scale_x: filter.scale_x as i32,
-                    scale_y: filter.scale_y as i32,
+                    scale_x: filter.scale_x,
+                    scale_y: filter.scale_y,
                     source_width: source.texture.width() as f32,
                     source_height: source.texture.height() as f32,
                     map_width: map_texture.texture.width() as f32,
                     map_height: map_texture.texture.height() as f32,
-                    offset_x: filter.map_point.0,
-                    offset_y: filter.map_point.1,
+                    offset_x: filter.map_point.0 as f32,
+                    offset_y: filter.map_point.1 as f32,
                     viewscale_x: filter.viewscale_x,
                     viewscale_y: filter.viewscale_y,
                 }]),
@@ -239,6 +245,12 @@ impl DisplacementMapFilter {
                     },
                     wgpu::BindGroupEntry {
                         binding: 3,
+                        resource: wgpu::BindingResource::Sampler(
+                            descriptors.bitmap_samplers.get_sampler(false, false),
+                        ),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
                         resource: buffer.as_entire_binding(),
                     },
                 ],
