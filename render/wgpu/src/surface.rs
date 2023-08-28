@@ -154,6 +154,8 @@ impl Surface {
                 Chunk::Draw(chunk, needs_depth) => {
                     let mut render_pass =
                         draw_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            occlusion_query_set: None,
+                            timestamp_writes: None,
                             label: create_debug_label!(
                                 "Chunked draw calls {}",
                                 if needs_depth {
@@ -279,6 +281,8 @@ impl Surface {
 
                     let mut render_pass =
                         draw_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            occlusion_query_set: None,
+                            timestamp_writes: None,
                             label: create_debug_label!(
                                 "Complex blend {:?} {}",
                                 blend_mode,

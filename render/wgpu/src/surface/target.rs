@@ -336,6 +336,8 @@ impl CommandTarget {
         // the there's no point in creating a new render pass that does nothing.
         if self.render_target_mode.color().is_some() {
             encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                occlusion_query_set: None,
+                timestamp_writes: None,
                 label: create_debug_label!("Clearing command target").as_deref(),
                 color_attachments: &[self.color_attachments()],
                 depth_stencil_attachment: None,

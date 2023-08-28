@@ -61,6 +61,7 @@ impl WgpuRenderBackend<SwapChainTarget> {
     #[cfg(target_family = "wasm")]
     pub async fn for_canvas(canvas: web_sys::HtmlCanvasElement) -> Result<Self, Error> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            gles_minor_version: wgpu::Gles3MinorVersion::Automatic,
             backends: wgpu::Backends::BROWSER_WEBGPU | wgpu::Backends::GL,
             dx12_shader_compiler: wgpu::Dx12Compiler::default(),
         });
@@ -96,6 +97,7 @@ impl WgpuRenderBackend<SwapChainTarget> {
             );
         }
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            gles_minor_version: wgpu::Gles3MinorVersion::Automatic,
             backends: backend,
             dx12_shader_compiler: wgpu::Dx12Compiler::default(),
         });
@@ -143,6 +145,7 @@ impl WgpuRenderBackend<crate::target::TextureTarget> {
             );
         }
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            gles_minor_version: wgpu::Gles3MinorVersion::Automatic,
             backends: backend,
             dx12_shader_compiler: wgpu::Dx12Compiler::default(),
         });

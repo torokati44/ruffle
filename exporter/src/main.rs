@@ -402,6 +402,7 @@ fn trace_path(_opt: &Opt) -> Option<&Path> {
 fn main() -> Result<()> {
     let opt: Opt = Opt::parse();
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        gles_minor_version: wgpu::Gles3MinorVersion::Automatic,
         backends: opt.graphics.into(),
         dx12_shader_compiler: wgpu::Dx12Compiler::default(),
     });

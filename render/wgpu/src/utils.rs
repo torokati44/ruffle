@@ -248,6 +248,8 @@ pub fn run_copy_pipeline(
     let load = wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT);
 
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        occlusion_query_set: None,
+        timestamp_writes: None,
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
             view: frame_view,
             ops: wgpu::Operations { load, store: true },

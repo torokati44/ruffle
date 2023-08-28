@@ -54,6 +54,7 @@ impl GuiController {
             );
         }
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            gles_minor_version: wgpu::Gles3MinorVersion::Automatic,
             backends: backend,
             dx12_shader_compiler: wgpu::Dx12Compiler::default(),
         });
@@ -275,6 +276,8 @@ impl GuiController {
             let surface_view = surface_texture.texture.create_view(&Default::default());
 
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                occlusion_query_set: None,
+                timestamp_writes: None,
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &surface_view,
                     resolve_target: None,

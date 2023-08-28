@@ -259,6 +259,7 @@ impl<'a> ShaderBuilder<'a> {
                 location: 0,
                 interpolation: Some(naga::Interpolation::Perspective),
                 sampling: Some(naga::Sampling::Center),
+                second_blend_source: false,
             }),
         });
 
@@ -268,6 +269,7 @@ impl<'a> ShaderBuilder<'a> {
                 location: 0,
                 interpolation: None,
                 sampling: None,
+                second_blend_source: false,
             }),
         });
 
@@ -1777,10 +1779,7 @@ impl<'a> ShaderBuilder<'a> {
 fn to_wgsl(module: &naga::Module) -> String {
     let mut out = String::new();
 
-    let mut validator = Validator::new(
-        ValidationFlags::all() - ValidationFlags::CONTROL_FLOW_UNIFORMITY,
-        Capabilities::all(),
-    );
+    let mut validator = Validator::new(ValidationFlags::all(), Capabilities::all());
     let module_info = validator
         .validate(module)
         .unwrap_or_else(|e| panic!("Validation failed: {:#?}", e));

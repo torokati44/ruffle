@@ -315,6 +315,8 @@ impl BlurFilter {
             });
 
         let mut render_pass = draw_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            occlusion_query_set: None,
+            timestamp_writes: None,
             label: create_debug_label!("Blur filter").as_deref(),
             color_attachments: &[destination.color_attachments()],
             depth_stencil_attachment: None,
@@ -379,6 +381,8 @@ impl BlurFilter {
             });
 
         let mut render_pass = draw_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            occlusion_query_set: None,
+            timestamp_writes: None,
             label: create_debug_label!("Blur filter").as_deref(),
             color_attachments: &[destination.color_attachments()],
             depth_stencil_attachment: None,

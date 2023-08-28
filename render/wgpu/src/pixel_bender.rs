@@ -555,6 +555,8 @@ pub(super) fn run_pixelbender_shader_impl(
     let pipeline = compiled_shader.get_pipeline(descriptors, sample_count);
 
     let mut render_pass = render_command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        occlusion_query_set: None,
+        timestamp_writes: None,
         label: Some("PixelBender render pass"),
         color_attachments: &[color_attachment],
         depth_stencil_attachment: None,

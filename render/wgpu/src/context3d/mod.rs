@@ -275,6 +275,8 @@ impl WgpuContext3D {
         };
 
         let mut pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            occlusion_query_set: None,
+            timestamp_writes: None,
             label: Some("Context3D render pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: self.current_texture_view.as_ref().unwrap(),

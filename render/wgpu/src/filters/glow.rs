@@ -212,6 +212,8 @@ impl GlowFilter {
                 ],
             });
         let mut render_pass = draw_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            occlusion_query_set: None,
+            timestamp_writes: None,
             label: create_debug_label!("Glow filter").as_deref(),
             color_attachments: &[target.color_attachments()],
             depth_stencil_attachment: None,
