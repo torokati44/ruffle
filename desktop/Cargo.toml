@@ -8,12 +8,12 @@ repository.workspace = true
 version.workspace = true
 
 [dependencies]
-clap = { version = "4.4.2", features = ["derive"] }
+clap = { version = "4.4.7", features = ["derive"] }
 cpal = "0.15.2"
 egui = { workspace = true }
 egui-wgpu = {  git = "https://github.com/torokati44/egui", branch = "wgpu-0.17-arc" , features = ["winit"] }
 egui-winit = { git = "https://github.com/torokati44/egui", branch = "wgpu-0.17-arc"  }
-fontdb = "0.14"
+fontdb = "0.15"
 ruffle_core = { path = "../core", features = ["audio", "clap", "mp3", "nellymoser", "default_compatibility_rules", "egui"] }
 ruffle_render = { path = "../render", features = ["clap"] }
 ruffle_render_wgpu = { path = "../render/wgpu", features = ["clap"] }
@@ -21,15 +21,15 @@ ruffle_video_software = { path = "../video/software", optional = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 generational-arena = "0.2.9"
-winit = "0.28.6"
-webbrowser = "0.8.11"
+winit = "0.29.2"
+webbrowser = "0.8.12"
 url = "2.4.1"
 arboard = "3.2.1"
 dirs = "5.0"
 isahc = "1.7.2"
-rfd = "0.11.4"
+rfd = "0.12.1"
 anyhow = "1.0"
-bytemuck = "1.13.1"
+bytemuck = "1.14.0"
 os_info = { version = "3", default-features = false }
 unic-langid = "0.9.1"
 sys-locale = "0.3.1"
@@ -39,7 +39,7 @@ chrono = { version = "0.4", default-features = false, features = [] }
 fluent-templates = "0.8.0"
 futures-lite = "1.13.0"
 async-io = "1.13.0"
-async-net = "1.7.0"
+async-net = "1.8.0"
 async-channel = "1.9.0"
 
 # Deliberately held back to match tracy client used by profiling crate
@@ -50,7 +50,7 @@ winapi = "0.3.9"
 
 [build-dependencies]
 embed-resource = "2"
-vergen = { version = "8.2.4", features = ["build", "git", "gitcl", "cargo"] }
+vergen = { version = "8.2.5", features = ["build", "git", "gitcl", "cargo"] }
 
 [features]
 default = ["software_video"]

@@ -41,7 +41,7 @@ version = "0.1.0"
 
 [workspace.dependencies]
 # gc-arena = { git = "https://github.com/kyren/gc-arena", rev = "efd89fc683c6bb456af3e226c33763cb822645e9" }
-tracing = "0.1.37"
+tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 naga = { git = "https://github.com/gfx-rs/naga", rev = "df8107b78812cc2b1e3d5de35279cedc1f0da3fb" }
 naga_oil = { git = "https://github.com/torokati44/naga_oil", branch = "indexmap-2.0" }
