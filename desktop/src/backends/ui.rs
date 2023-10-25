@@ -36,18 +36,6 @@ impl DesktopUiBackend {
         })
     }
 
-    pub fn cursor(&self) -> egui::CursorIcon {
-        if self.cursor_visible {
-            match self.preferred_cursor {
-                MouseCursor::Arrow => egui::CursorIcon::Default,
-                MouseCursor::Hand => egui::CursorIcon::PointingHand,
-                MouseCursor::IBeam => egui::CursorIcon::Text,
-                MouseCursor::Grab => egui::CursorIcon::Grab,
-            }
-        } else {
-            egui::CursorIcon::None
-        }
-    }
 }
 
 const DOWNLOAD_FAILED_MESSAGE: &str = "Ruffle failed to open or download this file.";
