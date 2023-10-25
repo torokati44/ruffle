@@ -49,7 +49,7 @@ getrandom = { version = "0.2", features = ["js"] }
 serde = { version = "1.0.188", features = ["derive"] }
 thiserror = "1.0"
 base64 = "0.21.3"
-async-channel = "1.9.0"
+async-channel = "2.0.0"
 
 [dependencies.ruffle_core]
 path = "../core"

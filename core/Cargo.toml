@@ -55,7 +55,7 @@ egui = { workspace = true, optional = true }
 egui_extras = { git = "https://github.com/torokati44/egui", branch = "wgpu-0.17-arc", optional = true }
 png = { version = "0.17.10", optional = true }
 flv-rs = { path = "../flv" }
-async-channel = "1.9.0"
+async-channel = "2.0.0"
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies.futures]
 version = "0.3.28"

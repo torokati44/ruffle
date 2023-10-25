@@ -37,7 +37,7 @@ toml = "0.7.6"
 libtest-mimic = "0.6.1"
 walkdir = "2.3.3"
 anyhow = "1.0.75"
-async-channel = "1.9.0"
+async-channel = "2.0.0"
 
 [[test]]
 name = "tests"
