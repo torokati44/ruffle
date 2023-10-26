@@ -9,7 +9,7 @@ use crate::util::{
 use anyhow::{Context, Error};
 use ruffle_core::{PlayerEvent, StageDisplayState};
 use ruffle_render::backend::ViewportDimensions;
-use winit::keyboard::{ModifiersState, Key};
+use winit::keyboard::{ModifiersState, Key, NamedKey};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -97,7 +97,7 @@ impl App {
 
         // Poll UI events.
         let event_loop = self.event_loop.take().expect("App already running");
-        event_loop.run(move |event, _window_target, control_flow| {
+        event_loop.run(move |event, window_target| {
             let mut check_redraw = false;
             match event {
                 winit::event::Event::LoopExiting => {
@@ -126,20 +126,6 @@ impl App {
                     }
                 }
 
-                // Render
-                winit::event::Event::RedrawRequested(_) => {
-                    // Don't render when minimized to avoid potential swap chain errors in `wgpu`.
-                    if !minimized {
-                        if let Some(mut player) = self.player.get() {
-                            // Even if the movie is paused, user interaction with debug tools can change the render output
-                            player.render();
-                            self.gui.borrow_mut().render(Some(player));
-                        } else {
-                            self.gui.borrow_mut().render(None);
-                        }
-                        plot_stats_in_tracy(&self.gui.borrow().descriptors().wgpu_instance);
-                    }
-                }
 
                 winit::event::Event::WindowEvent { event, .. } => {
                     if self.gui.borrow_mut().handle_event(&event) {
@@ -153,7 +139,7 @@ impl App {
                     };
                     match event {
                         WindowEvent::CloseRequested => {
-                            *control_flow = ControlFlow::Exit;
+                            window_target.exit();
                             return;
                         }
                         WindowEvent::Resized(size) => {
@@ -176,6 +162,22 @@ impl App {
                             }
                             self.window.request_inner_size(PhysicalSize::new(300, 400));
                         }
+
+                        // Render
+                        WindowEvent::RedrawRequested => {
+                            // Don't render when minimized to avoid potential swap chain errors in `wgpu`.
+                            if !minimized {
+                                if let Some(mut player) = self.player.get() {
+                                    // Even if the movie is paused, user interaction with debug tools can change the render output
+                                    player.render();
+                                    self.gui.borrow_mut().render(Some(player));
+                                } else {
+                                    self.gui.borrow_mut().render(None);
+                                }
+                                plot_stats_in_tracy(&self.gui.borrow().descriptors().wgpu_instance);
+                            }
+                        }
+
                         WindowEvent::CursorMoved { position, .. } => {
                             if self.gui.borrow_mut().is_context_menu_visible() {
                                 return;
@@ -267,7 +269,7 @@ impl App {
                             match event {
                                 KeyEvent {
                                     state: ElementState::Pressed,
-                                    logical_key: Key::Enter,
+                                    logical_key: Key::Named(NamedKey::Enter),
                                     ..
                                 } if modifiers.alt_key() => {
                                     if !fullscreen_down {
@@ -282,14 +284,14 @@ impl App {
                                 }
                                 KeyEvent {
                                     state: ElementState::Released,
-                                    logical_key: Key::Enter,
+                                    logical_key: Key::Named(NamedKey::Enter),
                                     ..
                                 } if fullscreen_down => {
                                     fullscreen_down = false;
                                 }
                                 KeyEvent {
                                     state: ElementState::Pressed,
-                                    logical_key: Key::Escape,
+                                    logical_key: Key::Named(NamedKey::Escape),
                                     ..
                                 } => {
                                     if let Some(mut player) = self.player.get() {
@@ -442,7 +444,7 @@ impl App {
                 }
 
                 winit::event::Event::UserEvent(RuffleEvent::ExitRequested) => {
-                    *control_flow = ControlFlow::Exit;
+                    window_target.exit();
                     return;
                 }
 
@@ -459,7 +461,7 @@ impl App {
             }
 
             // After polling events, sleep the event loop until the next event or the next frame.
-            *control_flow = if matches!(loaded, LoadingState::Loaded) {
+            window_target.set_control_flow(if matches!(loaded, LoadingState::Loaded) {
                 if let Some(next_frame_time) = next_frame_time {
                     ControlFlow::WaitUntil(next_frame_time)
                 } else {
@@ -469,7 +471,7 @@ impl App {
                 }
             } else {
                 ControlFlow::Wait
-            };
+            });
         });
     }
 }

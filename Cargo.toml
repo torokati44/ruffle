@@ -46,7 +46,7 @@ tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 naga = { version = "0.13.0", features = ["validate", "wgsl-out"] }
 naga_oil = "0.9.0"
 wgpu = "0.17.1"
-egui = "0.23.0"
+egui = { git="https://github.com/fornwall/egui.git", branch="master"}
 
 # Don't optimize build scripts and macros.
 [profile.release.build-override]
@@ -87,6 +87,8 @@ inherits = "release"
 # which we need. FIXME: Remove when wgpu `v0.18` is released and we can switch to it.
 [patch.crates-io]
 wgpu = { git = "https://github.com/gfx-rs/wgpu", branch = "v0.17" }
+egui = { git="https://github.com/fornwall/egui.git", branch="master"}
 
 [patch.'https://github.com/gfx-rs/naga']
 naga = "0.13.0"
+

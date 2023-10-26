@@ -29,7 +29,7 @@ pub fn winit_to_ruffle_text_control(
         }
     } else {
         match key {
-            Key::Backspace => Some(TextControlCode::Backspace),
+            /*Key::Backspace => Some(TextControlCode::Backspace),
             Key::Delete => Some(TextControlCode::Delete),
             Key::ArrowLeft => {
                 if shift {
@@ -44,7 +44,7 @@ pub fn winit_to_ruffle_text_control(
                 } else {
                     Some(TextControlCode::MoveRight)
                 }
-            }
+            }*/
             _ => None,
         }
     }
@@ -54,7 +54,7 @@ pub fn winit_to_ruffle_text_control(
 /// Return `KeyCode::Unknown` if there is no matching Flash key code.
 pub fn winit_to_ruffle_key_code(key_code: Key) -> KeyCode {
     match key_code {
-        Key::Backspace => KeyCode::Backspace,
+        /*Key::Backspace => KeyCode::Backspace,
         Key::Tab => KeyCode::Tab,
         Key::Enter => KeyCode::Return,
         Key::Shift => KeyCode::Shift,
@@ -63,7 +63,7 @@ pub fn winit_to_ruffle_key_code(key_code: Key) -> KeyCode {
         Key::CapsLock => KeyCode::CapsLock,
         Key::Escape => KeyCode::Escape,
         Key::Space => KeyCode::Space,
-        /*Key::Key0 => KeyCode::Key0,
+        Key::Key0 => KeyCode::Key0,
         Key::Key1 => KeyCode::Key1,
         Key::Key2 => KeyCode::Key2,
         Key::Key3 => KeyCode::Key3,
@@ -124,7 +124,7 @@ pub fn winit_to_ruffle_key_code(key_code: Key) -> KeyCode {
         Key::NumpadAdd => KeyCode::Plus,
         Key::NumpadSubtract => KeyCode::NumpadMinus,
         Key::NumpadDecimal => KeyCode::NumpadPeriod,
-        Key::NumpadDivide => KeyCode::NumpadSlash,*/
+        Key::NumpadDivide => KeyCode::NumpadSlash,
         Key::PageUp => KeyCode::PgUp,
         Key::PageDown => KeyCode::PgDown,
         Key::End => KeyCode::End,
@@ -148,7 +148,7 @@ pub fn winit_to_ruffle_key_code(key_code: Key) -> KeyCode {
         Key::F9 => KeyCode::F9,
         Key::F10 => KeyCode::F10,
         Key::F11 => KeyCode::F11,
-        Key::F12 => KeyCode::F12,
+        Key::F12 => KeyCode::F12,*/
         _ => KeyCode::Unknown,
     }
 }
@@ -162,7 +162,7 @@ pub fn winit_key_to_char(key_code: Key, is_shift_down: bool) -> Option<char> {
     // for international layouts.
     Some(match (key_code, is_shift_down) {
 
-        (Key::Space, _) => ' ',/*
+        /*(Key::Space, _) => ' ',
         (Key::Key0, _) => '0',
         (Key::Key1, _) => '1',
         (Key::Key2, _) => '2',

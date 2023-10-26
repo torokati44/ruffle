@@ -11,8 +11,8 @@ version.workspace = true
 clap = { version = "4.4.6", features = ["derive"] }
 cpal = "0.15.2"
 egui = { workspace = true }
-egui-wgpu = { version = "0.23.0", features = ["winit"] }
-egui-winit = "0.23.0"
+egui-wgpu = { git="https://github.com/fornwall/egui.git", branch="master", features = ["winit"] }
+egui-winit = { git="https://github.com/fornwall/egui.git", branch="master"}
 fontdb = "0.15"
 ruffle_core = { path = "../core", features = ["audio", "clap", "mp3", "nellymoser", "default_compatibility_rules", "egui", "default_font"] }
 ruffle_render = { path = "../render", features = ["clap"] }
@@ -21,7 +21,7 @@ ruffle_video_software = { path = "../video/software", optional = true }
 tracing = { workspace = true}
 tracing-subscriber = { workspace = true }
 generational-arena = "0.2.9"
-winit = "0.29.1-beta"
+winit = "0.29.2"
 webbrowser = "0.8.12"
 url = "2.4.1"
 arboard = "3.2.1"
