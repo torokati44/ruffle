@@ -33,7 +33,7 @@ pub fn sound_allocator<'gc>(
         activation.context.gc_context,
         SoundObjectData {
             base,
-            sound_data: RefLock::new(SoundData::NotLoaded {
+            sound_data: RefLock::new(SoundData::Loading {
                 queued_plays: Vec::new(),
             }),
             id3: Lock::new(None),
@@ -79,7 +79,7 @@ const _: () =
 #[derive(Collect)]
 #[collect(no_drop)]
 pub enum SoundData<'gc> {
-    NotLoaded {
+    Loading {
         queued_plays: Vec<QueuedPlay<'gc>>,
     },
     Loaded {
@@ -103,7 +103,7 @@ impl<'gc> SoundObject<'gc> {
     pub fn sound_handle(self) -> Option<SoundHandle> {
         let sound_data = self.0.sound_data.borrow();
         match &*sound_data {
-            SoundData::NotLoaded { .. } => None,
+            SoundData::Loading { .. } => None,
             SoundData::Loaded { sound } => Some(*sound),
         }
     }
@@ -121,13 +121,12 @@ impl<'gc> SoundObject<'gc> {
         )
         .borrow_mut();
         match &mut *sound_data {
-            SoundData::NotLoaded { queued_plays } => {
+            SoundData::Loading { queued_plays } => {
                 // Avoid to enqueue more unloaded sounds than the maximum allowed to be played
                 if queued_plays.len() >= AudioManager::MAX_SOUNDS {
                     tracing::warn!("Sound.play: too many unloaded sounds queued");
                     return Ok(false);
                 }
-
                 queued_plays.push(queued);
                 // We don't know the length yet, so return the `SoundChannel`
                 Ok(true)
@@ -149,7 +148,7 @@ impl<'gc> SoundObject<'gc> {
         .borrow_mut();
         let mut activation = Activation::from_nothing(context);
         match &mut *sound_data {
-            SoundData::NotLoaded { queued_plays } => {
+            SoundData::Loading { queued_plays } => {
                 for queued in std::mem::take(queued_plays) {
                     play_queued(queued, sound, &mut activation)?;
                 }
