@@ -4336,6 +4336,7 @@ dependencies = [
  "ruffle_core",
  "ruffle_render",
  "ruffle_render_wgpu",
+ "ruffle_video_external",
  "ruffle_video_software",
  "sys-locale",
  "tracing",
@@ -4523,6 +4524,20 @@ version = "0.1.0"
 dependencies = [
  "generational-arena",
  "ruffle_render",
+ "swf",
+ "thiserror",
+]
+
+[[package]]
+name = "ruffle_video_external"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "generational-arena",
+ "log",
+ "ruffle_render",
+ "ruffle_video",
+ "ruffle_video_software",
  "swf",
  "thiserror",
 ]

@@ -121,7 +121,10 @@ impl ActivePlayer {
             opt.tcp_connections,
         );
 
-        if cfg!(feature = "software_video") {
+        if cfg!(feature = "external_video") {
+            builder =
+                builder.with_video(ruffle_video_external::backend::ExternalVideoBackend::new());
+        } else if cfg!(feature = "software_video") {
             builder =
                 builder.with_video(ruffle_video_software::backend::SoftwareVideoBackend::new());
         }

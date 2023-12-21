@@ -1,0 +1,22 @@
+[package]
+name = "ruffle_video_external"
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+ruffle_render = { path = "../../render" }
+ruffle_video = { path = ".." }
+swf = { path = "../../swf" }
+generational-arena = "0.2.9"
+thiserror = "1.0"
+flate2 = "1.0.28"
+log = "0.4"
+ruffle_video_software = { path = "../software" }
+
+[features]
+default = ["h264_ffmpeg"]
+h264_ffmpeg = []

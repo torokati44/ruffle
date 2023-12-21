@@ -939,11 +939,51 @@ impl<'gc> NetStream<'gc> {
             (_, _, FlvVideoPacket::CommandFrame(_command)) => {
                 tracing::warn!("Stub: FLV command frame processing")
             }
-            (_, _, FlvVideoPacket::AvcSequenceHeader(_data)) => {
-                tracing::warn!("Stub: FLV AVC/H.264 Sequence Header processing")
+            (_, _, FlvVideoPacket::AvcSequenceHeader(data)) => {
+                tracing::warn!("Stub: FLV AVC/H.264 Sequence Header processing");
+                //println!("AVC Sequence Header: {:?}", data);
+
+                let encoded_frame = EncodedFrame {
+                    codec: codec.expect("valid codec"),
+                    data,
+                    frame_id,
+                };
+
+                match context.video.decode_video_stream_frame(
+                    video_handle.expect("video handle"),
+                    encoded_frame,
+                    context.renderer,
+                ) {
+                    Ok(bitmap_info) => {
+                        write.last_decoded_bitmap = Some(bitmap_info);
+                    }
+                    Err(e) => {
+                        tracing::error!("Decoding video frame {} failed: {}", frame_id, e);
+                    }
+                }
             }
-            (_, _, FlvVideoPacket::AvcNalu { .. }) => {
-                tracing::warn!("Stub: FLV AVC/H.264 NALU processing")
+            (_, _, FlvVideoPacket::AvcNalu { composition_time_offset: _, data }) => {
+                tracing::warn!("Stub: FLV AVC/H.264 NALU processing");
+                //println!("AVC NALU: {:?}", data);
+
+                let encoded_frame = EncodedFrame {
+                    codec: codec.expect("valid codec"),
+                    data,
+                    frame_id,
+                };
+
+                match context.video.decode_video_stream_frame(
+                    video_handle.expect("video handle"),
+                    encoded_frame,
+                    context.renderer,
+                ) {
+                    Ok(bitmap_info) => {
+                        write.last_decoded_bitmap = Some(bitmap_info);
+                    }
+                    Err(e) => {
+                        tracing::error!("Decoding video frame {} failed: {}", frame_id, e);
+                    }
+                }
             }
             (_, _, FlvVideoPacket::AvcEndOfSequence) => {
                 tracing::warn!("Stub: FLV AVC/H.264 End of Sequence processing")
