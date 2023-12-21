@@ -1741,6 +1741,7 @@ pub enum VideoCodec {
     Vp6 = 4,
     Vp6WithAlpha = 5,
     ScreenVideoV2 = 6,
+    H264 = 7,
 }
 
 impl VideoCodec {
