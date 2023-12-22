@@ -23,6 +23,65 @@ pub struct AVPacket {
 }
 
 #[repr(C)]
+pub struct AVFrame {
+
+    pub data: [*mut u8; 8],
+    pub linesize: [c_int; 8],
+    pub extended_data: *mut *mut u8,
+    pub width: c_int,
+    pub height: c_int,
+    pub nb_samples: c_int,
+    pub format: c_int,
+    pub key_frame: c_int,
+    pub pict_type: u32,
+    pub sample_aspect_ratio: [c_int; 2],
+    pub pts: i64,
+    pub pkt_pts: i64,
+    pub pkt_dts: i64,
+    pub coded_picture_number: c_int,
+    pub display_picture_number: c_int,
+    pub quality: c_int,
+    pub opaque: *mut c_void,
+    pub error: [u64; 8],
+    pub repeat_pict: c_int,
+    pub interlaced_frame: c_int,
+    pub top_field_first: c_int,
+    pub palette_has_changed: c_int,
+    pub reordered_opaque: i64,
+    pub sample_rate: c_int,
+    pub channel_layout: u64,
+    pub buf: [*mut c_void; 8],
+    pub extended_buf: *mut *mut c_void,
+    pub nb_extended_buf: c_int,
+    pub side_data: *mut *mut c_void,
+    pub nb_side_data: c_int,
+    pub flags: c_int,
+    pub color_range: u32,
+    pub color_primaries: u32,
+    pub color_trc: u32,
+    pub colorspace: u32,
+    pub chroma_location: u32,
+    pub best_effort_timestamp: i64,
+    pub pkt_pos: i64,
+    pub pkt_duration: i64,
+    pub metadata: *mut c_void,
+    pub decode_error_flags: c_int,
+    pub channels: c_int,
+    pub pkt_size: c_int,
+    pub qscale_table: *mut i8,
+    pub qstride: c_int,
+    pub qscale_type: c_int,
+    pub qp_table_buf: *mut c_void,
+    pub hw_frames_ctx: *mut c_void,
+    pub opaque_ref: *mut c_void,
+    pub crop_top: usize,
+    pub crop_bottom: usize,
+    pub crop_left: usize,
+    pub crop_right: usize,
+    pub private_ref: *mut c_void,
+}
+
+#[repr(C)]
 pub struct AVCodecParameters {
     pub codec_type: i32,
     pub codec_id: u32,
@@ -84,7 +143,7 @@ pub struct H264Decoder {
     context: *const c_void,
     decoder: *const c_void,
     packet: *mut AVPacket,
-    yuv_frame: *const c_void,
+    yuv_frame: *const AVFrame,
     // sws_context: *const c_void,
 }
 
@@ -94,6 +153,7 @@ static LIBAVCODEC: OnceLock<libloading::Library> = OnceLock::new();
 
 struct Ffmpeg {
     av_malloc: libloading::Symbol<'static, unsafe extern "C" fn(usize) -> *mut c_uchar>,
+    av_log_set_level: libloading::Symbol<'static, unsafe extern "C" fn(ffi::c_int) -> ffi::c_int>,
     avcodec_find_decoder_by_name:
         libloading::Symbol<'static, unsafe extern "C" fn(*const c_char) -> *const c_void>,
     avcodec_alloc_context3:
@@ -103,19 +163,19 @@ struct Ffmpeg {
         unsafe extern "C" fn(*const c_void, *const c_void, *const c_void) -> *const c_void,
     >,
     av_packet_alloc: libloading::Symbol<'static, unsafe extern "C" fn() -> *mut AVPacket>,
-    av_frame_alloc: libloading::Symbol<'static, unsafe extern "C" fn() -> *const c_void>,
+    av_frame_alloc: libloading::Symbol<'static, unsafe extern "C" fn() -> *const AVFrame>,
     avcodec_send_packet: libloading::Symbol<
         'static,
         unsafe extern "C" fn(*const c_void, *mut AVPacket) -> ffi::c_int,
     >,
     avcodec_receive_frame: libloading::Symbol<
         'static,
-        unsafe extern "C" fn(*const c_void, *const c_void) -> ffi::c_int,
+        unsafe extern "C" fn(*const c_void, *const AVFrame) -> ffi::c_int,
     >,
     av_grow_packet:
         libloading::Symbol<'static, unsafe extern "C" fn(*mut AVPacket, c_int) -> ffi::c_int>,
     av_shrink_packet:
-        libloading::Symbol<'static, unsafe extern "C" fn(*mut AVPacket, c_int) -> ffi::c_int>,
+        libloading::Symbol<'static, unsafe extern "C" fn(*mut AVPacket, c_int) -> ffi::c_void>,
     avcodec_parameters_alloc:
         libloading::Symbol<'static, unsafe extern "C" fn() -> *mut AVCodecParameters>,
     avcodec_parameters_to_context: libloading::Symbol<
@@ -132,6 +192,9 @@ impl Ffmpeg {
 
             let av_malloc: libloading::Symbol<unsafe extern "C" fn(usize) -> *mut c_uchar> =
                 libavcodec.get(b"av_malloc").unwrap();
+            let av_log_set_level: libloading::Symbol<
+                unsafe extern "C" fn(ffi::c_int) -> ffi::c_int,
+            > = libavcodec.get(b"av_log_set_level").unwrap();
             let avcodec_find_decoder_by_name: libloading::Symbol<
                 unsafe extern "C" fn(*const c_char) -> *const c_void,
             > = libavcodec.get(b"avcodec_find_decoder_by_name").unwrap();
@@ -143,19 +206,19 @@ impl Ffmpeg {
             > = libavcodec.get(b"avcodec_open2").unwrap();
             let av_packet_alloc: libloading::Symbol<unsafe extern "C" fn() -> *mut AVPacket> =
                 libavcodec.get(b"av_packet_alloc").unwrap();
-            let av_frame_alloc: libloading::Symbol<unsafe extern "C" fn() -> *const c_void> =
+            let av_frame_alloc: libloading::Symbol<unsafe extern "C" fn() -> *const AVFrame> =
                 libavcodec.get(b"av_frame_alloc").unwrap();
             let avcodec_send_packet: libloading::Symbol<
                 unsafe extern "C" fn(*const c_void, *mut AVPacket) -> ffi::c_int,
             > = libavcodec.get(b"avcodec_send_packet").unwrap();
             let avcodec_receive_frame: libloading::Symbol<
-                unsafe extern "C" fn(*const c_void, *const c_void) -> ffi::c_int,
+                unsafe extern "C" fn(*const c_void, *const AVFrame) -> ffi::c_int,
             > = libavcodec.get(b"avcodec_receive_frame").unwrap();
             let av_grow_packet: libloading::Symbol<
                 unsafe extern "C" fn(*mut AVPacket, c_int) -> ffi::c_int,
             > = libavcodec.get(b"av_grow_packet").unwrap();
             let av_shrink_packet: libloading::Symbol<
-                unsafe extern "C" fn(*mut AVPacket, c_int) -> ffi::c_int,
+                unsafe extern "C" fn(*mut AVPacket, c_int) -> ffi::c_void,
             > = libavcodec.get(b"av_shrink_packet").unwrap();
             let avcodec_parameters_alloc: libloading::Symbol<
                 unsafe extern "C" fn() -> *mut AVCodecParameters,
@@ -166,6 +229,7 @@ impl Ffmpeg {
 
             Ffmpeg {
                 av_malloc,
+                av_log_set_level,
                 avcodec_find_decoder_by_name,
                 avcodec_alloc_context3,
                 avcodec_open2,
@@ -218,6 +282,8 @@ impl VideoDecoder for H264Decoder {
         let ffmpeg = Ffmpeg::new();
 
         unsafe {
+            (ffmpeg.av_log_set_level)(56);
+
             // Create codec parameters and copy the avcC box as extradata
             let codec_params = (ffmpeg.avcodec_parameters_alloc)();
 
@@ -251,10 +317,11 @@ impl VideoDecoder for H264Decoder {
         let ffmpeg = Ffmpeg::new();
         unsafe {
             let l = (encoded_frame.data.len()) as u32;
-            let lp = l + 4;
 
-            if ((*self.packet).size as usize) < (lp as usize) {
-                let ret = (ffmpeg.av_grow_packet)(self.packet, lp as c_int - (*self.packet).size);
+            println!("{}, {:?}", l, &encoded_frame.data[0..10]);
+
+            if ((*self.packet).size as usize) < (l as usize) {
+                let ret = (ffmpeg.av_grow_packet)(self.packet, l as c_int - (*self.packet).size);
 
                 if ret != 0 {
                     return Err(Error::DecoderError(
@@ -263,16 +330,12 @@ impl VideoDecoder for H264Decoder {
                 }
             }
 
-            if ((*self.packet).size as usize) > (lp as usize) {
-                let ret = (ffmpeg.av_shrink_packet)(self.packet, lp as c_int);
+            if ((*self.packet).size as usize) > (l as usize) {
+                (ffmpeg.av_shrink_packet)(self.packet, l as c_int);
             }
 
-            (*self.packet).data.add(0).write(0);
-            (*self.packet).data.add(1).write((l >> 16) as u8);
-            (*self.packet).data.add(2).write((l >> 8) as u8);
-            (*self.packet).data.add(3).write(l as u8);
             for i in 0..encoded_frame.data.len() {
-                (*self.packet).data.add(i + 4).write(encoded_frame.data[i]);
+                (*self.packet).data.add(i ).write(encoded_frame.data[i]);
             }
 
             let ret = (ffmpeg.avcodec_send_packet)(self.context, self.packet);
@@ -291,11 +354,26 @@ impl VideoDecoder for H264Decoder {
                 ));
             }
 
+            let framesize = (*self.yuv_frame).height * (*self.yuv_frame).linesize[0];
+
+            let mut data = Vec::with_capacity(framesize as usize* 4);
+
+            for y in 0..(*self.yuv_frame).height {
+                for x in 0..(*self.yuv_frame).width {
+                    let i = y * (*self.yuv_frame).linesize[0] + x;
+                    data.push(*(*self.yuv_frame).data[0].add(i as usize));
+                    data.push(*(*self.yuv_frame).data[0].add(i as usize));
+                    data.push(*(*self.yuv_frame).data[0].add(i as usize));
+                }
+            }
+
+
+
             Ok(DecodedFrame::new(
-                1,
-                1,
+                (*self.yuv_frame).width as u32,
+                (*self.yuv_frame).height as u32,
                 BitmapFormat::Rgb,
-                vec![255, 0, 255],
+                data,
             ))
         }
     }
