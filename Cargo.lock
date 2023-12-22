@@ -4532,8 +4532,10 @@ dependencies = [
 name = "ruffle_video_external"
 version = "0.1.0"
 dependencies = [
+ "cc",
  "flate2",
  "generational-arena",
+ "libloading 0.8.1",
  "log",
  "ruffle_render",
  "ruffle_video",

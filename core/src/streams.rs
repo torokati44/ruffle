@@ -949,20 +949,24 @@ impl<'gc> NetStream<'gc> {
                     frame_id,
                 };
 
-                match context.video.decode_video_stream_frame(
-                    video_handle.expect("video handle"),
-                    encoded_frame,
-                    context.renderer,
-                ) {
-                    Ok(bitmap_info) => {
-                        write.last_decoded_bitmap = Some(bitmap_info);
-                    }
+                match context
+                    .video
+                    .preload_video_stream_frame(video_handle.expect("video handle"), encoded_frame)
+                {
+                    Ok(_) => {}
                     Err(e) => {
-                        tracing::error!("Decoding video frame {} failed: {}", frame_id, e);
+                        tracing::error!("Preloading video frame {} failed: {}", frame_id, e);
                     }
                 }
             }
-            (_, _, FlvVideoPacket::AvcNalu { composition_time_offset: _, data }) => {
+            (
+                _,
+                _,
+                FlvVideoPacket::AvcNalu {
+                    composition_time_offset: _,
+                    data,
+                },
+            ) => {
                 tracing::warn!("Stub: FLV AVC/H.264 NALU processing");
                 //println!("AVC NALU: {:?}", data);
 
