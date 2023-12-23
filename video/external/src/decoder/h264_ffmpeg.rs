@@ -253,8 +253,10 @@ impl H264Decoder {
         unsafe {
             let ffmpeg = Ffmpeg::new();
 
-            let h264: CString = CString::new("h264").unwrap();
+            let h264: CString = CString::new("h264_cuvid").unwrap();
             let h264_decoder = (ffmpeg.avcodec_find_decoder_by_name)(h264.as_ptr());
+
+            println!("{:#?}", h264_decoder);
             let context = (ffmpeg.avcodec_alloc_context3)(h264_decoder);
 
             let packet = (ffmpeg.av_packet_alloc)();
