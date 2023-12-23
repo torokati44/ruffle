@@ -24,7 +24,6 @@ pub struct AVPacket {
 
 #[repr(C)]
 pub struct AVFrame {
-
     pub data: [*mut u8; 8],
     pub linesize: [c_int; 8],
     pub extended_data: *mut *mut u8,
@@ -279,7 +278,7 @@ impl VideoDecoder for H264Decoder {
     fn preload_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<FrameDependency, Error> {
         println!("Preloading frame");
 
-        assert_eq!(self.is_opened, false);
+        assert!(!self.is_opened);
 
         let ffmpeg = Ffmpeg::new();
 
@@ -296,7 +295,7 @@ impl VideoDecoder for H264Decoder {
             for i in 0..encoded_frame.data.len() {
                 (*codec_params)
                     .extradata
-                    .add(i as usize)
+                    .add(i)
                     .write(encoded_frame.data[i]);
             }
 
@@ -315,7 +314,7 @@ impl VideoDecoder for H264Decoder {
 
     fn decode_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<DecodedFrame, Error> {
         println!("Decoding frame");
-        assert_eq!(self.is_opened, true);
+        assert!(self.is_opened);
         let ffmpeg = Ffmpeg::new();
         unsafe {
             let l = (encoded_frame.data.len()) as u32;
@@ -337,7 +336,7 @@ impl VideoDecoder for H264Decoder {
             }
 
             for i in 0..encoded_frame.data.len() {
-                (*self.packet).data.add(i ).write(encoded_frame.data[i]);
+                (*self.packet).data.add(i).write(encoded_frame.data[i]);
             }
 
             let ret = (ffmpeg.avcodec_send_packet)(self.context, self.packet);
@@ -358,7 +357,7 @@ impl VideoDecoder for H264Decoder {
 
             let framesize = (*self.yuv_frame).height * (*self.yuv_frame).linesize[0];
 
-            let mut data = Vec::with_capacity(framesize as usize* 4);
+            let mut data = Vec::with_capacity(framesize as usize * 4);
 
             for y in 0..(*self.yuv_frame).height {
                 for x in 0..(*self.yuv_frame).width {
@@ -368,8 +367,6 @@ impl VideoDecoder for H264Decoder {
                     data.push(*(*self.yuv_frame).data[0].add(i as usize));
                 }
             }
-
-
 
             Ok(DecodedFrame::new(
                 (*self.yuv_frame).width as u32,

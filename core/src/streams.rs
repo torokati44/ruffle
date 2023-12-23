@@ -176,6 +176,10 @@ pub enum NetStreamType {
         /// frame IDs ourselves for various API related purposes.
         frame_id: u32,
     },
+    F4v {
+        /// The currently playing video track's stream instance.
+        video_stream: Option<VideoStreamHandle>,
+    },
 }
 
 #[derive(Clone, Debug, Collect)]
@@ -770,8 +774,9 @@ impl<'gc> NetStream<'gc> {
             return false;
         }
 
-        match buffer.get(0..3) {
-            Some([0x46, 0x4C, 0x56]) => {
+        match buffer.get(0..8) {
+            // Only version 1 is valid.
+            Some([b'F', b'L', b'V', 1, _, _, _, _]) => {
                 let mut reader = FlvReader::from_parts(&*buffer, write.offset);
                 match FlvHeader::parse(&mut reader) {
                     Ok(header) => {
@@ -793,7 +798,19 @@ impl<'gc> NetStream<'gc> {
                     }
                 }
             }
-            Some([0, 0, 0]) => {
+            // Video File Format Specification Version 10, page 32
+            // Flash Player expects a valid F4V file to begin with the one of the following top-level boxes:
+            //  - ftyp (see “ftyp box” on page 18)
+            //  - moov (see “moov box” on page 19)
+            //  - mdat (see “mdat box” on page 32)
+            // And the first 4 bytes are the length of the first box.
+            Some([_, _, _, _, b'f', b't', b'y', b'p'])
+            | Some([_, _, _, _, b'm', b'o', b'o', b'v'])
+            | Some([_, _, _, _, b'm', b'd', b'a', b't']) => {
+                println!("F4V");
+                write.stream_type = Some(NetStreamType::F4v { video_stream: None });
+                true
+                /*
                 let mut reader = FlvReader::from_parts(&*buffer, write.offset);
                 match FlvHeader::parse(&mut reader) {
                     Ok(header) => {
@@ -813,7 +830,7 @@ impl<'gc> NetStream<'gc> {
                         write.preload_offset = 3;
                         false
                     }
-                }
+                }*/
             }
             Some(magic) => {
                 //Unrecognized signature
