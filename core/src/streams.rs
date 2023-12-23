@@ -793,6 +793,28 @@ impl<'gc> NetStream<'gc> {
                     }
                 }
             }
+            Some([0, 0, 0]) => {
+                let mut reader = FlvReader::from_parts(&*buffer, write.offset);
+                match FlvHeader::parse(&mut reader) {
+                    Ok(header) => {
+                        write.offset = reader.into_parts().1;
+                        write.preload_offset = write.offset;
+                        write.stream_type = Some(NetStreamType::Flv {
+                            header,
+                            video_stream: None,
+                            frame_id: 0,
+                        });
+                        true
+                    }
+                    Err(FlvError::EndOfData) => false,
+                    Err(e) => {
+                        //TODO: Fire an error event to AS & stop playing too
+                        tracing::error!("FLV header parsing failed: {}", e);
+                        write.preload_offset = 3;
+                        false
+                    }
+                }
+            }
             Some(magic) => {
                 //Unrecognized signature
                 //TODO: Fire an error event to AS & stop playing too
