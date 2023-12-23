@@ -762,6 +762,7 @@ impl<'gc> NetStream<'gc> {
         let slice = write.buffer.to_full_slice();
         let buffer = slice.data();
 
+        //println!("{:?}", buffer.get(0..buffer.len()));
         // A nonzero preload offset indicates that we tried and failed to
         // sniff the container format, so in that case do not process the
         // stream anymore.
