@@ -143,12 +143,13 @@ pub struct H264Decoder {
     decoder: *const c_void,
     packet: *mut AVPacket,
     yuv_frame: *const AVFrame,
-    // sws_context: *const c_void,
+    sws_context: *mut c_void,
 }
 
 use std::sync::OnceLock;
 
 static LIBAVCODEC: OnceLock<libloading::Library> = OnceLock::new();
+static LIBSWSCALE: OnceLock<libloading::Library> = OnceLock::new();
 
 struct Ffmpeg {
     av_malloc: libloading::Symbol<'static, unsafe extern "C" fn(usize) -> *mut c_uchar>,
@@ -181,6 +182,34 @@ struct Ffmpeg {
         'static,
         unsafe extern "C" fn(*const c_void, *const AVCodecParameters) -> ffi::c_int,
     >,
+    #[allow(non_snake_case)]
+    sws_getContext: libloading::Symbol<
+        'static,
+        unsafe extern "C" fn(
+            c_int,
+            c_int,
+            c_int,
+            c_int,
+            c_int,
+            c_int,
+            c_int,
+            *const c_void,
+            *const c_void,
+            *const c_void,
+        ) -> *mut c_void,
+    >,
+    sws_scale: libloading::Symbol::<
+        'static,
+        unsafe extern "C" fn(
+            *mut c_void,
+            *const *const u8,
+            *const c_int,
+            c_int,
+            c_int,
+            *mut *mut u8,
+            *const c_int,
+        ) -> c_int,
+    >,
 }
 
 impl Ffmpeg {
@@ -188,6 +217,9 @@ impl Ffmpeg {
         unsafe {
             let libavcodec: &libloading::Library =
                 LIBAVCODEC.get_or_init(|| libloading::Library::new("libavcodec.so").unwrap());
+
+            let libswscale: &libloading::Library =
+                LIBSWSCALE.get_or_init(|| libloading::Library::new("libswscale.so").unwrap());
 
             let av_malloc: libloading::Symbol<unsafe extern "C" fn(usize) -> *mut c_uchar> =
                 libavcodec.get(b"av_malloc").unwrap();
@@ -226,6 +258,35 @@ impl Ffmpeg {
                 unsafe extern "C" fn(*const c_void, *const AVCodecParameters) -> ffi::c_int,
             > = libavcodec.get(b"avcodec_parameters_to_context").unwrap();
 
+            #[allow(non_snake_case)]
+            let sws_getContext: libloading::Symbol<
+                unsafe extern "C" fn(
+                    c_int,
+                    c_int,
+                    c_int,
+                    c_int,
+                    c_int,
+                    c_int,
+                    c_int,
+                    *const c_void,
+                    *const c_void,
+                    *const c_void,
+                ) -> *mut c_void,
+            > = libswscale.get(b"sws_getContext").unwrap();
+
+            let sws_scale: libloading::Symbol::<
+                unsafe extern "C" fn(
+                    *mut c_void,
+                    *const *const u8,
+                    *const c_int,
+                    c_int,
+                    c_int,
+                    *mut *mut u8,
+                    *const c_int,
+                ) -> c_int,
+            > = libswscale.get(b"sws_scale").unwrap();
+
+
             Ffmpeg {
                 av_malloc,
                 av_log_set_level,
@@ -240,6 +301,8 @@ impl Ffmpeg {
                 av_shrink_packet,
                 avcodec_parameters_alloc,
                 avcodec_parameters_to_context,
+                sws_getContext,
+                sws_scale,
             }
         }
     }
@@ -252,7 +315,7 @@ impl H264Decoder {
         unsafe {
             let ffmpeg = Ffmpeg::new();
 
-            let h264: CString = CString::new("h264_cuvid").unwrap();
+            let h264: CString = CString::new("libopenh264").unwrap();
             let h264_decoder = (ffmpeg.avcodec_find_decoder_by_name)(h264.as_ptr());
 
             println!("{:#?}", h264_decoder);
@@ -269,6 +332,7 @@ impl H264Decoder {
                 decoder: h264_decoder,
                 packet,
                 yuv_frame,
+                sws_context: std::ptr::null_mut(),
             }
         }
     }
@@ -350,28 +414,100 @@ impl VideoDecoder for H264Decoder {
             let ret = (ffmpeg.avcodec_receive_frame)(self.context, self.yuv_frame);
 
             if ret != 0 {
-                return Err(Error::DecoderError(
-                    format!("avcodec_receive_frame returned: {}", ret).into(),
+                println!("avcodec_receive_frame returned: {}", ret);
+                return Ok(DecodedFrame::new(
+                    320,
+                    240,
+                    BitmapFormat::Rgb,
+                    vec![127; 320 * 240 * 3],
                 ));
             }
 
-            let framesize = (*self.yuv_frame).height * (*self.yuv_frame).linesize[0];
+            println!("getting sizes");
 
-            let mut data = Vec::with_capacity(framesize as usize * 4);
+            let h = (*self.yuv_frame).height as usize;
+            let w = (*self.yuv_frame).width as usize;
+            let ls = (*self.yuv_frame).linesize[0] as usize;
 
-            for y in 0..(*self.yuv_frame).height {
-                for x in 0..(*self.yuv_frame).width {
-                    let i = y * (*self.yuv_frame).linesize[0] + x;
-                    data.push(*(*self.yuv_frame).data[0].add(i as usize));
-                    data.push(*(*self.yuv_frame).data[0].add(i as usize));
-                    data.push(*(*self.yuv_frame).data[0].add(i as usize));
+            const AV_PIX_FMT_YUV420P: c_int = 0;
+            const AV_PIX_FMT_RGB24: c_int = 2;
+            const SWS_BICUBIC: c_int = 4;
+
+            if self.sws_context == std::ptr::null_mut() {
+                println!("creating sws context");
+                self.sws_context = (ffmpeg.sws_getContext)(
+                    w as c_int,
+                    h as c_int,
+                    AV_PIX_FMT_YUV420P,
+                    w as c_int,
+                    h as c_int,
+                    AV_PIX_FMT_RGB24,
+                    SWS_BICUBIC,
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                );
+                println!("created sws context");
+            }
+
+
+            let mut ls2: c_int = 320*4;
+            let mut rgb_data = vec![0u8; ls * h * 3];
+            let mut rgb_data_ptr = rgb_data.as_ptr();
+
+            let mut ls2s = vec![ls2; 1];
+            let mut rgb_data_ptrs = vec![rgb_data_ptr; 1];
+
+            /*
+            println!("scaling");
+
+            (ffmpeg.sws_scale)(
+                self.sws_context,
+                std::mem::transmute((*self.yuv_frame).data.as_ptr()),
+                (*self.yuv_frame).linesize.as_ptr(),
+                0,
+                h as c_int,
+                std::mem::transmute(rgb_data_ptrs.as_mut_ptr()),
+                ls2s.as_ptr(),
+            );
+            println!("scaled");
+            */
+
+
+            let c_w = (w+1) / 2;
+            let c_h = (h+1) / 2;
+
+            let mut data = Vec::with_capacity(w * h + 2 * c_w * c_h);
+
+            for y in 0..h {
+                for x in 0..w {
+                    let i = y * (*self.yuv_frame).linesize[0] as usize + x;
+                    data.push(*(*self.yuv_frame).data[0].add(i));
+                    //data.push(*(*self.yuv_frame).data[0].add(i));
+                    //data.push(*(*self.yuv_frame).data[0].add(i));
+                    //data.push(*(*self.yuv_frame).data[0].add(i));
+                }
+            }
+
+            for y in 0..c_h {
+                for x in 0..c_w {
+                    let i = y * (*self.yuv_frame).linesize[1] as usize + x;
+                    data.push(*(*self.yuv_frame).data[1].add(i
+                    ));
+                }
+            }
+
+            for y in 0..c_h {
+                for x in 0..c_w {
+                    let i = y * (*self.yuv_frame).linesize[2] as usize + x;
+                    data.push(*(*self.yuv_frame).data[2].add(i));
                 }
             }
 
             Ok(DecodedFrame::new(
-                (*self.yuv_frame).width as u32,
-                (*self.yuv_frame).height as u32,
-                BitmapFormat::Rgb,
+                w as u32,
+                h as u32,
+                BitmapFormat::Yuv420p,
                 data,
             ))
         }
