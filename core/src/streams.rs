@@ -20,6 +20,7 @@ use crate::display_object::MovieClip;
 use crate::loader::Error;
 use crate::string::AvmString;
 use crate::vminterface::AvmObject;
+use bitstream_io::Primitive;
 use flv_rs::{
     AudioData as FlvAudioData, AudioDataType as FlvAudioDataType, Error as FlvError, FlvReader,
     FrameType as FlvFrameType, Header as FlvHeader, ScriptData as FlvScriptData,
@@ -33,6 +34,7 @@ use ruffle_video::frame::EncodedFrame;
 use ruffle_video::VideoStreamHandle;
 use std::cmp::max;
 use std::io::{Seek, SeekFrom};
+use std::sync::Arc;
 use swf::{AudioCompression, SoundFormat, VideoCodec, VideoDeblocking};
 use thiserror::Error;
 use url::Url;
@@ -177,8 +179,12 @@ pub enum NetStreamType {
         frame_id: u32,
     },
     F4v {
+        context: Arc<mp4parse::MediaContext>,
+
         /// The currently playing video track's stream instance.
         video_stream: Option<VideoStreamHandle>,
+
+        frame_id: u32,
     },
 }
 
@@ -808,29 +814,14 @@ impl<'gc> NetStream<'gc> {
             | Some([_, _, _, _, b'm', b'o', b'o', b'v'])
             | Some([_, _, _, _, b'm', b'd', b'a', b't']) => {
                 println!("F4V");
-                write.stream_type = Some(NetStreamType::F4v { video_stream: None });
+
+                let mut cursor = slice.as_cursor();
+                let context = mp4parse::read_mp4(&mut cursor).unwrap();
+                println!("{:?}", context);
+                write.stream_type = Some(NetStreamType::F4v {
+                    context: Arc::new(context),
+                    video_stream: None, frame_id: 0 });
                 true
-                /*
-                let mut reader = FlvReader::from_parts(&*buffer, write.offset);
-                match FlvHeader::parse(&mut reader) {
-                    Ok(header) => {
-                        write.offset = reader.into_parts().1;
-                        write.preload_offset = write.offset;
-                        write.stream_type = Some(NetStreamType::Flv {
-                            header,
-                            video_stream: None,
-                            frame_id: 0,
-                        });
-                        true
-                    }
-                    Err(FlvError::EndOfData) => false,
-                    Err(e) => {
-                        //TODO: Fire an error event to AS & stop playing too
-                        tracing::error!("FLV header parsing failed: {}", e);
-                        write.preload_offset = 3;
-                        false
-                    }
-                }*/
             }
             Some(magic) => {
                 //Unrecognized signature
