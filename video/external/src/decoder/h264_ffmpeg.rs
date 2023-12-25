@@ -198,7 +198,7 @@ struct Ffmpeg {
             *const c_void,
         ) -> *mut c_void,
     >,
-    sws_scale: libloading::Symbol::<
+    sws_scale: libloading::Symbol<
         'static,
         unsafe extern "C" fn(
             *mut c_void,
@@ -274,7 +274,7 @@ impl Ffmpeg {
                 ) -> *mut c_void,
             > = libswscale.get(b"sws_getContext").unwrap();
 
-            let sws_scale: libloading::Symbol::<
+            let sws_scale: libloading::Symbol<
                 unsafe extern "C" fn(
                     *mut c_void,
                     *const *const u8,
@@ -285,7 +285,6 @@ impl Ffmpeg {
                     *const c_int,
                 ) -> c_int,
             > = libswscale.get(b"sws_scale").unwrap();
-
 
             Ffmpeg {
                 av_malloc,
@@ -450,8 +449,7 @@ impl VideoDecoder for H264Decoder {
                 println!("created sws context");
             }
 
-
-            let mut ls2: c_int = 320*4;
+            let mut ls2: c_int = 320 * 4;
             let mut rgb_data = vec![0u8; ls * h * 3];
             let mut rgb_data_ptr = rgb_data.as_ptr();
 
@@ -473,9 +471,8 @@ impl VideoDecoder for H264Decoder {
             println!("scaled");
             */
 
-
-            let c_w = (w+1) / 2;
-            let c_h = (h+1) / 2;
+            let c_w = (w + 1) / 2;
+            let c_h = (h + 1) / 2;
 
             let mut data = Vec::with_capacity(w * h + 2 * c_w * c_h);
 
@@ -492,8 +489,7 @@ impl VideoDecoder for H264Decoder {
             for y in 0..c_h {
                 for x in 0..c_w {
                     let i = y * (*self.yuv_frame).linesize[1] as usize + x;
-                    data.push(*(*self.yuv_frame).data[1].add(i
-                    ));
+                    data.push(*(*self.yuv_frame).data[1].add(i));
                 }
             }
 

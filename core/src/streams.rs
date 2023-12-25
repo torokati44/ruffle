@@ -817,7 +817,9 @@ impl<'gc> NetStream<'gc> {
                 println!("{:?}", context);
                 write.stream_type = Some(NetStreamType::F4v {
                     context: Arc::new(context),
-                    video_stream: None, frame_id: 0 });
+                    video_stream: None,
+                    frame_id: 0,
+                });
                 true
             }
             Some(magic) => {
