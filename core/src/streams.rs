@@ -818,7 +818,7 @@ impl<'gc> NetStream<'gc> {
 
                 let mut cursor = slice.as_cursor();
                 let context = mp4parse::read_mp4(&mut cursor).unwrap();
-                println!("{:?}", context);
+                println!("{:#?}", context);
                 write.stream_type = Some(NetStreamType::F4v {
                     context: Arc::new(context),
                     video_stream: None,
@@ -1237,8 +1237,25 @@ impl<'gc> NetStream<'gc> {
             }
         }
 
-        if matches!(write.stream_type, Some(NetStreamType::F4v { .. })) {
-            todo!("Ticking in F4V streams");
+        if let Some(NetStreamType::F4v { context: media_context, frame_id, video_stream }) = &write.stream_type {
+
+            let encoded_frame = EncodedFrame {
+                codec: VideoCodec::H264,
+                data: &slice.data()[write.offset..],
+                frame_id: *frame_id,
+            };
+
+            context.video.decode_video_stream_frame(
+                video_stream.unwrap(),
+                encoded_frame,
+                context.renderer,
+            );
+
+
+            if !is_lookahead_tag {
+                write.offset += buffer.len() - write.offset;
+                write.preload_offset = max(write.offset, write.preload_offset);
+            }
         }
 
         write.stream_time = end_time;
