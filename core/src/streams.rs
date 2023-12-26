@@ -492,6 +492,10 @@ impl<'gc> NetStream<'gc> {
                 .expect("FLV reader stream position") as usize;
         }
 
+        if matches!(write.stream_type, Some(NetStreamType::F4v { .. })) {
+            todo!("Seeking in F4V streams");
+        }
+
         drop(write);
 
         if let Some(AvmObject::Avm2(_)) = self.0.read().avm_object {
@@ -1034,6 +1038,9 @@ impl<'gc> NetStream<'gc> {
             Some(NetStreamType::Flv {
                 ref mut frame_id, ..
             }) => *frame_id += 1,
+            Some(NetStreamType::F4v {
+                ref mut frame_id, ..
+            }) => *frame_id += 1,
             _ => unreachable!(),
         };
     }
@@ -1228,6 +1235,10 @@ impl<'gc> NetStream<'gc> {
                     write.preload_offset = max(write.offset, write.preload_offset);
                 }
             }
+        }
+
+        if matches!(write.stream_type, Some(NetStreamType::F4v { .. })) {
+            todo!("Ticking in F4V streams");
         }
 
         write.stream_time = end_time;
