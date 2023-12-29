@@ -20,7 +20,6 @@ use crate::display_object::MovieClip;
 use crate::loader::Error;
 use crate::string::AvmString;
 use crate::vminterface::AvmObject;
-use bitstream_io::Primitive;
 use flv_rs::{
     AudioData as FlvAudioData, AudioDataType as FlvAudioDataType, Error as FlvError, FlvReader,
     FrameType as FlvFrameType, Header as FlvHeader, ScriptData as FlvScriptData,
@@ -1237,16 +1236,80 @@ impl<'gc> NetStream<'gc> {
             }
         }
 
-        if let Some(NetStreamType::F4v { context: media_context, frame_id, video_stream }) = &write.stream_type {
+        if let Some(NetStreamType::F4v { context: media_context, frame_id, video_stream }) = &mut write.stream_type {
+
+            let sizes = &media_context.tracks.get(0).unwrap().clone().stsz.as_ref().unwrap().sample_sizes;
+            let offsets = &media_context.tracks.get(0).unwrap().clone().stco.as_ref().unwrap().offsets;
 
             let encoded_frame = EncodedFrame {
                 codec: VideoCodec::H264,
-                data: &slice.data()[write.offset..],
+                data: write.buffer.to_full_slice().data()[offsets[*frame_id as usize] as usize..offsets[*frame_id as usize] as usize + sizes[*frame_id as usize] as usize].to_vec(),
                 frame_id: *frame_id,
             };
 
+            let video_handle: VideoStreamHandle = match video_stream {
+                Some(stream) => *stream,
+                None => {
+                    match context.video.register_video_stream(
+                        1,
+                        (8, 8),
+                        VideoCodec::H264,
+                        VideoDeblocking::UseVideoPacketValue,
+                    ) {
+                        Ok(new_handle) => {
+                            /*match write.stream_type {
+                                Some(NetStreamType::F4v { mut video_stream, .. }) => {
+                                    video_stream = Some(new_handle)
+                                }
+                                _ => unreachable!(),
+                            }*/
+
+                            new_handle
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                "Got error when registring FLV video stream: {}",
+                                e
+                            );
+                            return; //TODO: This originally breaks and halts tag processing
+                        }
+                    }
+                }
+            };
+
+            let mdct = media_context.clone();
+            let trk = mdct.tracks.get(0).unwrap().clone();
+            let stsd = trk.stsd.as_ref().unwrap();
+            let descs = stsd.descriptions.get(0).unwrap();
+            match descs {
+                mp4parse::SampleEntry::Video(video) => {
+                    match &video.codec_specific {
+                        mp4parse::VideoCodecSpecific::AVCConfig(avcconf) => {
+                            let prel_frame = EncodedFrame {
+                                codec: VideoCodec::H264,
+                                data: avcconf.as_slice(),
+                                frame_id: *frame_id,
+                            };
+                            context.video.preload_video_stream_frame(video_handle,
+                                                                        prel_frame);
+                        }
+                        mp4parse::VideoCodecSpecific::VPxConfig(_) => todo!(),
+                        mp4parse::VideoCodecSpecific::AV1Config(_) => todo!(),
+                        mp4parse::VideoCodecSpecific::ESDSConfig(_) => todo!(),
+                        mp4parse::VideoCodecSpecific::H263Config(_) => todo!(),
+                    }
+
+
+                }
+                mp4parse::SampleEntry::Audio(_) => todo!(),
+                mp4parse::SampleEntry::Unknown => todo!(),
+            }
+
+
+
+
             context.video.decode_video_stream_frame(
-                video_stream.unwrap(),
+                video_handle,
                 encoded_frame,
                 context.renderer,
             );
