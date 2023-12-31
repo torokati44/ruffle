@@ -1021,6 +1021,7 @@ impl<'gc> NetStream<'gc> {
                         tracing::error!("Decoding video frame {} failed: {}", frame_id, e);
                     }
                 }
+
             }
             (_, _, FlvVideoPacket::AvcEndOfSequence) => {
                 tracing::warn!("Stub: FLV AVC/H.264 End of Sequence processing")
@@ -1039,7 +1040,9 @@ impl<'gc> NetStream<'gc> {
             }) => *frame_id += 1,
             Some(NetStreamType::F4v {
                 ref mut frame_id, ..
-            }) => *frame_id += 1,
+            }) => {
+                println!("advancing f4v frame");
+                *frame_id += 1},
             _ => unreachable!(),
         };
     }
@@ -1241,9 +1244,15 @@ impl<'gc> NetStream<'gc> {
             let sizes = &media_context.tracks.get(0).unwrap().clone().stsz.as_ref().unwrap().sample_sizes;
             let offsets = &media_context.tracks.get(0).unwrap().clone().stco.as_ref().unwrap().offsets;
 
+            let offs = offsets[*frame_id as usize] as usize;
+            let siz = sizes[*frame_id as usize] as usize;
+
+            println!("offs: {}, siz: {}", offs, siz);
+            let s = slice.get(offs..offs + siz).unwrap();
+
             let encoded_frame = EncodedFrame {
                 codec: VideoCodec::H264,
-                data: write.buffer.to_full_slice().data()[offsets[*frame_id as usize] as usize..offsets[*frame_id as usize] as usize + sizes[*frame_id as usize] as usize].to_vec(),
+                data: &*s.data(),
                 frame_id: *frame_id,
             };
 
@@ -1257,12 +1266,8 @@ impl<'gc> NetStream<'gc> {
                         VideoDeblocking::UseVideoPacketValue,
                     ) {
                         Ok(new_handle) => {
-                            /*match write.stream_type {
-                                Some(NetStreamType::F4v { mut video_stream, .. }) => {
-                                    video_stream = Some(new_handle)
-                                }
-                                _ => unreachable!(),
-                            }*/
+
+                            *video_stream = Some(new_handle);
 
                             new_handle
                         }
@@ -1281,6 +1286,7 @@ impl<'gc> NetStream<'gc> {
             let trk = mdct.tracks.get(0).unwrap().clone();
             let stsd = trk.stsd.as_ref().unwrap();
             let descs = stsd.descriptions.get(0).unwrap();
+            println!("frame id: {}", *frame_id);
             match descs {
                 mp4parse::SampleEntry::Video(video) => {
                     match &video.codec_specific {
@@ -1290,8 +1296,11 @@ impl<'gc> NetStream<'gc> {
                                 data: avcconf.as_slice(),
                                 frame_id: *frame_id,
                             };
-                            context.video.preload_video_stream_frame(video_handle,
+                            if *frame_id == 0 {
+                                println!("preloading avc config");
+                                context.video.preload_video_stream_frame(video_handle,
                                                                         prel_frame);
+                            }
                         }
                         mp4parse::VideoCodecSpecific::VPxConfig(_) => todo!(),
                         mp4parse::VideoCodecSpecific::AV1Config(_) => todo!(),
@@ -1314,11 +1323,9 @@ impl<'gc> NetStream<'gc> {
                 context.renderer,
             );
 
+            *frame_id += 1;
 
-            if !is_lookahead_tag {
-                write.offset += buffer.len() - write.offset;
-                write.preload_offset = max(write.offset, write.preload_offset);
-            }
+
         }
 
         write.stream_time = end_time;
@@ -1327,6 +1334,8 @@ impl<'gc> NetStream<'gc> {
             tracing::error!("Error committing sound stream: {}", e);
         }
         drop(write);
+
+
 
         if end_of_video {
             self.trigger_status_event(

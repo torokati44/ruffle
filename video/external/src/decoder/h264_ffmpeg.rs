@@ -341,7 +341,7 @@ impl VideoDecoder for H264Decoder {
     fn preload_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<FrameDependency, Error> {
         println!("Preloading frame");
 
-        assert!(!self.is_opened);
+        //assert!(!self.is_opened);
 
         let ffmpeg = Ffmpeg::new();
 
