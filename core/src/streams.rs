@@ -31,6 +31,7 @@ use gc_arena::{Collect, GcCell, Mutation};
 use ruffle_render::bitmap::BitmapInfo;
 use ruffle_video::frame::EncodedFrame;
 use ruffle_video::VideoStreamHandle;
+use symphonia::core::sample;
 use std::cmp::max;
 use std::io::{Seek, SeekFrom};
 use std::sync::Arc;
@@ -183,7 +184,7 @@ pub enum NetStreamType {
         /// The currently playing video track's stream instance.
         video_stream: Option<VideoStreamHandle>,
 
-        frame_id: u32,
+        frame_id: Option<u32>,
     },
 }
 
@@ -821,7 +822,7 @@ impl<'gc> NetStream<'gc> {
                 write.stream_type = Some(NetStreamType::F4v {
                     context: Arc::new(context),
                     video_stream: None,
-                    frame_id: 0,
+                    frame_id: None,
                 });
                 true
             }
@@ -1038,11 +1039,6 @@ impl<'gc> NetStream<'gc> {
             Some(NetStreamType::Flv {
                 ref mut frame_id, ..
             }) => *frame_id += 1,
-            Some(NetStreamType::F4v {
-                ref mut frame_id, ..
-            }) => {
-                println!("advancing f4v frame");
-                *frame_id += 1},
             _ => unreachable!(),
         };
     }
@@ -1241,124 +1237,149 @@ impl<'gc> NetStream<'gc> {
 
         if let Some(NetStreamType::F4v { context: media_context, frame_id, video_stream }) = &mut write.stream_type {
 
-            let sample_sizes = &media_context.tracks.get(1).unwrap().stsz.as_ref().unwrap().sample_sizes;
-            let chunk_runs = &media_context.tracks.get(1).unwrap().stsc.as_ref().unwrap().samples;
+            println!("frame id: {:?}, end_time: {}", frame_id, end_time);
 
-            let sample_id: u32 = *frame_id;
+            let should_do_frame;
+            let sample_id;
 
-            let get_samples_in_chunk = |chunk: u32| -> u32 {
-                let mut result = 0;
-                for cr in chunk_runs {
-                    if (cr.first_chunk-1) > chunk {
-                        break;
+            match frame_id {
+                Some(frame) => {
+                    should_do_frame = end_time > *frame as f64 * 1000.0 / 30.0;
+
+                    if should_do_frame {
+                        *frame_id = Some(*frame + 1);
+                        sample_id = frame_id.unwrap();
                     }
-                    result = cr.samples_per_chunk;
-                }
-                result
-            };
-
-            let chunk_of_sample = |sample: u32| -> (u32, u32) {
-                let mut sample_accum = 0;
-                for chunk in 0.. {
-                    let samples_in_chunk = get_samples_in_chunk(chunk);
-                    if sample_accum + samples_in_chunk > sample {
-                        return (chunk, sample_accum);
+                    else {
+                        sample_id = 0;
                     }
-                    sample_accum += samples_in_chunk;
                 }
-                (0, 0)
-            };
-
-            let (chunk, first_sample_in_chunk) = chunk_of_sample(sample_id);
-            let chunk_offsets = &media_context.tracks.get(1).unwrap().stco.as_ref().unwrap().offsets;
-
-            let mut offs = chunk_offsets[chunk as usize] as usize;
-
-            for sam in first_sample_in_chunk..sample_id {
-                offs += sample_sizes[sam as usize] as usize;
+                None => {
+                    should_do_frame = true;
+                    sample_id = 0;
+                    *frame_id = Some(0);
+                }
             }
 
-            let siz = sample_sizes[sample_id as usize] as usize;
+            if should_do_frame {
 
-            println!("offs: {}, siz: {}", offs, siz);
-            let s = buffer;
 
-            let encoded_frame = EncodedFrame {
-                codec: VideoCodec::H264,
-                data: s[offs..offs + siz].as_ref(),
-                frame_id: *frame_id,
-            };
 
-            let video_handle: VideoStreamHandle = match video_stream {
-                Some(stream) => *stream,
-                None => {
-                    match context.video.register_video_stream(
-                        1,
-                        (8, 8),
-                        VideoCodec::H264,
-                        VideoDeblocking::UseVideoPacketValue,
-                    ) {
-                        Ok(new_handle) => {
+                let sample_sizes = &media_context.tracks.get(1).unwrap().stsz.as_ref().unwrap().sample_sizes;
+                let chunk_runs = &media_context.tracks.get(1).unwrap().stsc.as_ref().unwrap().samples;
 
-                            *video_stream = Some(new_handle);
 
-                            new_handle
+
+                let get_samples_in_chunk = |chunk: u32| -> u32 {
+                    let mut result = 0;
+                    for cr in chunk_runs {
+                        if (cr.first_chunk-1) > chunk {
+                            break;
                         }
-                        Err(e) => {
-                            tracing::error!(
-                                "Got error when registring FLV video stream: {}",
-                                e
-                            );
-                            return; //TODO: This originally breaks and halts tag processing
-                        }
+                        result = cr.samples_per_chunk;
                     }
-                }
-            };
+                    result
+                };
 
-            let mdct = media_context.clone();
-            let trk = mdct.tracks.get(1).unwrap();
-            let stsd = trk.stsd.as_ref().unwrap();
-            let descs = stsd.descriptions.get(0).unwrap();
-            println!("frame id: {}", *frame_id);
-            match descs {
-                mp4parse::SampleEntry::Video(video) => {
-                    match &video.codec_specific {
-                        mp4parse::VideoCodecSpecific::AVCConfig(avcconf) => {
-                            let prel_frame = EncodedFrame {
-                                codec: VideoCodec::H264,
-                                data: avcconf.as_slice(),
-                                frame_id: *frame_id,
-                            };
-                            if *frame_id == 0 {
-                                println!("preloading avc config");
-                                context.video.preload_video_stream_frame(video_handle,
-                                                                        prel_frame);
+                let chunk_of_sample = |sample: u32| -> (u32, u32) {
+                    let mut sample_accum = 0;
+                    for chunk in 0.. {
+                        let samples_in_chunk = get_samples_in_chunk(chunk);
+                        if sample_accum + samples_in_chunk > sample {
+                            return (chunk, sample_accum);
+                        }
+                        sample_accum += samples_in_chunk;
+                    }
+                    (0, 0)
+                };
+
+                let (chunk, first_sample_in_chunk) = chunk_of_sample(sample_id);
+                let chunk_offsets = &media_context.tracks.get(1).unwrap().stco.as_ref().unwrap().offsets;
+
+                let mut offs = chunk_offsets[chunk as usize] as usize;
+
+                for sam in first_sample_in_chunk..sample_id {
+                    offs += sample_sizes[sam as usize] as usize;
+                }
+
+                let siz = sample_sizes[sample_id as usize] as usize;
+
+                println!("offs: {}, siz: {}", offs, siz);
+                let s = buffer;
+
+                let encoded_frame = EncodedFrame {
+                    codec: VideoCodec::H264,
+                    data: s[offs..offs + siz].as_ref(),
+                    frame_id: frame_id.unwrap(),
+                };
+
+                let video_handle: VideoStreamHandle = match video_stream {
+                    Some(stream) => *stream,
+                    None => {
+                        match context.video.register_video_stream(
+                            1,
+                            (8, 8),
+                            VideoCodec::H264,
+                            VideoDeblocking::UseVideoPacketValue,
+                        ) {
+                            Ok(new_handle) => {
+
+                                *video_stream = Some(new_handle);
+
+                                new_handle
+                            }
+                            Err(e) => {
+                                tracing::error!(
+                                    "Got error when registring FLV video stream: {}",
+                                    e
+                                );
+                                return; //TODO: This originally breaks and halts tag processing
                             }
                         }
-                        mp4parse::VideoCodecSpecific::VPxConfig(_) => todo!(),
-                        mp4parse::VideoCodecSpecific::AV1Config(_) => todo!(),
-                        mp4parse::VideoCodecSpecific::ESDSConfig(_) => todo!(),
-                        mp4parse::VideoCodecSpecific::H263Config(_) => todo!(),
                     }
+                };
+
+                let mdct = media_context.clone();
+                let trk = mdct.tracks.get(1).unwrap();
+                let stsd = trk.stsd.as_ref().unwrap();
+                let descs = stsd.descriptions.get(0).unwrap();
+
+                match descs {
+                    mp4parse::SampleEntry::Video(video) => {
+                        match &video.codec_specific {
+                            mp4parse::VideoCodecSpecific::AVCConfig(avcconf) => {
+                                let prel_frame = EncodedFrame {
+                                    codec: VideoCodec::H264,
+                                    data: avcconf.as_slice(),
+                                    frame_id: frame_id.unwrap(),
+                                };
+                                if *frame_id == Some(0) {
+                                    println!("preloading avc config");
+                                    context.video.preload_video_stream_frame(video_handle,
+                                                                            prel_frame);
+                                }
+                            }
+                            mp4parse::VideoCodecSpecific::VPxConfig(_) => todo!(),
+                            mp4parse::VideoCodecSpecific::AV1Config(_) => todo!(),
+                            mp4parse::VideoCodecSpecific::ESDSConfig(_) => todo!(),
+                            mp4parse::VideoCodecSpecific::H263Config(_) => todo!(),
+                        }
 
 
+                    }
+                    mp4parse::SampleEntry::Audio(_) => todo!(),
+                    mp4parse::SampleEntry::Unknown => todo!(),
                 }
-                mp4parse::SampleEntry::Audio(_) => todo!(),
-                mp4parse::SampleEntry::Unknown => todo!(),
+
+
+
+
+                write.last_decoded_bitmap = Some(context.video.decode_video_stream_frame(
+                    video_handle,
+                    encoded_frame,
+                    context.renderer,
+                ).unwrap());
             }
-
-
-
-
-            context.video.decode_video_stream_frame(
-                video_handle,
-                encoded_frame,
-                context.renderer,
-            );
-
-            *frame_id += 1;
-
-
         }
 
         write.stream_time = end_time;
