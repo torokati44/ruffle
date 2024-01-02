@@ -1241,18 +1241,51 @@ impl<'gc> NetStream<'gc> {
 
         if let Some(NetStreamType::F4v { context: media_context, frame_id, video_stream }) = &mut write.stream_type {
 
-            let sizes = &media_context.tracks.get(0).unwrap().clone().stsz.as_ref().unwrap().sample_sizes;
-            let offsets = &media_context.tracks.get(0).unwrap().clone().stco.as_ref().unwrap().offsets;
+            let sample_sizes = &media_context.tracks.get(1).unwrap().stsz.as_ref().unwrap().sample_sizes;
+            let chunk_runs = &media_context.tracks.get(1).unwrap().stsc.as_ref().unwrap().samples;
 
-            let offs = offsets[*frame_id as usize] as usize;
-            let siz = sizes[*frame_id as usize] as usize;
+            let sample_id: u32 = *frame_id;
+
+            let get_samples_in_chunk = |chunk: u32| -> u32 {
+                let mut result = 0;
+                for cr in chunk_runs {
+                    if (cr.first_chunk-1) > chunk {
+                        break;
+                    }
+                    result = cr.samples_per_chunk;
+                }
+                result
+            };
+
+            let chunk_of_sample = |sample: u32| -> (u32, u32) {
+                let mut sample_accum = 0;
+                for chunk in 0.. {
+                    let samples_in_chunk = get_samples_in_chunk(chunk);
+                    if sample_accum + samples_in_chunk > sample {
+                        return (chunk, sample_accum);
+                    }
+                    sample_accum += samples_in_chunk;
+                }
+                (0, 0)
+            };
+
+            let (chunk, first_sample_in_chunk) = chunk_of_sample(sample_id);
+            let chunk_offsets = &media_context.tracks.get(1).unwrap().stco.as_ref().unwrap().offsets;
+
+            let mut offs = chunk_offsets[chunk as usize] as usize;
+
+            for sam in first_sample_in_chunk..sample_id {
+                offs += sample_sizes[sam as usize] as usize;
+            }
+
+            let siz = sample_sizes[sample_id as usize] as usize;
 
             println!("offs: {}, siz: {}", offs, siz);
-            let s = slice.get(offs..offs + siz).unwrap();
+            let s = buffer;
 
             let encoded_frame = EncodedFrame {
                 codec: VideoCodec::H264,
-                data: &*s.data(),
+                data: s[offs..offs + siz].as_ref(),
                 frame_id: *frame_id,
             };
 
@@ -1283,7 +1316,7 @@ impl<'gc> NetStream<'gc> {
             };
 
             let mdct = media_context.clone();
-            let trk = mdct.tracks.get(0).unwrap().clone();
+            let trk = mdct.tracks.get(1).unwrap();
             let stsd = trk.stsd.as_ref().unwrap();
             let descs = stsd.descriptions.get(0).unwrap();
             println!("frame id: {}", *frame_id);
