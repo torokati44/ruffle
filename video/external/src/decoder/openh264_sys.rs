@@ -1335,33 +1335,116 @@ pub type WelsTraceCallback = ::std::option::Option<
         string: *const ::std::os::raw::c_char,
     ),
 >;
-extern "C" {
+extern crate libloading;
+pub struct OpenH264 {
+    __library: ::libloading::Library,
+    pub WelsCreateSVCEncoder: Result<
+        unsafe extern "C" fn(ppEncoder: *mut *mut ISVCEncoder) -> ::std::os::raw::c_int,
+        ::libloading::Error,
+    >,
+    pub WelsDestroySVCEncoder:
+        Result<unsafe extern "C" fn(pEncoder: *mut ISVCEncoder), ::libloading::Error>,
+    pub WelsGetDecoderCapability: Result<
+        unsafe extern "C" fn(pDecCapability: *mut SDecoderCapability) -> ::std::os::raw::c_int,
+        ::libloading::Error,
+    >,
+    pub WelsCreateDecoder: Result<
+        unsafe extern "C" fn(ppDecoder: *mut *mut ISVCDecoder) -> ::std::os::raw::c_long,
+        ::libloading::Error,
+    >,
+    pub WelsDestroyDecoder:
+        Result<unsafe extern "C" fn(pDecoder: *mut ISVCDecoder), ::libloading::Error>,
+    pub WelsGetCodecVersion: Result<unsafe extern "C" fn() -> OpenH264Version, ::libloading::Error>,
+    pub WelsGetCodecVersionEx:
+        Result<unsafe extern "C" fn(pVersion: *mut OpenH264Version), ::libloading::Error>,
+}
+impl OpenH264 {
+    pub unsafe fn new<P>(path: P) -> Result<Self, ::libloading::Error>
+    where
+        P: AsRef<::std::ffi::OsStr>,
+    {
+        let library = ::libloading::Library::new(path)?;
+        Self::from_library(library)
+    }
+    pub unsafe fn from_library<L>(library: L) -> Result<Self, ::libloading::Error>
+    where
+        L: Into<::libloading::Library>,
+    {
+        let __library = library.into();
+        let WelsCreateSVCEncoder = __library.get(b"WelsCreateSVCEncoder\0").map(|sym| *sym);
+        let WelsDestroySVCEncoder = __library.get(b"WelsDestroySVCEncoder\0").map(|sym| *sym);
+        let WelsGetDecoderCapability = __library.get(b"WelsGetDecoderCapability\0").map(|sym| *sym);
+        let WelsCreateDecoder = __library.get(b"WelsCreateDecoder\0").map(|sym| *sym);
+        let WelsDestroyDecoder = __library.get(b"WelsDestroyDecoder\0").map(|sym| *sym);
+        let WelsGetCodecVersion = __library.get(b"WelsGetCodecVersion\0").map(|sym| *sym);
+        let WelsGetCodecVersionEx = __library.get(b"WelsGetCodecVersionEx\0").map(|sym| *sym);
+        Ok(OpenH264 {
+            __library,
+            WelsCreateSVCEncoder,
+            WelsDestroySVCEncoder,
+            WelsGetDecoderCapability,
+            WelsCreateDecoder,
+            WelsDestroyDecoder,
+            WelsGetCodecVersion,
+            WelsGetCodecVersionEx,
+        })
+    }
     #[doc = " @brief   Create encoder\n  @param   ppEncoder encoder\n  @return  0 - success; otherwise - failed;"]
-    pub fn WelsCreateSVCEncoder(ppEncoder: *mut *mut ISVCEncoder) -> ::std::os::raw::c_int;
-}
-extern "C" {
+    pub unsafe fn WelsCreateSVCEncoder(
+        &self,
+        ppEncoder: *mut *mut ISVCEncoder,
+    ) -> ::std::os::raw::c_int {
+        (self
+            .WelsCreateSVCEncoder
+            .as_ref()
+            .expect("Expected function, got error."))(ppEncoder)
+    }
     #[doc = " @brief   Destroy encoder\n   @param   pEncoder encoder\n  @return  void"]
-    pub fn WelsDestroySVCEncoder(pEncoder: *mut ISVCEncoder);
-}
-extern "C" {
+    pub unsafe fn WelsDestroySVCEncoder(&self, pEncoder: *mut ISVCEncoder) {
+        (self
+            .WelsDestroySVCEncoder
+            .as_ref()
+            .expect("Expected function, got error."))(pEncoder)
+    }
     #[doc = " @brief   Get the capability of decoder\n  @param   pDecCapability  decoder capability\n  @return  0 - success; otherwise - failed;"]
-    pub fn WelsGetDecoderCapability(
+    pub unsafe fn WelsGetDecoderCapability(
+        &self,
         pDecCapability: *mut SDecoderCapability,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
+    ) -> ::std::os::raw::c_int {
+        (self
+            .WelsGetDecoderCapability
+            .as_ref()
+            .expect("Expected function, got error."))(pDecCapability)
+    }
     #[doc = " @brief   Create decoder\n  @param   ppDecoder decoder\n  @return  0 - success; otherwise - failed;"]
-    pub fn WelsCreateDecoder(ppDecoder: *mut *mut ISVCDecoder) -> ::std::os::raw::c_long;
-}
-extern "C" {
+    pub unsafe fn WelsCreateDecoder(
+        &self,
+        ppDecoder: *mut *mut ISVCDecoder,
+    ) -> ::std::os::raw::c_long {
+        (self
+            .WelsCreateDecoder
+            .as_ref()
+            .expect("Expected function, got error."))(ppDecoder)
+    }
     #[doc = " @brief   Destroy decoder\n  @param   pDecoder  decoder\n  @return  void"]
-    pub fn WelsDestroyDecoder(pDecoder: *mut ISVCDecoder);
-}
-extern "C" {
+    pub unsafe fn WelsDestroyDecoder(&self, pDecoder: *mut ISVCDecoder) {
+        (self
+            .WelsDestroyDecoder
+            .as_ref()
+            .expect("Expected function, got error."))(pDecoder)
+    }
     #[doc = " @brief   Get codec version\n           Note, old versions of Mingw (GCC < 4.7) are buggy and use an\n           incorrect/different ABI for calling this function, making it\n           incompatible with MSVC builds.\n  @return  The linked codec version"]
-    pub fn WelsGetCodecVersion() -> OpenH264Version;
-}
-extern "C" {
+    pub unsafe fn WelsGetCodecVersion(&self) -> OpenH264Version {
+        (self
+            .WelsGetCodecVersion
+            .as_ref()
+            .expect("Expected function, got error."))()
+    }
     #[doc = " @brief   Get codec version\n  @param   pVersion  struct to fill in with the version"]
-    pub fn WelsGetCodecVersionEx(pVersion: *mut OpenH264Version);
+    pub unsafe fn WelsGetCodecVersionEx(&self, pVersion: *mut OpenH264Version) {
+        (self
+            .WelsGetCodecVersionEx
+            .as_ref()
+            .expect("Expected function, got error."))(pVersion)
+    }
 }
