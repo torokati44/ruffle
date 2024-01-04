@@ -48,7 +48,7 @@ impl VideoBackend for ExternalVideoBackend {
         // unique identifier. Ideas: shift the fallback handles by a large amount (hack),
         // put the stream into the fallback backend's arena (or share the arena with it).
         if codec == VideoCodec::H264 {
-            let decoder = Box::new(crate::decoder::h264_ffmpeg::H264Decoder::new());
+            let decoder = Box::new(crate::decoder::openh264::H264Decoder::new());
             let stream = VideoStream::new(decoder);
             let stream_handle = self.streams.insert(stream);
             Ok(stream_handle)

@@ -1,10 +1,15 @@
 use core::ffi;
 use std::ffi::{c_char, c_int, c_uchar, c_void, CString};
+use std::ptr;
 
 use crate::decoder::VideoDecoder;
+use crate::decoder::openh264_sys;
+
 use ruffle_render::bitmap::BitmapFormat;
 use ruffle_video::error::Error;
 use ruffle_video::frame::{DecodedFrame, EncodedFrame, FrameDependency};
+
+
 
 #[repr(C)]
 pub struct AVPacket {
@@ -139,19 +144,14 @@ impl From<H264Error> for Error {
 /// H264 video decoder.
 pub struct H264Decoder {
     is_opened: bool,
-    context: *const c_void,
-    decoder: *const c_void,
-    packet: *mut AVPacket,
-    yuv_frame: *const AVFrame,
-    sws_context: *mut c_void,
 }
 
 use std::sync::OnceLock;
 
-static LIBAVCODEC: OnceLock<libloading::Library> = OnceLock::new();
-static LIBSWSCALE: OnceLock<libloading::Library> = OnceLock::new();
+static LIBOPENH264: OnceLock<libloading::Library> = OnceLock::new();
 
-struct Ffmpeg {
+
+struct OpenH264 {
     av_malloc: libloading::Symbol<'static, unsafe extern "C" fn(usize) -> *mut c_uchar>,
     av_log_set_level: libloading::Symbol<'static, unsafe extern "C" fn(ffi::c_int) -> ffi::c_int>,
     avcodec_find_decoder_by_name:
@@ -182,126 +182,43 @@ struct Ffmpeg {
         'static,
         unsafe extern "C" fn(*const c_void, *const AVCodecParameters) -> ffi::c_int,
     >,
-    #[allow(non_snake_case)]
-    sws_getContext: libloading::Symbol<
-        'static,
-        unsafe extern "C" fn(
-            c_int,
-            c_int,
-            c_int,
-            c_int,
-            c_int,
-            c_int,
-            c_int,
-            *const c_void,
-            *const c_void,
-            *const c_void,
-        ) -> *mut c_void,
-    >,
-    sws_scale: libloading::Symbol<
-        'static,
-        unsafe extern "C" fn(
-            *mut c_void,
-            *const *const u8,
-            *const c_int,
-            c_int,
-            c_int,
-            *mut *mut u8,
-            *const c_int,
-        ) -> c_int,
-    >,
 }
 
-impl Ffmpeg {
-    fn new() -> Ffmpeg {
+impl OpenH264 {
+    fn new() -> OpenH264 {
         unsafe {
-            let libavcodec: &libloading::Library =
-                LIBAVCODEC.get_or_init(|| libloading::Library::new("libavcodec.so").unwrap());
+            let libopenh264: &libloading::Library =
+                LIBOPENH264.get_or_init(|| libloading::Library::new("./libopenh264-2.4.0-linux64.7.so").unwrap());
 
-            let libswscale: &libloading::Library =
-                LIBSWSCALE.get_or_init(|| libloading::Library::new("libswscale.so").unwrap());
 
-            let av_malloc: libloading::Symbol<unsafe extern "C" fn(usize) -> *mut c_uchar> =
-                libavcodec.get(b"av_malloc").unwrap();
-            let av_log_set_level: libloading::Symbol<
-                unsafe extern "C" fn(ffi::c_int) -> ffi::c_int,
-            > = libavcodec.get(b"av_log_set_level").unwrap();
-            let avcodec_find_decoder_by_name: libloading::Symbol<
-                unsafe extern "C" fn(*const c_char) -> *const c_void,
-            > = libavcodec.get(b"avcodec_find_decoder_by_name").unwrap();
-            let avcodec_alloc_context3: libloading::Symbol<
-                unsafe extern "C" fn(*const c_void) -> *const c_void,
-            > = libavcodec.get(b"avcodec_alloc_context3").unwrap();
-            let avcodec_open2: libloading::Symbol<
-                unsafe extern "C" fn(*const c_void, *const c_void, *const c_void) -> *const c_void,
-            > = libavcodec.get(b"avcodec_open2").unwrap();
-            let av_packet_alloc: libloading::Symbol<unsafe extern "C" fn() -> *mut AVPacket> =
-                libavcodec.get(b"av_packet_alloc").unwrap();
-            let av_frame_alloc: libloading::Symbol<unsafe extern "C" fn() -> *const AVFrame> =
-                libavcodec.get(b"av_frame_alloc").unwrap();
-            let avcodec_send_packet: libloading::Symbol<
-                unsafe extern "C" fn(*const c_void, *mut AVPacket) -> ffi::c_int,
-            > = libavcodec.get(b"avcodec_send_packet").unwrap();
-            let avcodec_receive_frame: libloading::Symbol<
-                unsafe extern "C" fn(*const c_void, *const AVFrame) -> ffi::c_int,
-            > = libavcodec.get(b"avcodec_receive_frame").unwrap();
-            let av_grow_packet: libloading::Symbol<
-                unsafe extern "C" fn(*mut AVPacket, c_int) -> ffi::c_int,
-            > = libavcodec.get(b"av_grow_packet").unwrap();
-            let av_shrink_packet: libloading::Symbol<
-                unsafe extern "C" fn(*mut AVPacket, c_int) -> ffi::c_void,
-            > = libavcodec.get(b"av_shrink_packet").unwrap();
-            let avcodec_parameters_alloc: libloading::Symbol<
-                unsafe extern "C" fn() -> *mut AVCodecParameters,
-            > = libavcodec.get(b"avcodec_parameters_alloc").unwrap();
-            let avcodec_parameters_to_context: libloading::Symbol<
-                unsafe extern "C" fn(*const c_void, *const AVCodecParameters) -> ffi::c_int,
-            > = libavcodec.get(b"avcodec_parameters_to_context").unwrap();
+            let mut pSvcDecoder :*mut openh264_sys::ISVCDecoder = ptr::null_mut();
 
-            #[allow(non_snake_case)]
-            let sws_getContext: libloading::Symbol<
-                unsafe extern "C" fn(
-                    c_int,
-                    c_int,
-                    c_int,
-                    c_int,
-                    c_int,
-                    c_int,
-                    c_int,
-                    *const c_void,
-                    *const c_void,
-                    *const c_void,
-                ) -> *mut c_void,
-            > = libswscale.get(b"sws_getContext").unwrap();
 
-            let sws_scale: libloading::Symbol<
-                unsafe extern "C" fn(
-                    *mut c_void,
-                    *const *const u8,
-                    *const c_int,
-                    c_int,
-                    c_int,
-                    *mut *mut u8,
-                    *const c_int,
-                ) -> c_int,
-            > = libswscale.get(b"sws_scale").unwrap();
+                    //input: encoded bitstream start position; should include start code prefix
+        let pBuf : &[c_uchar];
 
-            Ffmpeg {
-                av_malloc,
-                av_log_set_level,
-                avcodec_find_decoder_by_name,
-                avcodec_alloc_context3,
-                avcodec_open2,
-                av_packet_alloc,
-                av_frame_alloc,
-                avcodec_send_packet,
-                avcodec_receive_frame,
-                av_grow_packet,
-                av_shrink_packet,
-                avcodec_parameters_alloc,
-                avcodec_parameters_to_context,
-                sws_getContext,
-                sws_scale,
+        //input: encoded bit stream length; should include the size of start code prefix
+        let iSize : c_int = 0;
+
+    //output: [0~2] for Y,U,V buffer for Decoding only
+    let pData = [ptr::null_mut() as *mut c_uchar; 3];
+    //in-out: for Decoding only: declare and initialize the output buffer info
+    let sDstBufInfo: openh264_sys::SBufferInfo = std::mem::zeroed();
+
+    let create_decoder  = libopenh264.get::<fn(*mut *mut openh264_sys::ISVCDecoder) -> ::std::os::raw::c_long>(b"WelsCreateDecoder").unwrap();
+    create_decoder(&mut pSvcDecoder);
+
+
+        let mut sDecParam : openh264_sys::SDecodingParam = std::mem::zeroed();
+    sDecParam.sVideoProperty.eVideoBsType = openh264_sys::VIDEO_BITSTREAM_AVC;
+    //for Parsing only, the assignment is mandatory
+    sDecParam.bParseOnly = true;
+
+
+        let initialize_decoder = libopenh264.get::<fn(*mut openh264_sys::ISVCDecoder, *const openh264_sys::SDecodingParam) -> ::std::os::raw::c_long>(b"WelsInitDecoder").unwrap();
+
+
+            OpenH264 {
             }
         }
     }
@@ -312,7 +229,7 @@ impl H264Decoder {
         println!("Creating H264 decoder");
 
         unsafe {
-            let ffmpeg = Ffmpeg::new();
+            let ffmpeg = OpenH264::new();
 
             let h264: CString = CString::new("libopenh264").unwrap();
             let h264_decoder = (ffmpeg.avcodec_find_decoder_by_name)(h264.as_ptr());
@@ -343,7 +260,7 @@ impl VideoDecoder for H264Decoder {
 
         //assert!(!self.is_opened);
 
-        let ffmpeg = Ffmpeg::new();
+        let ffmpeg = OpenH264::new();
 
         unsafe {
             (ffmpeg.av_log_set_level)(56);
@@ -378,7 +295,7 @@ impl VideoDecoder for H264Decoder {
     fn decode_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<DecodedFrame, Error> {
         println!("Decoding frame");
         assert!(self.is_opened);
-        let ffmpeg = Ffmpeg::new();
+        let ffmpeg = OpenH264::new();
         unsafe {
             let l = (encoded_frame.data.len()) as u32;
 
