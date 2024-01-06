@@ -1,9 +1,9 @@
-use core::ffi;
-use std::ffi::{c_char, c_int, c_uchar, c_void, CString};
+
+use std::ffi::{c_uchar, c_int};
 use std::ptr;
 
 use crate::decoder::VideoDecoder;
-use crate::decoder::openh264_sys;
+use crate::decoder::openh264_sys::{self, OpenH264, ISVCDecoder, ISVCDecoderVtbl};
 
 use ruffle_render::bitmap::BitmapFormat;
 use ruffle_video::error::Error;
@@ -11,112 +11,6 @@ use ruffle_video::frame::{DecodedFrame, EncodedFrame, FrameDependency};
 
 
 
-#[repr(C)]
-pub struct AVPacket {
-    pub buf: *mut c_void,
-    pub pts: i64,
-    pub dts: i64,
-    pub data: *mut u8,
-    pub size: c_int,
-    pub stream_index: c_int,
-    pub flags: c_int,
-    pub side_data: *mut c_void,
-    pub side_data_elems: c_int,
-    pub duration: i64,
-    pub pos: i64,
-    pub convergence_duration: i64,
-}
-
-#[repr(C)]
-pub struct AVFrame {
-    pub data: [*mut u8; 8],
-    pub linesize: [c_int; 8],
-    pub extended_data: *mut *mut u8,
-    pub width: c_int,
-    pub height: c_int,
-    pub nb_samples: c_int,
-    pub format: c_int,
-    pub key_frame: c_int,
-    pub pict_type: u32,
-    pub sample_aspect_ratio: [c_int; 2],
-    pub pts: i64,
-    pub pkt_pts: i64,
-    pub pkt_dts: i64,
-    pub coded_picture_number: c_int,
-    pub display_picture_number: c_int,
-    pub quality: c_int,
-    pub opaque: *mut c_void,
-    pub error: [u64; 8],
-    pub repeat_pict: c_int,
-    pub interlaced_frame: c_int,
-    pub top_field_first: c_int,
-    pub palette_has_changed: c_int,
-    pub reordered_opaque: i64,
-    pub sample_rate: c_int,
-    pub channel_layout: u64,
-    pub buf: [*mut c_void; 8],
-    pub extended_buf: *mut *mut c_void,
-    pub nb_extended_buf: c_int,
-    pub side_data: *mut *mut c_void,
-    pub nb_side_data: c_int,
-    pub flags: c_int,
-    pub color_range: u32,
-    pub color_primaries: u32,
-    pub color_trc: u32,
-    pub colorspace: u32,
-    pub chroma_location: u32,
-    pub best_effort_timestamp: i64,
-    pub pkt_pos: i64,
-    pub pkt_duration: i64,
-    pub metadata: *mut c_void,
-    pub decode_error_flags: c_int,
-    pub channels: c_int,
-    pub pkt_size: c_int,
-    pub qscale_table: *mut i8,
-    pub qstride: c_int,
-    pub qscale_type: c_int,
-    pub qp_table_buf: *mut c_void,
-    pub hw_frames_ctx: *mut c_void,
-    pub opaque_ref: *mut c_void,
-    pub crop_top: usize,
-    pub crop_bottom: usize,
-    pub crop_left: usize,
-    pub crop_right: usize,
-    pub private_ref: *mut c_void,
-}
-
-#[repr(C)]
-pub struct AVCodecParameters {
-    pub codec_type: i32,
-    pub codec_id: u32,
-    pub codec_tag: u32,
-    pub extradata: *mut u8,
-    pub extradata_size: c_int,
-    pub format: c_int,
-    pub bit_rate: i64,
-    pub bits_per_coded_sample: c_int,
-    pub bits_per_raw_sample: c_int,
-    pub profile: c_int,
-    pub level: c_int,
-    pub width: c_int,
-    pub height: c_int,
-    pub sample_aspect_ratio: [c_int; 2],
-    pub field_order: u32,
-    pub color_range: u32,
-    pub color_primaries: u32,
-    pub color_trc: u32,
-    pub color_space: u32,
-    pub chroma_location: u32,
-    pub video_delay: c_int,
-    pub channel_layout: u64,
-    pub channels: c_int,
-    pub sample_rate: c_int,
-    pub block_align: c_int,
-    pub frame_size: c_int,
-    pub initial_padding: c_int,
-    pub trailing_padding: c_int,
-    pub seek_preroll: c_int,
-}
 
 #[derive(thiserror::Error, Debug)]
 pub enum H264Error {
@@ -143,113 +37,66 @@ impl From<H264Error> for Error {
 
 /// H264 video decoder.
 pub struct H264Decoder {
-    is_opened: bool,
+    length_size: u8, // how many bytes are used to store the length of the NALU (1, 2, 3, or 4)
+
+    openh264: OpenH264,
+    decoder: *mut ISVCDecoder,
 }
 
-use std::sync::OnceLock;
 
-static LIBOPENH264: OnceLock<libloading::Library> = OnceLock::new();
+impl H264Decoder {
+    /// `extradata` should hold "AVCC (MP4) format" decoder configuration, including PPS and SPS.
+    /// Make sure it has any start code emulation prevention "three bytes" removed.
+    pub fn new(/*extradata: &[u8]*/) -> Self {
+
+        let extradata = [1, 1, 1, 1, 3];
+
+        assert!(extradata[0] == 1); // configuration version, always 1
+        // extradata[1]: profile
+        // extradata[2]: compatibility
+        // extradata[3]: level
+        // extradata[4]: 6 reserved bits | NALU length size - 1
+        let length_size = (extradata[4] & 0b0000_0011) + 1;
 
 
-struct OpenH264 {
-    av_malloc: libloading::Symbol<'static, unsafe extern "C" fn(usize) -> *mut c_uchar>,
-    av_log_set_level: libloading::Symbol<'static, unsafe extern "C" fn(ffi::c_int) -> ffi::c_int>,
-    avcodec_find_decoder_by_name:
-        libloading::Symbol<'static, unsafe extern "C" fn(*const c_char) -> *const c_void>,
-    avcodec_alloc_context3:
-        libloading::Symbol<'static, unsafe extern "C" fn(*const c_void) -> *const c_void>,
-    avcodec_open2: libloading::Symbol<
-        'static,
-        unsafe extern "C" fn(*const c_void, *const c_void, *const c_void) -> *const c_void,
-    >,
-    av_packet_alloc: libloading::Symbol<'static, unsafe extern "C" fn() -> *mut AVPacket>,
-    av_frame_alloc: libloading::Symbol<'static, unsafe extern "C" fn() -> *const AVFrame>,
-    avcodec_send_packet: libloading::Symbol<
-        'static,
-        unsafe extern "C" fn(*const c_void, *mut AVPacket) -> ffi::c_int,
-    >,
-    avcodec_receive_frame: libloading::Symbol<
-        'static,
-        unsafe extern "C" fn(*const c_void, *const AVFrame) -> ffi::c_int,
-    >,
-    av_grow_packet:
-        libloading::Symbol<'static, unsafe extern "C" fn(*mut AVPacket, c_int) -> ffi::c_int>,
-    av_shrink_packet:
-        libloading::Symbol<'static, unsafe extern "C" fn(*mut AVPacket, c_int) -> ffi::c_void>,
-    avcodec_parameters_alloc:
-        libloading::Symbol<'static, unsafe extern "C" fn() -> *mut AVCodecParameters>,
-    avcodec_parameters_to_context: libloading::Symbol<
-        'static,
-        unsafe extern "C" fn(*const c_void, *const AVCodecParameters) -> ffi::c_int,
-    >,
-}
 
-impl OpenH264 {
-    fn new() -> OpenH264 {
+        let mut decoder: *mut ISVCDecoder = ptr::null_mut();
         unsafe {
-            let libopenh264: &libloading::Library =
-                LIBOPENH264.get_or_init(|| libloading::Library::new("./libopenh264-2.4.0-linux64.7.so").unwrap());
+            let openh264 = OpenH264::new("./libopenh264-2.4.0-linux64.7.so").unwrap();
 
 
-            let mut pSvcDecoder :*mut openh264_sys::ISVCDecoder = ptr::null_mut();
+            openh264.WelsCreateDecoder(&mut decoder);
 
 
-                    //input: encoded bitstream start position; should include start code prefix
-        let pBuf : &[c_uchar];
-
-        //input: encoded bit stream length; should include the size of start code prefix
-        let iSize : c_int = 0;
-
-    //output: [0~2] for Y,U,V buffer for Decoding only
-    let pData = [ptr::null_mut() as *mut c_uchar; 3];
-    //in-out: for Decoding only: declare and initialize the output buffer info
-    let sDstBufInfo: openh264_sys::SBufferInfo = std::mem::zeroed();
-
-    let create_decoder  = libopenh264.get::<fn(*mut *mut openh264_sys::ISVCDecoder) -> ::std::os::raw::c_long>(b"WelsCreateDecoder").unwrap();
-    create_decoder(&mut pSvcDecoder);
+            let decoder_vtbl = (*decoder as *const ISVCDecoderVtbl)
+            .as_ref()
+            .unwrap();
 
 
-        let mut sDecParam : openh264_sys::SDecodingParam = std::mem::zeroed();
-    sDecParam.sVideoProperty.eVideoBsType = openh264_sys::VIDEO_BITSTREAM_AVC;
-    //for Parsing only, the assignment is mandatory
-    sDecParam.bParseOnly = true;
+            let mut dec_param: openh264_sys::SDecodingParam = std::mem::zeroed();
+            dec_param.sVideoProperty.eVideoBsType = openh264_sys::VIDEO_BITSTREAM_AVC;
+
+            (decoder_vtbl.Initialize.unwrap())(decoder, &dec_param);
 
 
-        let initialize_decoder = libopenh264.get::<fn(*mut openh264_sys::ISVCDecoder, *const openh264_sys::SDecodingParam) -> ::std::os::raw::c_long>(b"WelsInitDecoder").unwrap();
-
-
-            OpenH264 {
+            Self {
+                length_size,
+                openh264,
+                decoder,
             }
         }
     }
 }
 
-impl H264Decoder {
-    pub fn new() -> Self {
-        println!("Creating H264 decoder");
-
+impl Drop for H264Decoder {
+    fn drop(&mut self) {
         unsafe {
-            let ffmpeg = OpenH264::new();
+            let decoder_vtbl = (*self.decoder as *const ISVCDecoderVtbl)
+                .as_ref()
+                .unwrap();
 
-            let h264: CString = CString::new("libopenh264").unwrap();
-            let h264_decoder = (ffmpeg.avcodec_find_decoder_by_name)(h264.as_ptr());
-
-            println!("{:#?}", h264_decoder);
-            let context = (ffmpeg.avcodec_alloc_context3)(h264_decoder);
-
-            let packet = (ffmpeg.av_packet_alloc)();
-            let yuv_frame = (ffmpeg.av_frame_alloc)();
-
-            println!("{:#?} {:#?}", packet, yuv_frame);
-
-            Self {
-                is_opened: false,
-                context,
-                decoder: h264_decoder,
-                packet,
-                yuv_frame,
-                sws_context: std::ptr::null_mut(),
-            }
+            (decoder_vtbl.Uninitialize.unwrap())(self.decoder);
+            self.openh264.WelsDestroyDecoder(self.decoder);
         }
     }
 }
@@ -258,177 +105,152 @@ impl VideoDecoder for H264Decoder {
     fn preload_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<FrameDependency, Error> {
         println!("Preloading frame");
 
-        //assert!(!self.is_opened);
-
-        let ffmpeg = OpenH264::new();
-
+        dbg!(encoded_frame.data);
         unsafe {
-            (ffmpeg.av_log_set_level)(56);
+            let decoder_vtbl = (*self.decoder as *const ISVCDecoderVtbl)
+            .as_ref()
+            .unwrap();
 
-            // Create codec parameters and copy the avcC box as extradata
-            let codec_params = (ffmpeg.avcodec_parameters_alloc)();
+            //input: encoded bitstream start position; should include start code prefix
+            let mut buffer: Vec<c_uchar> = Vec::new();
 
-            println!("params alloc'd, copying");
+            buffer.extend_from_slice(&[0, 0, 0, 1]);
 
-            (*codec_params).extradata = (ffmpeg.av_malloc)(encoded_frame.data.len());
+            let sps_length = encoded_frame.data[6] as usize * 256 + encoded_frame.data[7] as usize;
 
-            for i in 0..encoded_frame.data.len() {
-                (*codec_params)
-                    .extradata
-                    .add(i)
-                    .write(encoded_frame.data[i]);
+            dbg!(sps_length);
+
+            for i in 0..sps_length {
+                buffer.push(encoded_frame.data[8 + i]);
             }
 
-            println!("params copied");
+            let num_pps = encoded_frame.data[8 + sps_length] as usize;
 
-            (*codec_params).extradata_size = encoded_frame.data.len() as c_int;
+            assert!(num_pps == 1);
 
-            (*ffmpeg.avcodec_parameters_to_context)(self.context, codec_params);
+            buffer.extend_from_slice(&[0, 0, 0, 1]);
 
-            (ffmpeg.avcodec_open2)(self.context, self.decoder, std::ptr::null());
+            let pps_length = encoded_frame.data[8 + sps_length + 1] as usize * 256 + encoded_frame.data[8 + sps_length + 2] as usize;
+
+            dbg!(pps_length);
+
+            for i in 0..pps_length {
+                buffer.push(encoded_frame.data[8 + sps_length + 3 + i]);
+            }
+
+            dbg!(&buffer);
+
+
+            //output: [0~2] for Y,U,V buffer for Decoding only
+            let mut output = [ptr::null_mut() as *mut c_uchar; 3];
+            //in-out: for Decoding only: declare and initialize the output buffer info
+            let mut dest_buf_info: openh264_sys::SBufferInfo = std::mem::zeroed();
+
+            let ret = decoder_vtbl.DecodeFrameNoDelay.unwrap()(
+                self.decoder,
+                buffer.as_mut_ptr(),
+                buffer.len() as c_int,
+                output.as_mut_ptr(),
+                &mut dest_buf_info as *mut openh264_sys::SBufferInfo,
+            );
+
+            dbg!(ret);
+
         }
 
-        self.is_opened = true;
         Ok(FrameDependency::None)
+
+        /*
+
+
+        let nal_unit_type = encoded_frame.data[self.length_size as usize] & 0b0001_1111;
+
+        if nal_unit_type == openh264_sys::NAL_SLICE_IDR as u8 { // 5
+            Ok(FrameDependency::None)
+        }
+        else {
+            Ok(FrameDependency::Past)
+        }*/
     }
 
     fn decode_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<DecodedFrame, Error> {
         println!("Decoding frame");
-        assert!(self.is_opened);
-        let ffmpeg = OpenH264::new();
+
+
         unsafe {
-            let l = (encoded_frame.data.len()) as u32;
+            let decoder_vtbl = (*self.decoder as *const ISVCDecoderVtbl)
+                .as_ref()
+                .unwrap();
 
-            println!("{}, {:?}", l, &encoded_frame.data[0..10]);
 
-            if ((*self.packet).size as usize) < (l as usize) {
-                let ret = (ffmpeg.av_grow_packet)(self.packet, l as c_int - (*self.packet).size);
+            println!("{}, {:?}", encoded_frame.data.len(), &encoded_frame.data[0..10]);
 
-                if ret != 0 {
-                    return Err(Error::DecoderError(
-                        format!("av_grow_packet returned: {}", ret).into(),
-                    ));
-                }
+
+
+        //input: encoded bitstream start position; should include start code prefix
+        let mut buffer: Vec<c_uchar> = Vec::with_capacity(encoded_frame.data.len() - self.length_size as usize + 4);
+
+        buffer.extend_from_slice(&[0, 0, 0, 1]);
+        buffer.extend_from_slice(&encoded_frame.data[self.length_size as usize..]);
+
+        //output: [0~2] for Y,U,V buffer for Decoding only
+        let mut output = [ptr::null_mut() as *mut c_uchar; 3];
+        //in-out: for Decoding only: declare and initialize the output buffer info
+        let mut dest_buf_info: openh264_sys::SBufferInfo = std::mem::zeroed();
+
+        let ret = decoder_vtbl.DecodeFrameNoDelay.unwrap()(
+            self.decoder,
+            buffer.as_mut_ptr(),
+            buffer.len() as c_int,
+            output.as_mut_ptr(),
+            &mut dest_buf_info as *mut openh264_sys::SBufferInfo,
+        );
+
+        dbg!(ret);
+        //decode failed
+        if ret != 0 {
+            //RequestIDR or something like that.
+            return Ok(DecodedFrame::new(
+                1,
+                1,
+                BitmapFormat::Rgb,
+                vec![255, 0, 255],
+            ));
+        }
+        //for Decoding only, pData can be used for render.
+        if dest_buf_info.iBufferStatus == 1 {
+            //output pData[0], pData[1], pData[2];
+        }
+        let buffer_info = dest_buf_info.UsrData.sSystemBuffer;
+        dbg!(buffer_info);
+
+        let mut yuv: Vec<u8> = Vec::with_capacity(buffer_info.iWidth as usize * buffer_info.iHeight as usize * 3 / 2);
+
+        for i in 0..buffer_info.iHeight {
+            for j in 0..buffer_info.iWidth {
+                yuv.push(*output[0].offset((i * buffer_info.iStride[0] + j) as isize));
             }
+        }
 
-            if ((*self.packet).size as usize) > (l as usize) {
-                (ffmpeg.av_shrink_packet)(self.packet, l as c_int);
+        for i in 0..buffer_info.iHeight / 2 {
+            for j in 0..buffer_info.iWidth / 2 {
+                yuv.push(*output[1].offset((i * buffer_info.iStride[1] + j) as isize));
             }
+        }
 
-            for i in 0..encoded_frame.data.len() {
-                (*self.packet).data.add(i).write(encoded_frame.data[i]);
+        for i in 0..buffer_info.iHeight / 2 {
+            for j in 0..buffer_info.iWidth / 2 {
+                yuv.push(*output[2].offset((i * buffer_info.iStride[1] + j) as isize));
             }
+        }
 
-            let ret = (ffmpeg.avcodec_send_packet)(self.context, self.packet);
-
-            if ret != 0 {
-                return Err(Error::DecoderError(
-                    format!("avcodec_send_packet returned: {}", ret).into(),
-                ));
-            }
-
-            let ret = (ffmpeg.avcodec_receive_frame)(self.context, self.yuv_frame);
-
-            if ret != 0 {
-                println!("avcodec_receive_frame returned: {}", ret);
-                return Ok(DecodedFrame::new(
-                    320,
-                    240,
-                    BitmapFormat::Rgb,
-                    vec![127; 320 * 240 * 3],
-                ));
-            }
-
-            println!("getting sizes");
-
-            let h = (*self.yuv_frame).height as usize;
-            let w = (*self.yuv_frame).width as usize;
-            let ls = (*self.yuv_frame).linesize[0] as usize;
-
-            const AV_PIX_FMT_YUV420P: c_int = 0;
-            const AV_PIX_FMT_RGB24: c_int = 2;
-            const SWS_BICUBIC: c_int = 4;
-
-            if self.sws_context == std::ptr::null_mut() {
-                println!("creating sws context");
-                self.sws_context = (ffmpeg.sws_getContext)(
-                    w as c_int,
-                    h as c_int,
-                    AV_PIX_FMT_YUV420P,
-                    w as c_int,
-                    h as c_int,
-                    AV_PIX_FMT_RGB24,
-                    SWS_BICUBIC,
-                    std::ptr::null(),
-                    std::ptr::null(),
-                    std::ptr::null(),
-                );
-                println!("created sws context");
-            }
-
-            let mut ls2: c_int = 320 * 4;
-            let mut rgb_data = vec![0u8; ls * h * 3];
-            let mut rgb_data_ptr = rgb_data.as_ptr();
-
-            let mut ls2s = vec![ls2; 1];
-            let mut rgb_data_ptrs = vec![rgb_data_ptr; 1];
-
-            /*
-            println!("scaling");
-
-            (ffmpeg.sws_scale)(
-                self.sws_context,
-                std::mem::transmute((*self.yuv_frame).data.as_ptr()),
-                (*self.yuv_frame).linesize.as_ptr(),
-                0,
-                h as c_int,
-                std::mem::transmute(rgb_data_ptrs.as_mut_ptr()),
-                ls2s.as_ptr(),
-            );
-            println!("scaled");
-            */
-
-            let c_w = (w + 1) / 2;
-            let c_h = (h + 1) / 2;
-
-            let mut data = Vec::with_capacity(w * h + 2 * c_w * c_h);
-
-            for y in 0..h {
-                for x in 0..w {
-                    let i = y * (*self.yuv_frame).linesize[0] as usize + x;
-                    data.push(*(*self.yuv_frame).data[0].add(i));
-                    //data.push(*(*self.yuv_frame).data[0].add(i));
-                    //data.push(*(*self.yuv_frame).data[0].add(i));
-                    //data.push(*(*self.yuv_frame).data[0].add(i));
-                }
-            }
-
-            for y in 0..c_h {
-                for x in 0..c_w {
-                    let i = y * (*self.yuv_frame).linesize[1] as usize + x;
-                    data.push(*(*self.yuv_frame).data[1].add(i));
-                }
-            }
-
-            for y in 0..c_h {
-                for x in 0..c_w {
-                    let i = y * (*self.yuv_frame).linesize[2] as usize + x;
-                    data.push(*(*self.yuv_frame).data[2].add(i));
-                }
-            }
 
             Ok(DecodedFrame::new(
-                w as u32,
-                h as u32,
+                buffer_info.iWidth as u32,
+                buffer_info.iHeight as u32,
                 BitmapFormat::Yuv420p,
-                data,
+                yuv,
             ))
         }
-    }
-}
-
-impl Default for H264Decoder {
-    fn default() -> Self {
-        Self::new()
     }
 }
