@@ -15,7 +15,7 @@ clap = { version = "4.4.13", features = ["derive"] }
 cpal = "0.15.2"
 egui = { workspace = true }
 egui_extras = { version = "0.24.2", features = ["image"] }
-egui-wgpu = { version = "0.24.1", features = ["winit"] }
+egui-wgpu = { git = "https://github.com/dinnerbone/egui", rev = "0faaa7289a365da8f20ebc6a1e0034d1ba16ae0f", features = ["winit"] }
 image = { version = "0.24", features = ["png"] }
 egui-winit = "0.24.1"
 fontdb = "0.16"

@@ -81,7 +81,7 @@ impl WgpuRenderBackend<SwapChainTarget> {
 
     #[cfg(not(target_family = "wasm"))]
     pub fn for_window<
-        W: raw_window_handle::HasRawWindowHandle + raw_window_handle::HasRawDisplayHandle,
+        W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     >(
         window: &W,
         size: (u32, u32),
@@ -99,7 +99,7 @@ impl WgpuRenderBackend<SwapChainTarget> {
             backends: backend,
             ..Default::default()
         });
-        let surface = unsafe { instance.create_surface(window) }?;
+        let surface = unsafe { instance.create_surface_from_raw(window) }?;
         let (adapter, device, queue) = futures::executor::block_on(request_adapter_and_device(
             backend,
             &instance,
@@ -114,14 +114,14 @@ impl WgpuRenderBackend<SwapChainTarget> {
 
     #[cfg(not(target_family = "wasm"))]
     pub fn recreate_surface<
-        W: raw_window_handle::HasRawWindowHandle + raw_window_handle::HasRawDisplayHandle,
+        W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     >(
         &mut self,
         window: &W,
         size: (u32, u32),
     ) -> Result<(), Error> {
         let descriptors = &self.descriptors;
-        let surface = unsafe { descriptors.wgpu_instance.create_surface(window) }?;
+        let surface = unsafe { descriptors.wgpu_instance.create_surface_from_raw(window) }?;
         self.target =
             SwapChainTarget::new(surface, &descriptors.adapter, size, &descriptors.device);
         Ok(())
@@ -1055,7 +1055,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
 pub async fn request_adapter_and_device(
     backend: wgpu::Backends,
     instance: &wgpu::Instance,
-    surface: Option<&wgpu::Surface>,
+    surface: Option<&wgpu::Surface<'static>>,
     power_preference: wgpu::PowerPreference,
     trace_path: Option<&Path>,
 ) -> Result<(wgpu::Adapter, wgpu::Device, wgpu::Queue), Error> {
@@ -1117,8 +1117,8 @@ async fn request_device(
         .request_device(
             &wgpu::DeviceDescriptor {
                 label: None,
-                features,
-                limits,
+                required_features: features,
+                required_limits: limits,
             },
             trace_path,
         )

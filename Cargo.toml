@@ -43,10 +43,10 @@ version = "0.1.0"
 [workspace.dependencies]
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
-naga = { version = "0.14.2", features = ["validate", "wgsl-out"] }
-naga_oil = "0.11.0"
-wgpu = "0.18.0"
-egui = "0.24.1"
+naga = { git = "https://github.com/gfx-rs/wgpu", rev = "4400a5847080d1164bdca93a90622414963ed9f3", features = ["wgsl-out"] }
+naga_oil = { git = "https://github.com/dinnerbone/naga_oil", rev = "b208fc42844adecd1906059d7712d89fc18b85a3"}
+wgpu = { git = "https://github.com/gfx-rs/wgpu", rev = "4400a5847080d1164bdca93a90622414963ed9f3" }
+egui = { git = "https://github.com/dinnerbone/egui", rev = "0faaa7289a365da8f20ebc6a1e0034d1ba16ae0f"}
 
 [workspace.lints.rust]
 # Clippy nightly often adds new/buggy lints that we want to ignore.
@@ -93,9 +93,3 @@ inherits = "release"
 
 [profile.web-wasm-extensions]
 inherits = "release"
-
-[patch.crates-io]
-# These are needed because https://github.com/gfx-rs/wgpu/pull/4778
-# is not yet in the latest wgpu release. TODO: Remove when it is.
-wgpu = { git = "https://github.com/gfx-rs/wgpu", branch = "v0.18" }
-naga = { git = "https://github.com/gfx-rs/wgpu", branch = "v0.18" }

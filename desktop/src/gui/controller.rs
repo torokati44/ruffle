@@ -30,7 +30,7 @@ pub struct GuiController {
     window: Rc<Window>,
     last_update: Instant,
     repaint_after: Duration,
-    surface: wgpu::Surface,
+    surface: wgpu::Surface<'static>,
     surface_format: wgpu::TextureFormat,
     movie_view_renderer: Arc<MovieViewRenderer>,
     // Note that `window.get_inner_size` can change at any point on x11, even between two lines of code.
