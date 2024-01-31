@@ -42,8 +42,8 @@ rand = { version = "0.8.5", features = ["std", "small_rng"], default-features = 
 serde = { version = "1.0.195", features = ["derive"] }
 serde_json = { version = "1.0", features = ["preserve_order"] }
 nellymoser-rs = { git = "https://github.com/ruffle-rs/nellymoser", rev = "4a33521c29a918950df8ae9fe07e527ac65553f5", optional = true }
-regress = "0.7"
-flash-lso = { git = "https://github.com/ruffle-rs/rust-flash-lso", rev = "2f976fb15b30aa4c5cb398710dc5e31a21004e57" }
+regress = "0.8"
+flash-lso = { git = "https://github.com/torokati44/rust-flash-lso", rev = "8a71c178426269d73001634267c688e1f7c660ba" }
 lzma-rs = {version = "0.3.0", optional = true }
 dasp = { version = "0.11.0", features = ["interpolate", "interpolate-linear", "signal"], optional = true }
 symphonia = { version = "0.5.3", default-features = false, features = ["mp3"], optional = true }

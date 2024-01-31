@@ -1737,7 +1737,7 @@ checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
 [[package]]
 name = "flash-lso"
 version = "0.6.0"
-source = "git+https://github.com/ruffle-rs/rust-flash-lso?rev=2f976fb15b30aa4c5cb398710dc5e31a21004e57#2f976fb15b30aa4c5cb398710dc5e31a21004e57"
+source = "git+https://github.com/torokati44/rust-flash-lso?rev=8a71c178426269d73001634267c688e1f7c660ba#8a71c178426269d73001634267c688e1f7c660ba"
 dependencies = [
  "cookie-factory",
  "enumset",
@@ -4137,11 +4137,11 @@ checksum = "c08c74e62047bb2de4ff487b251e4a92e24f48745648451635cec7d591162d9f"
 
 [[package]]
 name = "regress"
-version = "0.7.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ed9969cad8051328011596bf549629f1b800cf1731e7964b1eef8dfc480d2c2"
+checksum = "4f5f39ba4513916c1b2657b72af6ec671f091cd637992f58d0ede5cae4e5dea0"
 dependencies = [
- "hashbrown 0.13.2",
+ "hashbrown 0.14.3",
  "memchr",
 ]
 
