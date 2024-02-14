@@ -10,6 +10,7 @@ mod app;
 mod backends;
 mod cli;
 mod custom_event;
+mod egui_glyphon;
 mod executor;
 mod gui;
 mod player;

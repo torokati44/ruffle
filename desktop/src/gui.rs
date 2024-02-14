@@ -4,8 +4,12 @@ mod movie;
 mod open_dialog;
 
 pub use controller::GuiController;
+use glyphon::{Attrs, Family, FontSystem, Metrics, Shaping};
+use crate::egui_glyphon::{BufferWithTextArea, GlyphonRendererCallback};
 pub use movie::MovieView;
 use std::borrow::Cow;
+use std::ops::{Deref, DerefMut};
+use std::sync::{Arc, Mutex};
 use url::Url;
 
 use crate::custom_event::RuffleEvent;
@@ -42,6 +46,29 @@ pub fn text<'a>(locale: &LanguageIdentifier, id: &'a str) -> Cow<'a, str> {
         Cow::Borrowed(id)
     })
 }
+
+
+struct Buffer(glyphon::Buffer);
+
+impl AsRef<glyphon::Buffer> for Buffer {
+    fn as_ref(&self) -> &glyphon::Buffer {
+        &self.0
+    }
+}
+
+impl Deref for Buffer {
+    type Target = glyphon::Buffer;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Buffer {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 
 #[allow(dead_code)]
 pub fn text_with_args<'a, T: AsRef<str>>(
@@ -339,6 +366,22 @@ impl RuffleGui {
 
     /// Renders the About Ruffle window.
     fn about_window(&mut self, egui_ctx: &egui::Context) {
+
+
+    let mut font_system = FontSystem::new();
+    let mut buffer = Buffer(glyphon::Buffer::new(
+        &mut font_system,
+        Metrics::new(30.0, 42.0),
+    ));
+
+    buffer.set_size(&mut font_system, 16.0, 9.0);
+    buffer.set_text(&mut font_system, "<== Hello world! ==> 👋\nThis is rendered with 🦅 glyphon 🦁\nThe text below should be partially clipped.\na b c d e f g h i j k l m n o p q r s t u v w x y z", Attrs::new().family(Family::SansSerif), Shaping::Advanced);
+    buffer.shape_until_scroll(&mut font_system);
+
+        let font_system = Arc::new(Mutex::new(font_system));
+        let buffer = Arc::new(mutex::RwLock::new(buffer));
+        let size = 35.0;
+
         egui::Window::new(text(&self.locale, "about-ruffle"))
             .collapsible(false)
             .resizable(false)
@@ -354,6 +397,22 @@ impl RuffleGui {
                         .striped(true)
                         .show(ui, |ui| {
                             ui.label(text(&self.locale, "about-ruffle-version"));
+
+                            let size = Vec2::new(350.0, 200.0);
+
+                            let rect = Rect::from_min_size(ui.cursor().min, size);
+                            let buffers: Vec<BufferWithTextArea<Buffer>> = vec![BufferWithTextArea::new(
+                                std::sync::Arc::clone(&buffer),
+                                rect,
+                                1.0,
+                                glyphon::Color::rgb(255, 255, 255),
+                                ui.ctx(),
+                            )];
+                            ui.painter().add(egui_wgpu::Callback::new_paint_callback(
+                                ui.max_rect(),
+                                GlyphonRendererCallback { buffers },
+                            ));
+
                             ui.label(env!("CARGO_PKG_VERSION"));
                             ui.end_row();
 
