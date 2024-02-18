@@ -1,3 +1,5 @@
+//! This crate is for using [`glyphon`] to render advanced shaped text to the screen in an [`egui`] application
+//! Please see the example for a primer on how to use this crate
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
@@ -87,7 +89,7 @@ impl GlyphonRenderer {
             device,
             queue,
             wgpu_render_state.target_format,
-            ColorMode::Accurate,
+            ColorMode::Egui,
         );
         let text_renderer =
             TextRenderer::new(&mut atlas, device, wgpu::MultisampleState::default(), None);
@@ -104,12 +106,12 @@ impl GlyphonRenderer {
             });
     }
 
-    fn prepare<'a, A: AsRef<Buffer>, T: Deref<Target = A>>(
+    fn prepare<A: AsRef<Buffer>, T: Deref<Target = A>>(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         screen_resolution: Resolution,
-        text_areas: impl IntoIterator<Item = TextArea<'a>>,
+        text_areas: impl IntoIterator<Item = TextArea<A, T>>,
     ) -> Result<(), PrepareError> {
         self.text_renderer.prepare(
             device,
@@ -146,7 +148,8 @@ impl<T: AsRef<Buffer> + Send + Sync> egui_wgpu::CallbackTrait for GlyphonRendere
     ) -> Vec<wgpu::CommandBuffer> {
         let glyphon_renderer: &mut GlyphonRenderer = resources.get_mut().unwrap();
         glyphon_renderer.atlas.trim();
-        glyphon_renderer.prepare::<T, Buffer>(
+        glyphon_renderer
+            .prepare(
                 device,
                 queue,
                 Resolution {
@@ -154,10 +157,11 @@ impl<T: AsRef<Buffer> + Send + Sync> egui_wgpu::CallbackTrait for GlyphonRendere
                     height: screen_descriptor.size_in_pixels[1],
                 },
                 self.buffers.iter().map(|b| TextArea {
-                    buffer: &b.buffer.read().as_ref(),
+                    buffer: b.buffer.read(),
                     left: b.rect.left(),
                     top: b.rect.top(),
                     scale: b.scale,
+                    opacity: b.opacity,
                     bounds: TextBounds {
                         left: b.rect.left() as i32,
                         top: b.rect.top() as i32,

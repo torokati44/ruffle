@@ -5,11 +5,11 @@ mod open_dialog;
 
 pub use controller::GuiController;
 use glyphon::{Attrs, Family, FontSystem, Metrics, Shaping};
-use crate::egui_glyphon::{BufferWithTextArea, GlyphonRendererCallback};
+use crate::egui_glyphon::{self, BufferWithTextArea, GlyphonRendererCallback};
 pub use movie::MovieView;
 use std::borrow::Cow;
 use std::ops::{Deref, DerefMut};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use url::Url;
 
 use crate::custom_event::RuffleEvent;
@@ -48,28 +48,6 @@ pub fn text<'a>(locale: &LanguageIdentifier, id: &'a str) -> Cow<'a, str> {
 }
 
 
-struct Buffer(glyphon::Buffer);
-
-impl AsRef<glyphon::Buffer> for Buffer {
-    fn as_ref(&self) -> &glyphon::Buffer {
-        &self.0
-    }
-}
-
-impl Deref for Buffer {
-    type Target = glyphon::Buffer;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for Buffer {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-
 #[allow(dead_code)]
 pub fn text_with_args<'a, T: AsRef<str>>(
     locale: &LanguageIdentifier,
@@ -84,6 +62,32 @@ pub fn text_with_args<'a, T: AsRef<str>>(
             Cow::Borrowed(id)
         })
 }
+
+
+
+struct Buffer(egui_glyphon::glyphon::Buffer);
+
+impl AsRef<egui_glyphon::glyphon::Buffer> for Buffer {
+    fn as_ref(&self) -> &egui_glyphon::glyphon::Buffer {
+        &self.0
+    }
+}
+
+impl Deref for Buffer {
+    type Target = egui_glyphon::glyphon::Buffer;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Buffer {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+
+
 
 /// Size of the top menu bar in pixels.
 /// This is the offset at which the movie will be shown,
@@ -118,6 +122,8 @@ impl RuffleGui {
         let locale = preferred_locale
             .and_then(|l| l.parse().ok())
             .unwrap_or_else(|| US_ENGLISH.clone());
+
+
 
         Self {
             is_about_visible: false,
@@ -376,10 +382,10 @@ impl RuffleGui {
 
     buffer.set_size(&mut font_system, 16.0, 9.0);
     buffer.set_text(&mut font_system, "<== Hello world! ==> 👋\nThis is rendered with 🦅 glyphon 🦁\nThe text below should be partially clipped.\na b c d e f g h i j k l m n o p q r s t u v w x y z", Attrs::new().family(Family::SansSerif), Shaping::Advanced);
-    buffer.shape_until_scroll(&mut font_system);
+    buffer.shape_until_scroll(&mut font_system, false);
 
-        let font_system = Arc::new(Mutex::new(font_system));
-        let buffer = Arc::new(mutex::RwLock::new(buffer));
+        let font_system =  Arc::new(egui::mutex::Mutex::new(font_system));
+        let buffer = Arc::new(egui::mutex::RwLock::new(buffer));
         let size = 35.0;
 
         egui::Window::new(text(&self.locale, "about-ruffle"))

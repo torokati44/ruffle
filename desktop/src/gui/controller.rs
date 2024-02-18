@@ -1,16 +1,20 @@
 use crate::backends::DesktopUiBackend;
 use crate::cli::Opt;
 use crate::custom_event::RuffleEvent;
+use crate::egui_glyphon::GlyphonRenderer;
 use crate::gui::movie::{MovieView, MovieViewRenderer};
 use crate::gui::{RuffleGui, MENU_HEIGHT};
 use crate::player::{PlayerController, PlayerOptions};
 use anyhow::anyhow;
 use egui::{Context, ViewportId};
+use egui_wgpu::WgpuConfiguration;
 use fontdb::{Database, Family, Query, Source};
+use glyphon::FontSystem;
 use ruffle_core::Player;
 use ruffle_render_wgpu::backend::{request_adapter_and_device, WgpuRenderBackend};
 use ruffle_render_wgpu::descriptors::Descriptors;
 use ruffle_render_wgpu::utils::{format_list, get_backend_names};
+use tracing::Instrument;
 use std::rc::Rc;
 use std::sync::{Arc, MutexGuard};
 use std::time::{Duration, Instant};
@@ -108,7 +112,17 @@ impl GuiController {
         ));
         let egui_renderer = egui_wgpu::Renderer::new(&descriptors.device, surface_format, None, 1);
         let event_loop = event_loop.create_proxy();
+
+        let state = futures::executor::block_on(egui_wgpu::RenderState::create(&WgpuConfiguration::default()
+        , &descriptors.wgpu_instance, &surface, None, 1)).unwrap();
+
+
+            GlyphonRenderer::insert(&state, Arc::new(egui::mutex::Mutex::new(FontSystem::new())));
+
+
+
         let gui = RuffleGui::new(event_loop, opt.movie_url.clone(), PlayerOptions::from(opt));
+
         let system_fonts =
             load_system_fonts(font_database, gui.locale.to_owned()).unwrap_or_default();
         egui_winit.egui_ctx().set_fonts(system_fonts);
