@@ -1,7 +1,6 @@
 use crate::cli::Opt;
 use anyhow::{anyhow, Context, Error};
-use isahc::config::{Configurable, RedirectPolicy};
-use isahc::HttpClient;
+use reqwest::{Client, ClientBuilder};
 use ruffle_core::tag_utils::SwfMovie;
 use ruffle_core::PlayerBuilder;
 use ruffle_render_wgpu::backend::WgpuRenderBackend;
@@ -20,20 +19,14 @@ fn load_movie(url: &Url, opt: &Opt) -> Result<SwfMovie, Error> {
         .context("Couldn't load swf")?
     } else {
         let proxy = opt.proxy.as_ref().and_then(|url| url.as_str().parse().ok());
-        let builder = HttpClient::builder()
-            .proxy(proxy)
-            .redirect_policy(RedirectPolicy::Follow);
-        let client = builder.build().context("Couldn't create HTTP client")?;
-        let response = client
-            .get(url.to_string())
-            .with_context(|| format!("Couldn't load URL {url}"))?;
-        let mut buffer: Vec<u8> = Vec::new();
-        response
-            .into_body()
-            .read_to_end(&mut buffer)
-            .context("Couldn't read response from server")?;
+        let builder = Client::builder().proxy(proxy).redirect(reqwest::redirect::Policy::default());
 
-        SwfMovie::from_data(&buffer, url.to_string(), None)
+
+        let client = builder.build().context("Couldn't create HTTP client")?;
+        let response = client.get(url).build().with_context(|| format!("Couldn't load URL {url}"))?.body().unwrap().as_bytes().unwrap().to_vec();
+
+
+        SwfMovie::from_data(&response, url.to_string(), None)
             .map_err(|e| anyhow!(e.to_string()))
             .context("Couldn't load swf")?
     };

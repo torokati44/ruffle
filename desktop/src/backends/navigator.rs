@@ -5,13 +5,16 @@ use async_channel::{Receiver, Sender, TryRecvError};
 use async_io::Timer;
 use async_net::TcpStream;
 use futures::future::select;
-use futures::{AsyncReadExt, AsyncWriteExt};
+use futures::{AsyncReadExt, AsyncWriteExt, TryFutureExt};
 use futures_lite::FutureExt;
-use isahc::http::{HeaderName, HeaderValue};
+use reqwest::header::{HeaderName, HeaderValue};
+/*
 use isahc::{
     config::RedirectPolicy, prelude::*, AsyncBody, AsyncReadResponseExt, HttpClient,
     Request as IsahcRequest, Response as IsahcResponse,
 };
+*/
+use reqwest::{Body, Client, Proxy, Response};
 use rfd::{AsyncMessageDialog, MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
 use ruffle_core::backend::navigator::{
     async_return, create_fetch_error, create_specific_fetch_error, ErrorResponse, NavigationMethod,
@@ -41,7 +44,7 @@ pub struct ExternalNavigatorBackend<F: FutureSpawner> {
     base_url: Url,
 
     // Client to use for network requests
-    client: Option<Rc<HttpClient>>,
+    client: Option<Rc<Client>>,
 
     socket_allowed: HashSet<String>,
 
@@ -64,11 +67,12 @@ impl<F: FutureSpawner> ExternalNavigatorBackend<F> {
         socket_allowed: HashSet<String>,
         socket_mode: SocketMode,
     ) -> Self {
-        let proxy = proxy.and_then(|url| url.as_str().parse().ok());
-        let builder = HttpClient::builder()
-            .proxy(proxy)
-            .cookies()
-            .redirect_policy(RedirectPolicy::Follow);
+        let mut builder = Client::builder();
+        if let Some(proxy) = proxy {
+            builder = builder.proxy(Proxy::all(proxy).unwrap());
+        }
+            builder.cookie_store(true)
+            .redirect(reqwest::redirect::Policy::default());
 
         let client = builder.build().ok().map(Rc::new);
 
@@ -177,7 +181,7 @@ impl<F: FutureSpawner> NavigatorBackend for ExternalNavigatorBackend<F> {
             /// This has to be stored in shared ownership so that we can return
             /// owned futures. A synchronous lock is used here as we do not
             /// expect contention on this lock.
-            Network(Arc<Mutex<IsahcResponse<AsyncBody>>>),
+            Network(Arc<Mutex<Response>>),
         }
 
         struct DesktopResponse {
@@ -203,13 +207,18 @@ impl<F: FutureSpawner> NavigatorBackend for ExternalNavigatorBackend<F> {
                         Ok(body)
                     }),
                     DesktopResponseBody::Network(response) => Box::pin(async move {
-                        let mut body = vec![];
-                        response
+
+                        let bytes = response
                             .lock()
                             .expect("working lock during fetch body read")
-                            .copy_to(&mut body)
+                            .bytes()
                             .await
-                            .map_err(|e| Error::FetchError(e.to_string()))?;
+                            .map_err(|e| Error::FetchError(e.to_string()))?
+                            .bytes();
+
+                        let body = bytes
+                            .map(|b| b.map_err(|e| Error::FetchError(e.to_string())))
+                            .collect::<Result<Vec<u8>, Error>>()?;
 
                         Ok(body)
                     }),
@@ -375,11 +384,11 @@ impl<F: FutureSpawner> NavigatorBackend for ExternalNavigatorBackend<F> {
                 })?;
 
                 let mut isahc_request = match request.method() {
-                    NavigationMethod::Get => IsahcRequest::get(processed_url.to_string()),
-                    NavigationMethod::Post => IsahcRequest::post(processed_url.to_string()),
+                    NavigationMethod::Get => Request::get(processed_url.to_string()),
+                    NavigationMethod::Post => Request::post(processed_url.to_string(), None),
                 };
                 let (body_data, mime) = request.body().clone().unwrap_or_default();
-                if let Some(headers) = isahc_request.headers_mut() {
+                if let Some(headers) = isahc_request.headers() {
                     for (name, val) in request.headers().iter() {
                         headers.insert(
                             HeaderName::from_str(name).map_err(|e| ErrorResponse {
