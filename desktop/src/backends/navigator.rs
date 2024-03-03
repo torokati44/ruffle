@@ -8,12 +8,6 @@ use futures::future::select;
 use futures::{AsyncReadExt, AsyncWriteExt, TryFutureExt};
 use futures_lite::FutureExt;
 use reqwest::header::{HeaderName, HeaderValue};
-/*
-use isahc::{
-    config::RedirectPolicy, prelude::*, AsyncBody, AsyncReadResponseExt, HttpClient,
-    Request as IsahcRequest, Response as IsahcResponse,
-};
-*/
 use reqwest::{Body, Client, Proxy, Response};
 use rfd::{AsyncMessageDialog, MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
 use ruffle_core::backend::navigator::{
@@ -383,12 +377,13 @@ impl<F: FutureSpawner> NavigatorBackend for ExternalNavigatorBackend<F> {
                     error: Error::FetchError("Network unavailable".to_string()),
                 })?;
 
-                let mut isahc_request = match request.method() {
+                let mut reqwest_request = match request.method() {
                     NavigationMethod::Get => Request::get(processed_url.to_string()),
                     NavigationMethod::Post => Request::post(processed_url.to_string(), None),
                 };
                 let (body_data, mime) = request.body().clone().unwrap_or_default();
-                if let Some(headers) = isahc_request.headers() {
+                /*
+                if let Some(headers) = reqwest_request.headers() {
                     for (name, val) in request.headers().iter() {
                         headers.insert(
                             HeaderName::from_str(name).map_err(|e| ErrorResponse {
@@ -408,15 +403,16 @@ impl<F: FutureSpawner> NavigatorBackend for ExternalNavigatorBackend<F> {
                             error: Error::FetchError(e.to_string()),
                         })?,
                     );
-                }
+                }*/
 
-                let body = isahc_request.body(body_data).map_err(|e| ErrorResponse {
+                let body = reqwest_request.body(body_data).map_err(|e| ErrorResponse {
                     url: processed_url.to_string(),
                     error: Error::FetchError(e.to_string()),
                 })?;
 
-                let response = client.send_async(body).await.map_err(|e| {
+                let response = client .send(body).await.map_err(|e| {
                     let inner = match e.kind() {
+
                         isahc::error::ErrorKind::NameResolution => {
                             Error::InvalidDomain(processed_url.to_string())
                         }
