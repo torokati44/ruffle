@@ -16,6 +16,7 @@
         "serve": "webpack-dev-server",
         "test": "wdio"
     },
+    "type": "module",
     "dependencies": {
         "ruffle-core": "^0.1.0"
     },

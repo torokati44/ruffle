@@ -1,7 +1,7 @@
-const { openTest, injectRuffleAndWait } = require("../../utils");
-const { expect, use } = require("chai");
-const chaiHtml = require("chai-html");
-const fs = require("fs");
+import { openTest, injectRuffleAndWait } from "../../utils.js";
+import { expect, use } from "chai";
+import chaiHtml from "chai-html";
+import fs from "fs";
 
 use(chaiHtml);
 
