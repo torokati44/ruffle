@@ -63,6 +63,7 @@ unknown-git = "deny"
 [sources.allow-org]
 #  github.com organizations to allow git sources for
 github = [
+    "torokati44",
     "ruffle-rs",
 ]
 
