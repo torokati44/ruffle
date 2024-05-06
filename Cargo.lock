@@ -4586,6 +4586,7 @@ dependencies = [
  "slotmap",
  "swf",
  "tracing",
+ "web-sys",
 ]
 
 [[package]]
@@ -4625,6 +4626,7 @@ dependencies = [
  "ruffle_render_canvas",
  "ruffle_render_webgl",
  "ruffle_render_wgpu",
+ "ruffle_video_external",
  "ruffle_video_software",
  "ruffle_web_common",
  "serde",

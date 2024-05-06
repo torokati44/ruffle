@@ -26,7 +26,7 @@ use ruffle_core::{
     StageScaleMode, StaticCallstack, ViewportDimensions,
 };
 use ruffle_render::quality::StageQuality;
-use ruffle_video_software::backend::SoftwareVideoBackend;
+use ruffle_video_external::backend::ExternalVideoBackend;
 use ruffle_web_common::JsResult;
 use serde::{Deserialize, Serialize};
 use slotmap::{DefaultKey, SlotMap};
@@ -677,7 +677,7 @@ impl Ruffle {
         let core = builder
             .with_log(log_adapter::WebLogBackend::new(trace_observer.clone()))
             .with_ui(ui::WebUiBackend::new(js_player.clone(), &canvas))
-            .with_video(SoftwareVideoBackend::new())
+            .with_video(ExternalVideoBackend::new(None))
             .with_letterbox(config.letterbox)
             .with_max_execution_duration(config.max_execution_duration)
             .with_player_version(config.player_version)

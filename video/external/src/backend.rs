@@ -1,5 +1,7 @@
 use crate::decoder::VideoDecoder;
+#[cfg(not(target_arch = "wasm32"))]
 use bzip2::read::BzDecoder;
+#[cfg(not(target_arch = "wasm32"))]
 use md5::{Digest, Md5};
 use ruffle_render::backend::RenderBackend;
 use ruffle_render::bitmap::{BitmapHandle, BitmapInfo, PixelRegion};
@@ -39,6 +41,8 @@ impl Default for ExternalVideoBackend {
 }
 
 impl ExternalVideoBackend {
+
+    #[cfg(not(target_arch = "wasm32"))]
     fn get_openh264_data() -> Result<(&'static str, &'static str), Box<dyn std::error::Error>> {
         // Source: https://github.com/cisco/openh264/releases/tag/v2.4.1
         match (std::env::consts::OS, std::env::consts::ARCH) {
@@ -78,6 +82,8 @@ impl ExternalVideoBackend {
         }
     }
 
+
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn get_openh264() -> Result<PathBuf, Box<dyn std::error::Error>> {
         // See the license at: https://www.openh264.org/BINARY_LICENSE.txt
         const URL_BASE: &str = "http://ciscobinary.openh264.org/";
@@ -134,12 +140,18 @@ impl VideoBackend for ExternalVideoBackend {
     ) -> Result<VideoStreamHandle, Error> {
         let proxy_or_stream = if codec == VideoCodec::H264 {
             let openh264 = &self.openh264_lib_filepath;
+
+            #[cfg(not(target_arch = "wasm32"))]
             if let Some(openh264) = openh264 {
                 tracing::info!("Using OpenH264 at {:?}", openh264);
                 let decoder = Box::new(crate::decoder::openh264::H264Decoder::new(openh264));
                 let stream = VideoStream::new(decoder);
                 ProxyOrStream::Owned(stream)
             } else {
+                return Err(Error::DecoderError("No OpenH264".into()));
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
                 return Err(Error::DecoderError("No OpenH264".into()));
             }
         } else {
