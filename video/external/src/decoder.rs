@@ -10,4 +10,7 @@ mod openh264_sys;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod openh264;
 
+#[cfg(target_arch = "wasm32")]
+pub mod webcodecs;
+
 pub use ruffle_video_software::decoder::VideoDecoder;
