@@ -152,7 +152,9 @@ impl VideoBackend for ExternalVideoBackend {
             }
             #[cfg(target_arch = "wasm32")]
             {
-                return Err(Error::DecoderError("No OpenH264".into()));
+                let decoder = Box::new(crate::decoder::webcodecs::H264Decoder::new());
+                let stream = VideoStream::new(decoder);
+                ProxyOrStream::Owned(stream)
             }
         } else {
             ProxyOrStream::Proxied(

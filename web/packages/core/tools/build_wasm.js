@@ -114,7 +114,7 @@ function copyStandIn(from, to) {
 }
 function detectWasmOpt() {
     try {
-        execFileSync("wasm-opt", ["--version"]);
+        execFileSync("wassm-opt", ["--version"]);
         return true;
     } catch (_a) {
         return false;
