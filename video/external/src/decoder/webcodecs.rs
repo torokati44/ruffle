@@ -34,12 +34,28 @@ impl H264Decoder {
         // TODO: set up tracing log subscriber into these closures
         let output = move |output: &VideoFrame| {
             tracing::warn!("webcodecs output frame");
-            assert!(output.format().unwrap() == VideoPixelFormat::I420);
-            //let options = VideoFrameCopyToOptions::new();
             let visible_rect = output.visible_rect().unwrap();
-            let mut data : Vec<u8> = vec![0; visible_rect.width() as usize * visible_rect.height() as usize * 3 / 2];
-            output.copy_to_with_u8_array(&mut data);
-            last_frame.replace(Some(DecodedFrame::new(visible_rect.width() as u32, visible_rect.height() as u32,BitmapFormat::Yuv420p, data)));
+            //let options = VideoFrameCopyToOptions::new();
+
+            match output.format().unwrap() {
+                VideoPixelFormat::I420 => {
+                    let mut data : Vec<u8> = vec![0; visible_rect.width() as usize * visible_rect.height() as usize * 3 / 2];
+                    output.copy_to_with_u8_array(&mut data);
+                    last_frame.replace(Some(DecodedFrame::new(visible_rect.width() as u32, visible_rect.height() as u32,BitmapFormat::Yuv420p, data)));
+                }
+                VideoPixelFormat::Bgrx => {
+                    let mut data : Vec<u8> = vec![0; visible_rect.width() as usize * visible_rect.height() as usize * 4];
+                    output.copy_to_with_u8_array(&mut data);
+                    for pixel in data.chunks_mut(4) {
+                        pixel.swap(0, 2);
+                        pixel[3] = 0xff;
+                    }
+                    last_frame.replace(Some(DecodedFrame::new(visible_rect.width() as u32, visible_rect.height() as u32,BitmapFormat::Rgba, data)));
+                }
+                _ => {
+                    assert!(false, "unsupported pixel format: {:?}", output.format().unwrap());
+                }
+            };
         };
 
         fn error(error: &DomException) {
