@@ -1,11 +1,14 @@
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::decoder::VideoDecoder;
 
 use ruffle_render::bitmap::BitmapFormat;
 use ruffle_video::error::Error;
 use ruffle_video::frame::{DecodedFrame, EncodedFrame, FrameDependency};
 
-use web_sys::{DomException, EncodedVideoChunk, EncodedVideoChunkInit, EncodedVideoChunkType, VideoDecoder as WebVideoDecoder, VideoDecoderConfig, VideoDecoderInit, VideoFrame};
+use web_sys::{DomException, EncodedVideoChunk, EncodedVideoChunkInit, EncodedVideoChunkType, VideoDecoder as WebVideoDecoder, VideoDecoderConfig, VideoDecoderInit, VideoFrame, VideoPixelFormat, VideoFrameCopyToOptions};
 use js_sys::{Function, Uint8Array};
 use wasm_bindgen::prelude::*;
 
@@ -17,6 +20,8 @@ pub struct H264Decoder {
     length_size: u8,
 
     decoder: WebVideoDecoder,
+
+    last_frame: Rc<RefCell<Option<DecodedFrame>>>,
 }
 
 impl H264Decoder {
@@ -24,11 +29,18 @@ impl H264Decoder {
     /// Make sure it has any start code emulation prevention "three bytes" removed.
     pub fn new() -> Self {
 
-
+        let mut last_frame = Rc::new(RefCell::new(None));
+        let mut lf = last_frame.clone();
         // TODO: set up tracing log subscriber into these closures
-        fn output(output: &VideoFrame) {
+        let output = move |output: &VideoFrame| {
             tracing::warn!("webcodecs output frame");
-        }
+            assert!(output.format().unwrap() == VideoPixelFormat::I420);
+            //let options = VideoFrameCopyToOptions::new();
+            let visible_rect = output.visible_rect().unwrap();
+            let mut data : Vec<u8> = vec![0; visible_rect.width() as usize * visible_rect.height() as usize * 3 / 2];
+            output.copy_to_with_u8_array(&mut data);
+            last_frame.replace(Some(DecodedFrame::new(visible_rect.width() as u32, visible_rect.height() as u32,BitmapFormat::Yuv420p, data)));
+        };
 
         fn error(error: &DomException) {
             tracing::error!("webcodecs error {:}", error.message());
@@ -44,6 +56,7 @@ impl H264Decoder {
         Self {
             length_size: 0,
             decoder,
+            last_frame: lf
         }
     }
 }
@@ -148,8 +161,11 @@ impl VideoDecoder for H264Decoder {
 
         assert!(offset == encoded_frame.data.len(), "Incomplete NALu at the end");
 
-        return Err(Error::DecoderError(
-            "No output frame produced by the decoder".into(),
-        ));
+        match self.last_frame.borrow_mut().take() {
+            Some(frame) => Ok(frame),
+            None => Err(Error::DecoderError(
+                "No output frame produced by the decoder".into(),
+            )),
+        }
     }
 }
