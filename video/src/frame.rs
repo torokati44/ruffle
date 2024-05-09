@@ -12,6 +12,8 @@ pub struct EncodedFrame<'a> {
     /// A caller-specified frame ID. Frame IDs must be consistent between
     /// subsequent uses of the same data stream.
     pub frame_id: u32,
+
+    pub time_offset: i32,
 }
 
 impl<'a> EncodedFrame<'a> {
