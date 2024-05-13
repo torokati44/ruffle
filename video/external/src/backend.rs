@@ -7,7 +7,7 @@ use ruffle_render::backend::RenderBackend;
 use ruffle_render::bitmap::{BitmapHandle, BitmapInfo, PixelRegion};
 use ruffle_video::backend::VideoBackend;
 use ruffle_video::error::Error;
-use ruffle_video::frame::{EncodedFrame, FrameDependency};
+use ruffle_video::frame::{EncodedFrame, DecodedFrame, FrameDependency};
 use ruffle_video::VideoStreamHandle;
 use ruffle_video_software::backend::SoftwareVideoBackend;
 use slotmap::SlotMap;
@@ -34,7 +34,7 @@ enum ProxyOrStream {
 pub struct ExternalVideoBackend {
     streams: SlotMap<VideoStreamHandle, ProxyOrStream>,
     openh264_lib_filepath: Option<PathBuf>,
-    video_frame_callback: Option<Box<dyn FnMut(VideoFrame)>>,
+//    video_frame_callback: Option<Box<dyn FnMut(VideoFrame)>>,
     software: SoftwareVideoBackend,
 }
 
@@ -127,7 +127,6 @@ impl ExternalVideoBackend {
         Self {
             streams: SlotMap::with_key(),
             openh264_lib_filepath,
-            video_frame_callback,
             software: SoftwareVideoBackend::new(),
         }
     }
@@ -158,12 +157,9 @@ impl VideoBackend for ExternalVideoBackend {
             #[cfg(target_arch = "wasm32")]
             {
                 let decoder = Box::new(crate::decoder::webcodecs::H264Decoder::new(
-                    move |bitmap| {
-
-                    tracing::warn!("format: {:?}", bitmap.format());
-                    assert!(bitmap.format() == Some(web_sys::VideoPixelFormat::I420));
-                    assert!(bitmap.format() == Some(web_sys::VideoPixelFormat::Bgrx));
-                    }
+                    Box::new(move |frame: DecodedFrame| {
+                        assert!(false);
+                    })
                 ));
                 let stream = VideoStream::new(decoder);
                 ProxyOrStream::Owned(stream)

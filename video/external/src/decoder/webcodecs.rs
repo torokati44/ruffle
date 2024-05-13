@@ -1,5 +1,5 @@
 
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::rc::Rc;
 
 use crate::decoder::VideoDecoder;
@@ -11,7 +11,7 @@ use ruffle_video::frame::{DecodedFrame, EncodedFrame, FrameDependency};
 use ruffle_video::VideoStreamHandle;
 use web_sys::{DomException, EncodedVideoChunk, EncodedVideoChunkInit, EncodedVideoChunkType, VideoDecoder as WebVideoDecoder, VideoDecoderConfig, VideoDecoderInit, VideoFrame, VideoPixelFormat, VideoFrameCopyToOptions};
 use js_sys::{Function, Uint8Array};
-use wasm_bindgen::prelude::*;
+use wasm_bindgen::{prelude::*, JsObject};
 
 
 
@@ -21,59 +21,72 @@ pub struct H264Decoder {
     length_size: u8,
 
     decoder: WebVideoDecoder,
+
+    // this is called by JS, kept for refkeeping purposes
+    output_callback: Closure<dyn Fn(VideoFrame)>,
+    error_callback: Closure<dyn Fn(DomException)>,
+
+    last_frame: Rc<RefCell<Vec<u8>>>,
 }
-use std::sync::mpsc::channel;
 
 impl H264Decoder {
     /// `extradata` should hold "AVCC (MP4) format" decoder configuration, including PPS and SPS.
     /// Make sure it has any start code emulation prevention "three bytes" removed.
-    pub fn new(callback: impl Fn(VideoFrame) + 'static) -> Self {
-/*
-        fn output(output: VideoFrame) {
+    pub fn new(callback: Box<dyn Fn(DecodedFrame)>) -> Self {
+
+        let mut last_frame = Rc::new(RefCell::new(vec![]));
+        let mut lf2 = last_frame.clone();
+        let cb2 = Rc::new(RefCell::new(callback));
+
+        let output = move |frame: VideoFrame| {
             tracing::warn!("webcodecs output frame");
-            let visible_rect = output.visible_rect().unwrap();
-            //let options = VideoFrameCopyToOptions::new();
+            let visible_rect = frame.visible_rect().unwrap();
+            let visible_rect2 = frame.visible_rect().unwrap();
 
-            let then = move |layout| {
-                let data = vec![];
-                tracing::warn!("webcodecs output frame {:#?}", layout);
-                callback(DecodedFrame::new(0, 0,BitmapFormat::Yuv420p, data));
+            let mut lf3 = lf2.clone();
+            let mut cb3 = cb2.clone();
+
+            let done = move |layout: JsValue| {
+                let data = lf3.as_ref().borrow_mut();
+                let cb = cb3.as_ref().borrow_mut();
+                let frame = DecodedFrame::new(visible_rect2.width() as u32, visible_rect2.height() as u32, BitmapFormat::Yuv420p, data.clone());
+                cb(frame);
             };
-            // TODO: set up tracing log subscriber into these closures
 
+            let copy_done_callback = Closure::<dyn FnMut(JsValue) + 'static>::new(done);
 
-            let t = Closure::<dyn FnMut(JsValue)>::new(then);
-
-            match output.format().unwrap() {
+            match frame.format().unwrap() {
                 VideoPixelFormat::I420 => {
-                    let mut data : Vec<u8> = vec![0; visible_rect.width() as usize * visible_rect.height() as usize * 3 / 2];
-                    output.copy_to_with_u8_array(&mut data).then(&t);
+                    let mut data = lf2.as_ref().borrow_mut();
+                    data.resize(visible_rect.width() as usize * visible_rect.height() as usize * 3 / 2, 0);
+                    let _ = frame.copy_to_with_u8_array(&mut data).then(&copy_done_callback);
                 }
                 _ => {
-                    assert!(false, "unsupported pixel format: {:?}", output.format().unwrap());
+                    assert!(false, "unsupported pixel format: {:?}", frame.format().unwrap());
                 }
             };
 
 
-            t.forget();
+            copy_done_callback.forget(); // TODO: not leak!
 
         };
-*/
 
-        fn error(error: DomException) {
+
+        let error = |error: DomException| {
             tracing::error!("webcodecs error {:}", error.message());
-        }
+        };
 
-        let o = Closure::<dyn Fn(VideoFrame)>::new(callback);
-        let e = Closure::<dyn Fn(DomException)>::new(error);
+        let output_callback = Closure::<dyn Fn(VideoFrame)>::new(output);
+        let error_callback = Closure::<dyn Fn(DomException)>::new(error);
 
-        let decoder = WebVideoDecoder::new(&VideoDecoderInit::new(e.as_ref().unchecked_ref(), o.as_ref().unchecked_ref())).unwrap();
+        let decoder = WebVideoDecoder::new(&VideoDecoderInit::new(error_callback.as_ref().unchecked_ref(), output_callback.as_ref().unchecked_ref())).unwrap();
 
-        e.forget();
-        o.forget();
         Self {
             length_size: 0,
             decoder,
+            output_callback,
+            error_callback,
+            last_frame,
         }
     }
 }

@@ -86,7 +86,6 @@ struct RuffleInstance {
     key_up_callback: Option<Closure<dyn FnMut(KeyboardEvent)>>,
     paste_callback: Option<Closure<dyn FnMut(ClipboardEvent)>>,
     unload_callback: Option<Closure<dyn FnMut(Event)>>,
-    video_frame_callback: Option<Closure<dyn FnMut(VideoFrame)>>,
     has_focus: bool,
     trace_observer: Rc<RefCell<JsValue>>,
     log_subscriber: Arc<Layered<WASMLayer, Registry>>,
@@ -675,7 +674,7 @@ impl Ruffle {
                 .with_fs_commands(interface);
         }
 
-
+        /*
         let video_frame_callback = Closure::new(move |
             bitmap: VideoFrame
             | {
@@ -687,6 +686,8 @@ impl Ruffle {
                 core.renderer_mut().update_texture(&handle, bitmap, PixelRegion::for_whole_size(bitmap.width(), bitmap.height()));
             });*/
         });
+
+        */
 
         let trace_observer = Rc::new(RefCell::new(JsValue::UNDEFINED));
         let core = builder
@@ -806,7 +807,6 @@ impl Ruffle {
             key_up_callback: None,
             paste_callback: None,
             unload_callback: None,
-            video_frame_callback: None,
             timestamp: None,
             has_focus: false,
             trace_observer,
@@ -1124,7 +1124,7 @@ impl Ruffle {
             instance.unload_callback = Some(unload_callback);
 
 
-            instance.video_frame_callback = Some(video_frame_callback);
+            //instance.video_frame_callback = Some(video_frame_callback);
         })?;
 
         // Set initial timestamp and do initial tick to start animation loop.
