@@ -4,10 +4,11 @@ use std::rc::Rc;
 
 use crate::decoder::VideoDecoder;
 
-use ruffle_render::bitmap::BitmapFormat;
+use ruffle_render::bitmap::{BitmapFormat, BitmapHandle};
 use ruffle_video::error::Error;
 use ruffle_video::frame::{DecodedFrame, EncodedFrame, FrameDependency};
 
+use ruffle_video::VideoStreamHandle;
 use web_sys::{DomException, EncodedVideoChunk, EncodedVideoChunkInit, EncodedVideoChunkType, VideoDecoder as WebVideoDecoder, VideoDecoderConfig, VideoDecoderInit, VideoFrame, VideoPixelFormat, VideoFrameCopyToOptions};
 use js_sys::{Function, Uint8Array};
 use wasm_bindgen::prelude::*;
@@ -20,50 +21,51 @@ pub struct H264Decoder {
     length_size: u8,
 
     decoder: WebVideoDecoder,
-
-    last_frame: Rc<RefCell<Option<DecodedFrame>>>,
 }
+use std::sync::mpsc::channel;
 
 impl H264Decoder {
     /// `extradata` should hold "AVCC (MP4) format" decoder configuration, including PPS and SPS.
     /// Make sure it has any start code emulation prevention "three bytes" removed.
-    pub fn new() -> Self {
+    pub fn new(callback: impl Fn(DecodedFrame) + 'static) -> Self {
 
-        let mut last_frame = Rc::new(RefCell::new(None));
-        let mut lf = last_frame.clone();
-        // TODO: set up tracing log subscriber into these closures
-        let output = move |output: &VideoFrame| {
+        fn output(output: VideoFrame) {
             tracing::warn!("webcodecs output frame");
             let visible_rect = output.visible_rect().unwrap();
             //let options = VideoFrameCopyToOptions::new();
 
+            let then = move |layout| {
+                let data = vec![];
+                tracing::warn!("webcodecs output frame {:#?}", layout);
+                callback(DecodedFrame::new(0, 0,BitmapFormat::Yuv420p, data));
+            };
+            // TODO: set up tracing log subscriber into these closures
+
+
+            let t = Closure::<dyn FnMut(JsValue)>::new(then);
+
             match output.format().unwrap() {
                 VideoPixelFormat::I420 => {
                     let mut data : Vec<u8> = vec![0; visible_rect.width() as usize * visible_rect.height() as usize * 3 / 2];
-                    output.copy_to_with_u8_array(&mut data);
-                    last_frame.replace(Some(DecodedFrame::new(visible_rect.width() as u32, visible_rect.height() as u32,BitmapFormat::Yuv420p, data)));
-                }
-                VideoPixelFormat::Bgrx => {
-                    let mut data : Vec<u8> = vec![0; visible_rect.width() as usize * visible_rect.height() as usize * 4];
-                    output.copy_to_with_u8_array(&mut data);
-                    for pixel in data.chunks_mut(4) {
-                        pixel.swap(0, 2);
-                        pixel[3] = 0xff;
-                    }
-                    last_frame.replace(Some(DecodedFrame::new(visible_rect.width() as u32, visible_rect.height() as u32,BitmapFormat::Rgba, data)));
+                    output.copy_to_with_u8_array(&mut data).then(&t);
                 }
                 _ => {
                     assert!(false, "unsupported pixel format: {:?}", output.format().unwrap());
                 }
             };
+
+
+            t.forget();
+
         };
 
-        fn error(error: &DomException) {
+
+        fn error(error: DomException) {
             tracing::error!("webcodecs error {:}", error.message());
         }
 
-        let o = Closure::<dyn Fn(VideoFrame)>::new(move |o| output(&o));
-        let e = Closure::<dyn Fn(DomException)>::new(move |e| error(&e));
+        let o = Closure::<dyn Fn(VideoFrame)>::new(output);
+        let e = Closure::<dyn Fn(DomException)>::new(error);
 
         let decoder = WebVideoDecoder::new(&VideoDecoderInit::new(e.as_ref().unchecked_ref(), o.as_ref().unchecked_ref())).unwrap();
 
@@ -72,7 +74,6 @@ impl H264Decoder {
         Self {
             length_size: 0,
             decoder,
-            last_frame: lf
         }
     }
 }
@@ -177,11 +178,6 @@ impl VideoDecoder for H264Decoder {
 
         assert!(offset == encoded_frame.data.len(), "Incomplete NALu at the end");
 
-        match self.last_frame.borrow_mut().take() {
-            Some(frame) => Ok(frame),
-            None => Err(Error::DecoderError(
-                "No output frame produced by the decoder".into(),
-            )),
-        }
+        Err(Error::DecoderError("asd".into()))
     }
 }

@@ -20,11 +20,12 @@ use ruffle_core::external::{
     Value,
 };
 use ruffle_core::tag_utils::SwfMovie;
-use ruffle_core::{swf, DefaultFont};
+use ruffle_core::{bitmap, swf, DefaultFont};
 use ruffle_core::{
     Color, Player, PlayerBuilder, PlayerEvent, PlayerRuntime, SandboxType, StageAlign,
     StageScaleMode, StaticCallstack, ViewportDimensions,
 };
+use ruffle_render::bitmap::{BitmapHandle, PixelRegion};
 use ruffle_render::quality::StageQuality;
 use ruffle_video_external::backend::ExternalVideoBackend;
 use ruffle_web_common::JsResult;
@@ -85,6 +86,7 @@ struct RuffleInstance {
     key_up_callback: Option<Closure<dyn FnMut(KeyboardEvent)>>,
     paste_callback: Option<Closure<dyn FnMut(ClipboardEvent)>>,
     unload_callback: Option<Closure<dyn FnMut(Event)>>,
+    video_frame_callback: Option<Closure<dyn FnMut(BitmapHandle, DecodedFrame)>>,
     has_focus: bool,
     trace_observer: Rc<RefCell<JsValue>>,
     log_subscriber: Arc<Layered<WASMLayer, Registry>>,
@@ -784,6 +786,7 @@ impl Ruffle {
             key_up_callback: None,
             paste_callback: None,
             unload_callback: None,
+            video_frame_callback: None,
             timestamp: None,
             has_focus: false,
             trace_observer,
@@ -1099,6 +1102,16 @@ impl Ruffle {
                 )
                 .warn_on_error();
             instance.unload_callback = Some(unload_callback);
+
+
+            let video_frame_callback = Closure::new(move |
+                handle: BitmapHandle, bitmap: Bitmap
+                | {
+                let _ = ruffle.with_core_mut(|core| {
+                    core.renderer_mut().update_texture(&handle, bitmap, PixelRegion::for_whole_size(bitmap.width(), bitmap.height()));
+                });
+            });
+            instance.video_frame_callback = Some(video_frame_callback);
         })?;
 
         // Set initial timestamp and do initial tick to start animation loop.

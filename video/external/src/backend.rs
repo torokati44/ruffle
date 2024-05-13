@@ -152,7 +152,11 @@ impl VideoBackend for ExternalVideoBackend {
             }
             #[cfg(target_arch = "wasm32")]
             {
-                let decoder = Box::new(crate::decoder::webcodecs::H264Decoder::new());
+                let decoder = Box::new(crate::decoder::webcodecs::H264Decoder::new(
+                    move |bitmap| {
+
+                    }
+                ));
                 let stream = VideoStream::new(decoder);
                 ProxyOrStream::Owned(stream)
             }
