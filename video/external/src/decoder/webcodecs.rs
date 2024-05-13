@@ -27,8 +27,8 @@ use std::sync::mpsc::channel;
 impl H264Decoder {
     /// `extradata` should hold "AVCC (MP4) format" decoder configuration, including PPS and SPS.
     /// Make sure it has any start code emulation prevention "three bytes" removed.
-    pub fn new(callback: impl Fn(DecodedFrame) + 'static) -> Self {
-
+    pub fn new(callback: impl Fn(VideoFrame) + 'static) -> Self {
+/*
         fn output(output: VideoFrame) {
             tracing::warn!("webcodecs output frame");
             let visible_rect = output.visible_rect().unwrap();
@@ -58,13 +58,13 @@ impl H264Decoder {
             t.forget();
 
         };
-
+*/
 
         fn error(error: DomException) {
             tracing::error!("webcodecs error {:}", error.message());
         }
 
-        let o = Closure::<dyn Fn(VideoFrame)>::new(output);
+        let o = Closure::<dyn Fn(VideoFrame)>::new(callback);
         let e = Closure::<dyn Fn(DomException)>::new(error);
 
         let decoder = WebVideoDecoder::new(&VideoDecoderInit::new(e.as_ref().unchecked_ref(), o.as_ref().unchecked_ref())).unwrap();

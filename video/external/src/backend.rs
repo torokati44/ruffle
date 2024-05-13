@@ -11,10 +11,13 @@ use ruffle_video::frame::{EncodedFrame, FrameDependency};
 use ruffle_video::VideoStreamHandle;
 use ruffle_video_software::backend::SoftwareVideoBackend;
 use slotmap::SlotMap;
+use web_sys::VideoFrame;
 use std::fs::File;
 use std::io::copy;
 use std::path::PathBuf;
 use swf::{VideoCodec, VideoDeblocking};
+
+use wasm_bindgen::prelude::*;
 
 enum ProxyOrStream {
     /// These streams are passed through to the wrapped software
@@ -31,12 +34,13 @@ enum ProxyOrStream {
 pub struct ExternalVideoBackend {
     streams: SlotMap<VideoStreamHandle, ProxyOrStream>,
     openh264_lib_filepath: Option<PathBuf>,
+    video_frame_callback: Option<Box<dyn FnMut(VideoFrame)>>,
     software: SoftwareVideoBackend,
 }
 
 impl Default for ExternalVideoBackend {
     fn default() -> Self {
-        Self::new(None)
+        Self::new(None, None)
     }
 }
 
@@ -119,10 +123,11 @@ impl ExternalVideoBackend {
         Ok(filepath)
     }
 
-    pub fn new(openh264_lib_filepath: Option<PathBuf>) -> Self {
+    pub fn new(openh264_lib_filepath: Option<PathBuf>, video_frame_callback: Option<Box<dyn FnMut(VideoFrame)>>) -> Self {
         Self {
             streams: SlotMap::with_key(),
             openh264_lib_filepath,
+            video_frame_callback,
             software: SoftwareVideoBackend::new(),
         }
     }
@@ -155,6 +160,9 @@ impl VideoBackend for ExternalVideoBackend {
                 let decoder = Box::new(crate::decoder::webcodecs::H264Decoder::new(
                     move |bitmap| {
 
+                    tracing::warn!("format: {:?}", bitmap.format());
+                    assert!(bitmap.format() == Some(web_sys::VideoPixelFormat::I420));
+                    assert!(bitmap.format() == Some(web_sys::VideoPixelFormat::Bgrx));
                     }
                 ));
                 let stream = VideoStream::new(decoder);

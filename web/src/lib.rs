@@ -45,7 +45,7 @@ use url::Url;
 use wasm_bindgen::prelude::*;
 use web_sys::{
     AddEventListenerOptions, ClipboardEvent, Element, Event, EventTarget, HtmlCanvasElement,
-    HtmlElement, KeyboardEvent, PointerEvent, WheelEvent, Window,
+    HtmlElement, KeyboardEvent, PointerEvent, WheelEvent, Window, VideoFrame
 };
 
 static RUFFLE_GLOBAL_PANIC: Once = Once::new();
@@ -86,7 +86,7 @@ struct RuffleInstance {
     key_up_callback: Option<Closure<dyn FnMut(KeyboardEvent)>>,
     paste_callback: Option<Closure<dyn FnMut(ClipboardEvent)>>,
     unload_callback: Option<Closure<dyn FnMut(Event)>>,
-    video_frame_callback: Option<Closure<dyn FnMut(BitmapHandle, DecodedFrame)>>,
+    video_frame_callback: Option<Closure<dyn FnMut(VideoFrame)>>,
     has_focus: bool,
     trace_observer: Rc<RefCell<JsValue>>,
     log_subscriber: Arc<Layered<WASMLayer, Registry>>,
@@ -675,11 +675,31 @@ impl Ruffle {
                 .with_fs_commands(interface);
         }
 
+
+        let video_frame_callback = Closure::new(move |
+            bitmap: VideoFrame
+            | {
+                tracing::warn!("format: {:?}", bitmap.format());
+                assert!(bitmap.format() == Some(web_sys::VideoPixelFormat::I420));
+                assert!(bitmap.format() == Some(web_sys::VideoPixelFormat::Bgrx));
+
+            /*let _ = ruffle.with_core_mut(|core| {
+                core.renderer_mut().update_texture(&handle, bitmap, PixelRegion::for_whole_size(bitmap.width(), bitmap.height()));
+            });*/
+        });
+
         let trace_observer = Rc::new(RefCell::new(JsValue::UNDEFINED));
         let core = builder
             .with_log(log_adapter::WebLogBackend::new(trace_observer.clone()))
             .with_ui(ui::WebUiBackend::new(js_player.clone(), &canvas))
-            .with_video(ExternalVideoBackend::new(None))
+            .with_video(ExternalVideoBackend::new(None,
+                Some(Box::new(|bitmap: VideoFrame| {
+
+                tracing::warn!("format: {:?}", bitmap.format());
+                assert!(bitmap.format() == Some(web_sys::VideoPixelFormat::I420));
+                assert!(bitmap.format() == Some(web_sys::VideoPixelFormat::Bgrx));
+                }))
+            ))
             .with_letterbox(config.letterbox)
             .with_max_execution_duration(config.max_execution_duration)
             .with_player_version(config.player_version)
@@ -1104,13 +1124,6 @@ impl Ruffle {
             instance.unload_callback = Some(unload_callback);
 
 
-            let video_frame_callback = Closure::new(move |
-                handle: BitmapHandle, bitmap: Bitmap
-                | {
-                let _ = ruffle.with_core_mut(|core| {
-                    core.renderer_mut().update_texture(&handle, bitmap, PixelRegion::for_whole_size(bitmap.width(), bitmap.height()));
-                });
-            });
             instance.video_frame_callback = Some(video_frame_callback);
         })?;
 
