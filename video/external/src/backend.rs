@@ -34,7 +34,7 @@ enum ProxyOrStream {
 pub struct ExternalVideoBackend {
     streams: SlotMap<VideoStreamHandle, ProxyOrStream>,
     openh264_lib_filepath: Option<PathBuf>,
-//    video_frame_callback: Option<Box<dyn FnMut(VideoFrame)>>,
+    video_frame_callback: Option<Box<dyn Fn(VideoStreamHandle, DecodedFrame)>>,
     software: SoftwareVideoBackend,
 }
 
@@ -123,10 +123,11 @@ impl ExternalVideoBackend {
         Ok(filepath)
     }
 
-    pub fn new(openh264_lib_filepath: Option<PathBuf>, video_frame_callback: Option<Box<dyn FnMut(VideoFrame)>>) -> Self {
+    pub fn new(openh264_lib_filepath: Option<PathBuf>, video_frame_callback: Option<Box<dyn Fn(VideoStreamHandle, DecodedFrame)>>) -> Self {
         Self {
             streams: SlotMap::with_key(),
             openh264_lib_filepath,
+            video_frame_callback,
             software: SoftwareVideoBackend::new(),
         }
     }
@@ -156,13 +157,24 @@ impl VideoBackend for ExternalVideoBackend {
             }
             #[cfg(target_arch = "wasm32")]
             {
-                let decoder = Box::new(crate::decoder::webcodecs::H264Decoder::new(
-                    Box::new(move |frame: DecodedFrame| {
-                        assert!(false);
-                    })
-                ));
-                let stream = VideoStream::new(decoder);
-                ProxyOrStream::Owned(stream)
+                let mut cb = self.video_frame_callback.as_ref().clone();
+
+
+                return Ok(self.streams.insert_with_key(move |stream_handle| {
+                    let sh = stream_handle;
+
+                    let mut cb2 = cb.clone();
+
+                    let cbb = Box::new(move |frame: DecodedFrame| {
+                        println!("{:?}", sh);
+                        //println!("{:?}", cb2.is_some());
+                    });
+
+                    let decoder = Box::new(crate::decoder::webcodecs::H264Decoder::new(cbb));
+                    let stream = VideoStream::new(decoder);
+                    let owned = ProxyOrStream::Owned(stream);
+                    owned
+                }));
             }
         } else {
             ProxyOrStream::Proxied(

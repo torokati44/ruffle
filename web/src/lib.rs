@@ -694,11 +694,8 @@ impl Ruffle {
             .with_log(log_adapter::WebLogBackend::new(trace_observer.clone()))
             .with_ui(ui::WebUiBackend::new(js_player.clone(), &canvas))
             .with_video(ExternalVideoBackend::new(None,
-                Some(Box::new(|bitmap: VideoFrame| {
+                Some(Box::new(|_, _| {
 
-                tracing::warn!("format: {:?}", bitmap.format());
-                assert!(bitmap.format() == Some(web_sys::VideoPixelFormat::I420));
-                assert!(bitmap.format() == Some(web_sys::VideoPixelFormat::Bgrx));
                 }))
             ))
             .with_letterbox(config.letterbox)

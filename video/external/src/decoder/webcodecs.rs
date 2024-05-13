@@ -26,7 +26,7 @@ pub struct H264Decoder {
     output_callback: Closure<dyn Fn(VideoFrame)>,
     error_callback: Closure<dyn Fn(DomException)>,
 
-    last_frame: Rc<RefCell<Vec<u8>>>,
+    last_frame: Rc<RefCell<Option<DecodedFrame>>>,
 }
 
 impl H264Decoder {
@@ -34,7 +34,7 @@ impl H264Decoder {
     /// Make sure it has any start code emulation prevention "three bytes" removed.
     pub fn new(callback: Box<dyn Fn(DecodedFrame)>) -> Self {
 
-        let mut last_frame = Rc::new(RefCell::new(vec![]));
+        let mut last_frame = Rc::new(RefCell::new(None));
         let mut lf2 = last_frame.clone();
         let cb2 = Rc::new(RefCell::new(callback));
 
@@ -47,19 +47,20 @@ impl H264Decoder {
             let mut cb3 = cb2.clone();
 
             let done = move |layout: JsValue| {
-                let data = lf3.as_ref().borrow_mut();
+                let mut frame = lf3.as_ref().borrow_mut();
                 let cb = cb3.as_ref().borrow_mut();
-                let frame = DecodedFrame::new(visible_rect2.width() as u32, visible_rect2.height() as u32, BitmapFormat::Yuv420p, data.clone());
-                cb(frame);
+                if let Some(frame) = frame.take() {
+                    cb(frame);
+                }
             };
 
             let copy_done_callback = Closure::<dyn FnMut(JsValue) + 'static>::new(done);
 
             match frame.format().unwrap() {
                 VideoPixelFormat::I420 => {
-                    let mut data = lf2.as_ref().borrow_mut();
-                    data.resize(visible_rect.width() as usize * visible_rect.height() as usize * 3 / 2, 0);
-                    let _ = frame.copy_to_with_u8_array(&mut data).then(&copy_done_callback);
+                    let mut bitmap = lf2.as_ref().borrow_mut();
+                    bitmap.replace(DecodedFrame::new(visible_rect.width() as u32, visible_rect.height() as u32, BitmapFormat::Yuv420p, vec![0; visible_rect.width() as usize * visible_rect.height() as usize * 3 / 2]));
+                    let _ = frame.copy_to_with_u8_array(&mut bitmap.as_mut().unwrap().data_mut()).then(&copy_done_callback);
                 }
                 _ => {
                     assert!(false, "unsupported pixel format: {:?}", frame.format().unwrap());
