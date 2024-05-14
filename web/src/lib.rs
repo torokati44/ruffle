@@ -943,7 +943,7 @@ impl Ruffle {
                 });
             });
 
-            let cb = Some(Box::new(move |video_handle, bitmap: Bitmap| {
+            let cb = Some(Box::new(move |video_handle, mut bitmap: Bitmap| {
                 ruffle.with_instance(|instance| {
                     let _ = instance.with_core_mut(|core| {
                         let mut evb = core.video_mut().downcast_mut::<ExternalVideoBackend>().unwrap();
@@ -952,18 +952,26 @@ impl Ruffle {
                         drop(evb);
 
                         let handle = if let Some(bitmap_h) = bmh.clone() {
+                            bitmap = bitmap.to_rgb();
                             let region = PixelRegion::for_whole_size(bitmap.width(), bitmap.height());
                             tracing::warn!("bitmap size: {}x{}", bitmap.width(), bitmap.height());
-                            core.renderer_mut().update_texture(&bitmap_h, bitmap, region);
+                            tracing::warn!("format: {:?}", bitmap.format());
+                            tracing::warn!("top left pixel: {:?}", &bitmap.data()[0..4]);
+
+                            core.renderer_mut().update_texture(&bitmap_h, bitmap, region).unwrap();
                             bitmap_h
                         } else {
+                            bitmap = bitmap.to_rgb();
                             tracing::warn!("new bitmap size: {}x{}", bitmap.width(), bitmap.height());
+                            tracing::warn!("format: {:?}", bitmap.format());
+                            tracing::warn!("top left pixel: {:?}", &bitmap.data()[0..4]);
+
                             core.renderer_mut().register_bitmap(bitmap).unwrap()
                         };
+                        tracing::warn!("handle: {:?}", handle);
 
                         let mut evb = core.video_mut().downcast_mut::<ExternalVideoBackend>().unwrap();
                         evb.set_bitmap_of(video_handle, handle.clone());
-
                     });
                 });
             }));

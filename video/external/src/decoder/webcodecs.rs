@@ -34,7 +34,7 @@ impl H264Decoder {
     /// Make sure it has any start code emulation prevention "three bytes" removed.
     pub fn new(callback: Rc<RefCell<dyn Fn(DecodedFrame)>>) -> Self {
 
-        let mut last_frame = Rc::new(RefCell::new(None));
+        let mut last_frame = Rc::new(RefCell::new(None::<DecodedFrame>));
         let mut lf2 = last_frame.clone();
 
         let output = move |frame: VideoFrame| {
@@ -48,8 +48,8 @@ impl H264Decoder {
             let done = move |layout: JsValue| {
                 let mut frame = lf3.as_ref().borrow_mut();
                 let cb = cb3.as_ref().borrow_mut();
-                if let Some(frame) = frame.take() {
-                    cb(frame);
+                if let Some(frame) = frame.as_ref() {
+                    cb(frame.clone());
                 }
             };
 
@@ -196,6 +196,6 @@ impl VideoDecoder for H264Decoder {
 
         assert!(offset == encoded_frame.data.len(), "Incomplete NALu at the end");
 
-        Err(Error::DecoderError("asd".into()))
+        self.last_frame.borrow().as_ref().map(|frame| frame.clone()).ok_or(Error::DecoderError("asd".into()))
     }
 }
