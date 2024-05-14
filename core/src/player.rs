@@ -1772,6 +1772,14 @@ impl Player {
         &mut self.audio
     }
 
+    pub fn video(&self) -> &Video {
+        &self.video
+    }
+
+    pub fn video_mut(&mut self) -> &mut Video {
+        &mut self.video
+    }
+
     pub fn navigator(&self) -> &Navigator {
         &self.navigator
     }

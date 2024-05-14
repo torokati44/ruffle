@@ -32,11 +32,10 @@ pub struct H264Decoder {
 impl H264Decoder {
     /// `extradata` should hold "AVCC (MP4) format" decoder configuration, including PPS and SPS.
     /// Make sure it has any start code emulation prevention "three bytes" removed.
-    pub fn new(callback: Box<dyn Fn(DecodedFrame)>) -> Self {
+    pub fn new(callback: Rc<RefCell<dyn Fn(DecodedFrame)>>) -> Self {
 
         let mut last_frame = Rc::new(RefCell::new(None));
         let mut lf2 = last_frame.clone();
-        let cb2 = Rc::new(RefCell::new(callback));
 
         let output = move |frame: VideoFrame| {
             tracing::warn!("webcodecs output frame");
@@ -44,7 +43,7 @@ impl H264Decoder {
             let visible_rect2 = frame.visible_rect().unwrap();
 
             let mut lf3 = lf2.clone();
-            let mut cb3 = cb2.clone();
+            let mut cb3 = callback.clone();
 
             let done = move |layout: JsValue| {
                 let mut frame = lf3.as_ref().borrow_mut();
@@ -60,6 +59,11 @@ impl H264Decoder {
                 VideoPixelFormat::I420 => {
                     let mut bitmap = lf2.as_ref().borrow_mut();
                     bitmap.replace(DecodedFrame::new(visible_rect.width() as u32, visible_rect.height() as u32, BitmapFormat::Yuv420p, vec![0; visible_rect.width() as usize * visible_rect.height() as usize * 3 / 2]));
+                    let _ = frame.copy_to_with_u8_array(&mut bitmap.as_mut().unwrap().data_mut()).then(&copy_done_callback);
+                }
+                VideoPixelFormat::Bgrx => {
+                    let mut bitmap = lf2.as_ref().borrow_mut();
+                    bitmap.replace(DecodedFrame::new(visible_rect.width() as u32, visible_rect.height() as u32, BitmapFormat::Rgba, vec![0; visible_rect.width() as usize * visible_rect.height() as usize * 4]));
                     let _ = frame.copy_to_with_u8_array(&mut bitmap.as_mut().unwrap().data_mut()).then(&copy_done_callback);
                 }
                 _ => {

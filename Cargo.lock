@@ -4565,6 +4565,7 @@ dependencies = [
 name = "ruffle_video"
 version = "0.1.0"
 dependencies = [
+ "downcast-rs",
  "ruffle_render",
  "slotmap",
  "swf",

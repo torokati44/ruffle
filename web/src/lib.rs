@@ -25,12 +25,13 @@ use ruffle_core::{
     Color, Player, PlayerBuilder, PlayerEvent, PlayerRuntime, SandboxType, StageAlign,
     StageScaleMode, StaticCallstack, ViewportDimensions,
 };
-use ruffle_render::bitmap::{BitmapHandle, PixelRegion};
+use ruffle_render::bitmap::{Bitmap, BitmapHandle, PixelRegion};
 use ruffle_render::quality::StageQuality;
 use ruffle_video_external::backend::ExternalVideoBackend;
 use ruffle_web_common::JsResult;
 use serde::{Deserialize, Serialize};
 use slotmap::{DefaultKey, SlotMap};
+use std::borrow::BorrowMut;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -575,7 +576,7 @@ impl Ruffle {
 
     pub fn set_trace_observer(&self, observer: JsValue) {
         let _ = self.with_instance(|instance| {
-            *instance.trace_observer.borrow_mut() = observer;
+            *std::cell::RefCell::<_>::borrow_mut(&instance.trace_observer) = observer;
         });
     }
 
@@ -693,11 +694,7 @@ impl Ruffle {
         let core = builder
             .with_log(log_adapter::WebLogBackend::new(trace_observer.clone()))
             .with_ui(ui::WebUiBackend::new(js_player.clone(), &canvas))
-            .with_video(ExternalVideoBackend::new(None,
-                Some(Box::new(|_, _| {
-
-                }))
-            ))
+            .with_video(ExternalVideoBackend::new(None, None))
             .with_letterbox(config.letterbox)
             .with_max_execution_duration(config.max_execution_duration)
             .with_player_version(config.player_version)
@@ -945,6 +942,38 @@ impl Ruffle {
                     instance.has_focus = false;
                 });
             });
+
+            let cb = Some(Box::new(move |video_handle, bitmap: Bitmap| {
+                ruffle.with_instance(|instance| {
+                    let _ = instance.with_core_mut(|core| {
+                        let mut evb = core.video_mut().downcast_mut::<ExternalVideoBackend>().unwrap();
+
+                        let bmh = evb.get_bitmap_of(video_handle);
+                        drop(evb);
+
+                        let handle = if let Some(bitmap_h) = bmh.clone() {
+                            let region = PixelRegion::for_whole_size(bitmap.width(), bitmap.height());
+                            tracing::warn!("bitmap size: {}x{}", bitmap.width(), bitmap.height());
+                            core.renderer_mut().update_texture(&bitmap_h, bitmap, region);
+                            bitmap_h
+                        } else {
+                            tracing::warn!("new bitmap size: {}x{}", bitmap.width(), bitmap.height());
+                            core.renderer_mut().register_bitmap(bitmap).unwrap()
+                        };
+
+                        let mut evb = core.video_mut().downcast_mut::<ExternalVideoBackend>().unwrap();
+                        evb.set_bitmap_of(video_handle, handle.clone());
+
+                    });
+                });
+            }));
+
+            let cb = Rc::new(RefCell::new(cb.unwrap()));
+
+            instance.with_core_mut(|core| {
+                core.video_mut().downcast_mut::<ExternalVideoBackend>().unwrap().video_frame_callback = cb.clone();
+            });
+
 
             window
                 .add_event_listener_with_callback_and_bool(

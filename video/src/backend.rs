@@ -5,13 +5,16 @@ use ruffle_render::backend::RenderBackend;
 use ruffle_render::bitmap::BitmapInfo;
 use swf::{VideoCodec, VideoDeblocking};
 
+use downcast_rs::impl_downcast;
+use downcast_rs::Downcast;
+
 /// A backend that provides access to some number of video decoders.
 ///
 /// Implementations of `VideoBackend` are not required to actually support
 /// decoding any video formats. However, they must interoperate with at least
 /// one `RenderBackend` so that renderable video frames may be passed from the
 /// decoder to the renderer.
-pub trait VideoBackend {
+pub trait VideoBackend: Downcast {
     /// Register a new video stream.
     ///
     /// Most of the parameters provided to this function are advisory: the
@@ -75,3 +78,5 @@ pub trait VideoBackend {
         renderer: &mut dyn RenderBackend,
     ) -> Result<BitmapInfo, Error>;
 }
+
+impl_downcast!(VideoBackend);

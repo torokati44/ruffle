@@ -12,9 +12,11 @@ use ruffle_video::VideoStreamHandle;
 use ruffle_video_software::backend::SoftwareVideoBackend;
 use slotmap::SlotMap;
 use web_sys::VideoFrame;
+use std::cell::RefCell;
 use std::fs::File;
 use std::io::copy;
 use std::path::PathBuf;
+use std::rc::Rc;
 use swf::{VideoCodec, VideoDeblocking};
 
 use wasm_bindgen::prelude::*;
@@ -34,7 +36,7 @@ enum ProxyOrStream {
 pub struct ExternalVideoBackend {
     streams: SlotMap<VideoStreamHandle, ProxyOrStream>,
     openh264_lib_filepath: Option<PathBuf>,
-    video_frame_callback: Option<Box<dyn Fn(VideoStreamHandle, DecodedFrame)>>,
+    pub video_frame_callback: Rc<RefCell<dyn Fn(VideoStreamHandle, DecodedFrame)>>,
     software: SoftwareVideoBackend,
 }
 
@@ -45,6 +47,24 @@ impl Default for ExternalVideoBackend {
 }
 
 impl ExternalVideoBackend {
+
+    pub fn get_bitmap_of(&self, stream: VideoStreamHandle) -> Option<BitmapHandle> {
+        self.streams.get(stream).and_then(|stream| {
+            if let ProxyOrStream::Owned(stream) = stream {
+                stream.bitmap.clone()
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn set_bitmap_of(&mut self, stream: VideoStreamHandle, bitmap: BitmapHandle) {
+        if let Some(stream) = self.streams.get_mut(stream) {
+            if let ProxyOrStream::Owned(stream) = stream {
+                stream.bitmap = Some(bitmap);
+            }
+        }
+    }
 
     #[cfg(not(target_arch = "wasm32"))]
     fn get_openh264_data() -> Result<(&'static str, &'static str), Box<dyn std::error::Error>> {
@@ -127,7 +147,7 @@ impl ExternalVideoBackend {
         Self {
             streams: SlotMap::with_key(),
             openh264_lib_filepath,
-            video_frame_callback,
+            video_frame_callback: Rc::new(RefCell::new(|_,_| {})),
             software: SoftwareVideoBackend::new(),
         }
     }
@@ -157,20 +177,21 @@ impl VideoBackend for ExternalVideoBackend {
             }
             #[cfg(target_arch = "wasm32")]
             {
-                let mut cb = self.video_frame_callback.as_ref().clone();
-
+                let mut cb = self.video_frame_callback.clone();
 
                 return Ok(self.streams.insert_with_key(move |stream_handle| {
                     let sh = stream_handle;
 
                     let mut cb2 = cb.clone();
+                    let cb2 = move |frame| {
+                        let cb = cb2.borrow_mut();
+                        cb(sh, frame);
+                    };
 
-                    let cbb = Box::new(move |frame: DecodedFrame| {
-                        println!("{:?}", sh);
-                        //println!("{:?}", cb2.is_some());
-                    });
+                    let cbrc = Rc::new(RefCell::new(cb2));
 
-                    let decoder = Box::new(crate::decoder::webcodecs::H264Decoder::new(cbb));
+
+                    let decoder = Box::new(crate::decoder::webcodecs::H264Decoder::new(cbrc));
                     let stream = VideoStream::new(decoder);
                     let owned = ProxyOrStream::Owned(stream);
                     owned
