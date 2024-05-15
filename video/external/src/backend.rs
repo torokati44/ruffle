@@ -7,11 +7,10 @@ use ruffle_render::backend::RenderBackend;
 use ruffle_render::bitmap::{BitmapHandle, BitmapInfo, PixelRegion};
 use ruffle_video::backend::VideoBackend;
 use ruffle_video::error::Error;
-use ruffle_video::frame::{EncodedFrame, DecodedFrame, FrameDependency};
+use ruffle_video::frame::{DecodedFrame, EncodedFrame, FrameDependency};
 use ruffle_video::VideoStreamHandle;
 use ruffle_video_software::backend::SoftwareVideoBackend;
 use slotmap::SlotMap;
-use web_sys::VideoFrame;
 use std::cell::RefCell;
 use std::fs::File;
 use std::io::copy;
@@ -19,6 +18,10 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use swf::{VideoCodec, VideoDeblocking};
 
+#[cfg(target_arch = "wasm32")]
+use web_sys::VideoFrame;
+
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
 enum ProxyOrStream {
@@ -47,7 +50,6 @@ impl Default for ExternalVideoBackend {
 }
 
 impl ExternalVideoBackend {
-
     pub fn get_bitmap_of(&self, stream: VideoStreamHandle) -> Option<BitmapHandle> {
         self.streams.get(stream).and_then(|stream| {
             if let ProxyOrStream::Owned(stream) = stream {
@@ -106,7 +108,6 @@ impl ExternalVideoBackend {
         }
     }
 
-
     #[cfg(not(target_arch = "wasm32"))]
     pub fn get_openh264() -> Result<PathBuf, Box<dyn std::error::Error>> {
         // See the license at: https://www.openh264.org/BINARY_LICENSE.txt
@@ -143,11 +144,14 @@ impl ExternalVideoBackend {
         Ok(filepath)
     }
 
-    pub fn new(openh264_lib_filepath: Option<PathBuf>, video_frame_callback: Option<Box<dyn Fn(VideoStreamHandle, DecodedFrame)>>) -> Self {
+    pub fn new(
+        openh264_lib_filepath: Option<PathBuf>,
+        video_frame_callback: Option<Box<dyn Fn(VideoStreamHandle, DecodedFrame)>>,
+    ) -> Self {
         Self {
             streams: SlotMap::with_key(),
             openh264_lib_filepath,
-            video_frame_callback: Rc::new(RefCell::new(|_,_| {})),
+            video_frame_callback: Rc::new(RefCell::new(|_, _| {})),
             software: SoftwareVideoBackend::new(),
         }
     }
@@ -189,7 +193,6 @@ impl VideoBackend for ExternalVideoBackend {
                     };
 
                     let cbrc = Rc::new(RefCell::new(cb2));
-
 
                     let decoder = Box::new(crate::decoder::webcodecs::H264Decoder::new(cbrc));
                     let stream = VideoStream::new(decoder);

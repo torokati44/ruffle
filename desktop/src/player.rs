@@ -233,7 +233,7 @@ impl ActivePlayer {
                     }
                 };
 
-                builder = builder.with_video(ExternalVideoBackend::new(openh264_path));
+                builder = builder.with_video(ExternalVideoBackend::new(openh264_path, None));
             }
         } else {
             #[cfg(feature = "software_video")]

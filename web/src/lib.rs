@@ -46,7 +46,7 @@ use url::Url;
 use wasm_bindgen::prelude::*;
 use web_sys::{
     AddEventListenerOptions, ClipboardEvent, Element, Event, EventTarget, HtmlCanvasElement,
-    HtmlElement, KeyboardEvent, PointerEvent, WheelEvent, Window, VideoFrame
+    HtmlElement, KeyboardEvent, PointerEvent, VideoFrame, WheelEvent, Window,
 };
 
 static RUFFLE_GLOBAL_PANIC: Once = Once::new();
@@ -946,23 +946,33 @@ impl Ruffle {
             let cb = Some(Box::new(move |video_handle, mut bitmap: Bitmap| {
                 ruffle.with_instance(|instance| {
                     let _ = instance.with_core_mut(|core| {
-                        let mut evb = core.video_mut().downcast_mut::<ExternalVideoBackend>().unwrap();
+                        let mut evb = core
+                            .video_mut()
+                            .downcast_mut::<ExternalVideoBackend>()
+                            .unwrap();
 
                         let bmh = evb.get_bitmap_of(video_handle);
                         drop(evb);
 
                         let handle = if let Some(bitmap_h) = bmh.clone() {
                             bitmap = bitmap.to_rgb();
-                            let region = PixelRegion::for_whole_size(bitmap.width(), bitmap.height());
+                            let region =
+                                PixelRegion::for_whole_size(bitmap.width(), bitmap.height());
                             tracing::warn!("bitmap size: {}x{}", bitmap.width(), bitmap.height());
                             tracing::warn!("format: {:?}", bitmap.format());
                             tracing::warn!("top left pixel: {:?}", &bitmap.data()[0..4]);
 
-                            core.renderer_mut().update_texture(&bitmap_h, bitmap, region).unwrap();
+                            core.renderer_mut()
+                                .update_texture(&bitmap_h, bitmap, region)
+                                .unwrap();
                             bitmap_h
                         } else {
                             bitmap = bitmap.to_rgb();
-                            tracing::warn!("new bitmap size: {}x{}", bitmap.width(), bitmap.height());
+                            tracing::warn!(
+                                "new bitmap size: {}x{}",
+                                bitmap.width(),
+                                bitmap.height()
+                            );
                             tracing::warn!("format: {:?}", bitmap.format());
                             tracing::warn!("top left pixel: {:?}", &bitmap.data()[0..4]);
 
@@ -970,7 +980,10 @@ impl Ruffle {
                         };
                         tracing::warn!("handle: {:?}", handle);
 
-                        let mut evb = core.video_mut().downcast_mut::<ExternalVideoBackend>().unwrap();
+                        let mut evb = core
+                            .video_mut()
+                            .downcast_mut::<ExternalVideoBackend>()
+                            .unwrap();
                         evb.set_bitmap_of(video_handle, handle.clone());
                     });
                 });
@@ -979,9 +992,11 @@ impl Ruffle {
             let cb = Rc::new(RefCell::new(cb.unwrap()));
 
             instance.with_core_mut(|core| {
-                core.video_mut().downcast_mut::<ExternalVideoBackend>().unwrap().video_frame_callback = cb.clone();
+                core.video_mut()
+                    .downcast_mut::<ExternalVideoBackend>()
+                    .unwrap()
+                    .video_frame_callback = cb.clone();
             });
-
 
             window
                 .add_event_listener_with_callback_and_bool(
@@ -1156,7 +1171,6 @@ impl Ruffle {
                 )
                 .warn_on_error();
             instance.unload_callback = Some(unload_callback);
-
 
             //instance.video_frame_callback = Some(video_frame_callback);
         })?;
