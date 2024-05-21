@@ -181,24 +181,36 @@ impl VideoBackend for ExternalVideoBackend {
             }
             #[cfg(target_arch = "wasm32")]
             {
-                let mut cb = self.video_frame_callback.clone();
+                if JsValue::from_str("VideoDecoder").js_in(&web_sys::window().unwrap().into()) {
+                    tracing::info!("Using WebCodecs");
+                    let mut cb = self.video_frame_callback.clone();
 
-                return Ok(self.streams.insert_with_key(move |stream_handle| {
-                    let sh = stream_handle;
+                    return Ok(self.streams.insert_with_key(move |stream_handle| {
+                        let sh = stream_handle;
 
-                    let mut cb2 = cb.clone();
-                    let cb2 = move |frame| {
-                        let cb = cb2.borrow_mut();
-                        cb(sh, frame);
-                    };
+                        let mut cb2 = cb.clone();
+                        let cb2 = move |frame| {
+                            let cb = cb2.borrow_mut();
+                            cb(sh, frame);
+                        };
 
-                    let cbrc = Rc::new(RefCell::new(cb2));
+                        let cbrc = Rc::new(RefCell::new(cb2));
 
-                    let decoder = Box::new(crate::decoder::webcodecs::H264Decoder::new(cbrc));
+                        let decoder = Box::new(crate::decoder::webcodecs::H264Decoder::new(cbrc));
+                        let stream = VideoStream::new(decoder);
+                        let owned = ProxyOrStream::Owned(stream);
+                        owned
+                    }));
+                }
+                else {
+                    tracing::info!("Using MSE");
+
+
+                    let decoder = Box::new(crate::decoder::mse::H264Decoder::new());
                     let stream = VideoStream::new(decoder);
                     let owned = ProxyOrStream::Owned(stream);
-                    owned
-                }));
+                    return Ok(self.streams.insert(owned));
+                }
             }
         } else {
             ProxyOrStream::Proxied(
