@@ -155,12 +155,38 @@ impl VideoDecoder for H264Decoder {
     fn preload_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<FrameDependency, Error> {
         tracing::warn!("preloading frame");
 
-        let nal_unit_type = encoded_frame.data[self.length_size as usize] & 0b0001_1111;
+        let mut is_key = false;
+        let mut offset = 0;
+
+        while offset < encoded_frame.data.len() {
+            let mut encoded_len = 0;
+
+            for i in 0..self.length_size {
+                encoded_len = (encoded_len << 8) | encoded_frame.data[offset + i as usize] as u32;
+            }
+
+            tracing::warn!(
+                "encoded_len: {}, chunk length: {}",
+                encoded_len,
+                encoded_frame.data.len()
+            );
+
+            let nal_unit_type =
+                encoded_frame.data[offset + self.length_size as usize] & 0b0001_1111;
+
+            tracing::warn!("nal_unit_type: {}", nal_unit_type);
+
+            if nal_unit_type == 5u8 {
+                is_key = true;
+            }
+
+            offset += encoded_len as usize + self.length_size as usize;
+        }
 
         // 3.62 instantaneous decoding refresh (IDR) picture:
         // After the decoding of an IDR picture all following coded pictures in decoding order can
         // be decoded without inter prediction from any picture decoded prior to the IDR picture.
-        if nal_unit_type == 5u8 {
+        if is_key {
             // openh264_sys::NAL_SLICE_IDR as u8
             tracing::info!("is key");
             Ok(FrameDependency::None)
@@ -196,8 +222,8 @@ impl VideoDecoder for H264Decoder {
 
             tracing::warn!("nal_unit_type: {}", nal_unit_type);
 
-            if nal_unit_type != 6u8 {
-                // skipping SEI NALus
+            if nal_unit_type != 6u8 && nal_unit_type != 7u8 && nal_unit_type != 8u8 {
+                // skipping SEI NALus, SPS NALus, and PPS NALus
                 // 3.62 instantaneous decoding refresh (IDR) picture:
                 // After the decoding of an IDR picture all following coded pictures in decoding order can
                 // be decoded without inter prediction from any picture decoded prior to the IDR picture.
