@@ -221,7 +221,7 @@ impl VideoDecoder for H264Decoder {
                         [offset..offset + encoded_len as usize + self.length_size as usize],
                 );
 
-                let sb = self.media_source.add_source_buffer("video/mp4; codecs=\"avc1.42E01E, mp4a.40.2\"").unwrap();
+                let sb = self.media_source.add_source_buffer("video/mp4; codecs=\"avc1.42E01E\"").unwrap();
                 sb.append_buffer_with_array_buffer(&data.buffer()).unwrap();
 
                 let context: CanvasRenderingContext2d = self.canvas_element
