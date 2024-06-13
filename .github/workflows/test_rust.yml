@@ -80,6 +80,16 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - name: Download WARP DLL
+        if: runner.os == 'Windows'
+        run: |
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          Invoke-WebRequest -Uri "https://globalcdn.nuget.org/packages/microsoft.direct3d.warp.1.0.10.nupkg" -OutFile warp.nupkg
+          Expand-Archive -Path warp.nupkg -DestinationPath warp
+          New-Item -Type Directory -Force -Path target/ci/deps
+          cp warp/build/native/amd64/d3d10warp.dll target/ci
+          cp warp/build/native/amd64/d3d10warp.dll target/ci/deps
+
       - name: Run tests with image tests
         if: runner.os != 'macOS'
         # TODO: Disallow retries in general once we can allow only after SIGABRT.
