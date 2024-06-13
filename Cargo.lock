@@ -1452,16 +1452,17 @@ checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 [[package]]
 name = "ecolor"
 version = "0.27.2"
-source = "git+https://github.com/emilk/egui.git?rev=738ea75453567c5f17a543e68aec8c48097cae7b#738ea75453567c5f17a543e68aec8c48097cae7b"
+source = "git+https://github.com/emilk/egui.git?rev=814ad0783cf8b826a258e29ed4c50ae6daa2e890#814ad0783cf8b826a258e29ed4c50ae6daa2e890"
 dependencies = [
  "bytemuck",
+ "emath",
  "serde",
 ]
 
 [[package]]
 name = "egui"
 version = "0.27.2"
-source = "git+https://github.com/emilk/egui.git?rev=738ea75453567c5f17a543e68aec8c48097cae7b#738ea75453567c5f17a543e68aec8c48097cae7b"
+source = "git+https://github.com/emilk/egui.git?rev=814ad0783cf8b826a258e29ed4c50ae6daa2e890#814ad0783cf8b826a258e29ed4c50ae6daa2e890"
 dependencies = [
  "accesskit",
  "ahash",
@@ -1475,8 +1476,9 @@ dependencies = [
 [[package]]
 name = "egui-wgpu"
 version = "0.27.2"
-source = "git+https://github.com/emilk/egui.git?rev=738ea75453567c5f17a543e68aec8c48097cae7b#738ea75453567c5f17a543e68aec8c48097cae7b"
+source = "git+https://github.com/emilk/egui.git?rev=814ad0783cf8b826a258e29ed4c50ae6daa2e890#814ad0783cf8b826a258e29ed4c50ae6daa2e890"
 dependencies = [
+ "ahash",
  "bytemuck",
  "document-features",
  "egui",
@@ -1492,8 +1494,9 @@ dependencies = [
 [[package]]
 name = "egui-winit"
 version = "0.27.2"
-source = "git+https://github.com/emilk/egui.git?rev=738ea75453567c5f17a543e68aec8c48097cae7b#738ea75453567c5f17a543e68aec8c48097cae7b"
+source = "git+https://github.com/emilk/egui.git?rev=814ad0783cf8b826a258e29ed4c50ae6daa2e890#814ad0783cf8b826a258e29ed4c50ae6daa2e890"
 dependencies = [
+ "ahash",
  "arboard",
  "egui",
  "log",
@@ -1507,8 +1510,9 @@ dependencies = [
 [[package]]
 name = "egui_extras"
 version = "0.27.2"
-source = "git+https://github.com/emilk/egui.git?rev=738ea75453567c5f17a543e68aec8c48097cae7b#738ea75453567c5f17a543e68aec8c48097cae7b"
+source = "git+https://github.com/emilk/egui.git?rev=814ad0783cf8b826a258e29ed4c50ae6daa2e890#814ad0783cf8b826a258e29ed4c50ae6daa2e890"
 dependencies = [
+ "ahash",
  "egui",
  "enum-map",
  "image",
@@ -1526,7 +1530,7 @@ checksum = "3dca9240753cf90908d7e4aac30f630662b02aebaa1b58a3cadabdb23385b58b"
 [[package]]
 name = "emath"
 version = "0.27.2"
-source = "git+https://github.com/emilk/egui.git?rev=738ea75453567c5f17a543e68aec8c48097cae7b#738ea75453567c5f17a543e68aec8c48097cae7b"
+source = "git+https://github.com/emilk/egui.git?rev=814ad0783cf8b826a258e29ed4c50ae6daa2e890#814ad0783cf8b826a258e29ed4c50ae6daa2e890"
 dependencies = [
  "bytemuck",
  "serde",
@@ -1667,7 +1671,7 @@ dependencies = [
 [[package]]
 name = "epaint"
 version = "0.27.2"
-source = "git+https://github.com/emilk/egui.git?rev=738ea75453567c5f17a543e68aec8c48097cae7b#738ea75453567c5f17a543e68aec8c48097cae7b"
+source = "git+https://github.com/emilk/egui.git?rev=814ad0783cf8b826a258e29ed4c50ae6daa2e890#814ad0783cf8b826a258e29ed4c50ae6daa2e890"
 dependencies = [
  "ab_glyph",
  "ahash",
@@ -6408,9 +6412,9 @@ checksum = "53a85b86a771b1c87058196170769dd264f66c0782acf1ae6cc51bfd64b39082"
 
 [[package]]
 name = "wgpu"
-version = "0.20.0"
+version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32ff1bfee408e1028e2e3acbf6d32d98b08a5a059ccbf5f33305534453ba5d3e"
+checksum = "90e37c7b9921b75dfd26dd973fdcbce36f13dfa6e2dc82aece584e0ed48c355c"
 dependencies = [
  "arrayvec",
  "cfg-if",
@@ -6435,9 +6439,9 @@ dependencies = [
 
 [[package]]
 name = "wgpu-core"
-version = "0.20.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac6a86eaa5e763e59c73cf9e97d55fffd4dfda69fd8bda19589fcf851ddfef1f"
+checksum = "d59e0d5fc509601c69e4e1fa06c1eb3c4c9f12956a5e30c79b61ef1c1be7daf0"
 dependencies = [
  "arrayvec",
  "bit-vec",
@@ -6464,9 +6468,9 @@ dependencies = [
 
 [[package]]
 name = "wgpu-hal"
-version = "0.20.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d71c8ae05170583049b65ee562fd839fdc0b3e9ddb84f4e40c9d5f8ea0d4c8c"
+checksum = "6aa24c3889f885a3fb9133b454c8418bfcfaadcfe4ed3be96ac80e76703b863b"
 dependencies = [
  "android_system_properties",
  "arrayvec",
