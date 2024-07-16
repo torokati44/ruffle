@@ -48,9 +48,9 @@ version = "0.1.0"
 [workspace.dependencies]
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
-naga = { version = "0.20.0", features = ["wgsl-out"] }
-wgpu = "0.20.1"
-egui = "0.28.1"
+naga = { git = "https://github.com/gfx-rs/wgpu.git", rev = "f44f52a85ddb3e7b93fe195fb98a8990b05575d8", features = ["wgsl-out"] }
+wgpu = { git = "https://github.com/gfx-rs/wgpu.git", rev = "f44f52a85ddb3e7b93fe195fb98a8990b05575d8" }
+egui = { git = "https://github.com/torokati44/egui.git", rev = "223d18b97aac455cbbef07eace94376b2de4aea7" }
 clap = { version = "4.5.9", features = ["derive"] }
 anyhow = "1.0"
 slotmap = "1.0.7"
@@ -72,6 +72,16 @@ url = "2.5.2"
 wasm-bindgen = "=0.2.92"
 walkdir = "2.5.0"
 tokio = { version = "1.38.0" }
+
+
+[patch.crates-io]
+egui = { git = "https://github.com/torokati44/egui.git", rev = "223d18b97aac455cbbef07eace94376b2de4aea7" }
+egui-winit = { git = "https://github.com/torokati44/egui.git", rev = "223d18b97aac455cbbef07eace94376b2de4aea7" }
+egui-wgpu = { git = "https://github.com/torokati44/egui.git", rev = "223d18b97aac455cbbef07eace94376b2de4aea7" }
+egui_extras = { git = "https://github.com/torokati44/egui.git", rev = "223d18b97aac455cbbef07eace94376b2de4aea7" }
+wgpu = { git = "https://github.com/gfx-rs/wgpu.git", rev = "f44f52a85ddb3e7b93fe195fb98a8990b05575d8" }
+naga = { git = "https://github.com/gfx-rs/wgpu.git", rev = "f44f52a85ddb3e7b93fe195fb98a8990b05575d8" }
+
 
 [workspace.lints.rust]
 # Clippy nightly often adds new/buggy lints that we want to ignore.
