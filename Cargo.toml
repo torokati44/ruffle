@@ -51,17 +51,17 @@ tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 naga = { git = "https://github.com/gfx-rs/wgpu.git", rev = "347d902bcbc8f968032dc49160c7310689ce0808", features = ["wgsl-out"] }
 wgpu = { git = "https://github.com/gfx-rs/wgpu.git", rev = "347d902bcbc8f968032dc49160c7310689ce0808" }
 egui = { git = "https://github.com/torokati44/egui.git", rev = "223d18b97aac455cbbef07eace94376b2de4aea7" }
-clap = { version = "4.5.9", features = ["derive"] }
+clap = { version = "4.5.13", features = ["derive"] }
 anyhow = "1.0"
 slotmap = "1.0.7"
 async-channel = "2.3.1"
 bitflags = "2.6.0"
-bytemuck = "1.16.1"
+bytemuck = "1.16.3"
 chrono = { version = "0.4.38", default-features = false }
 enum-map = "2.7.3"
-flate2 = "1.0.30"
+flate2 = "1.0.31"
 futures = "0.3.30"
-image = { version = "0.25.1", default-features = false }
+image = { version = "0.25.2", default-features = false }
 js-sys = "0.3.69"
 log = "0.4"
 num-derive = "0.4.2"
@@ -71,7 +71,7 @@ thiserror = "1.0"
 url = "2.5.2"
 wasm-bindgen = "=0.2.92"
 walkdir = "2.5.0"
-tokio = { version = "1.38.0" }
+tokio = { version = "1.39.2" }
 
 
 [patch.crates-io]
