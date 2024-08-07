@@ -85,20 +85,21 @@ impl ExternalVideoBackend {
 
         let (filename, md5sum) = Self::get_openh264_data()?;
 
-        let filepath = std::env::current_exe()?
+        let current_exe = std::env::current_exe()?;
+        let directory = current_exe
             .parent()
-            .ok_or("Could not determine Ruffle location.")?
-            .join(filename);
+            .ok_or("Could not determine Ruffle location.")?;
+        let filepath = directory.join(filename);
 
         // If the binary doesn't exist in the expected location, download it.
         if !filepath.is_file() {
             let url = format!("{}{}{}", URL_BASE, filename, URL_SUFFIX);
             let response = reqwest::blocking::get(url)?;
-            let bytes = response.bytes()?;
-            let mut bzip2_reader = BzDecoder::new(bytes.as_ref());
+            let mut bzip2_reader = BzDecoder::new(response);
 
-            let mut file = File::create(filepath.clone())?;
-            copy(&mut bzip2_reader, &mut file)?;
+            let mut tempfile = tempfile::NamedTempFile::with_prefix_in(filename, directory)?;
+            copy(&mut bzip2_reader, &mut tempfile)?;
+            tempfile.persist(&filepath)?;
         }
 
         // Regardless of whether the library was already there, or we just downloaded it, let's check the MD5 hash.
