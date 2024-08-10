@@ -126,7 +126,7 @@ fn main() {
         external_interface_avm2(&NativeEnvironment)
     }));
 
-    tests.sort_unstable_by(|a, b| a.name().cmp(b.name()));
+    rand::seq::SliceRandom::shuffle(&mut tests, &mut rand::thread_rng());
 
     libtest_mimic::run(&args, tests).exit()
 }
