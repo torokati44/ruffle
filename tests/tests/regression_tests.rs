@@ -13,6 +13,8 @@ use ruffle_test_framework::options::TestOptions;
 use ruffle_test_framework::runner::TestStatus;
 use ruffle_test_framework::test::Test;
 use ruffle_test_framework::vfs::{PhysicalFS, VfsPath};
+use std::fmt::Debug;
+use std::hash::{Hash, Hasher};
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::path::Path;
 use std::thread::sleep;
@@ -126,8 +128,20 @@ fn main() {
         external_interface_avm2(&NativeEnvironment)
     }));
 
+
     use rand::seq::SliceRandom;
-    tests.shuffle(&mut rand::thread_rng());
+    let mut rng  = rand::thread_rng();
+//    tests.truncate(30);
+    //tests.shuffle(&mut rng);
+
+
+    tests.sort_unstable_by_key(|trial| {
+        let mut hasher = std::hash::DefaultHasher::default();
+        format!("[{:}] {:}", trial.kind(), trial.name()).hash(&mut hasher);
+        hasher.finish()
+
+    });
+
 
     libtest_mimic::run(&args, tests).exit()
 }
