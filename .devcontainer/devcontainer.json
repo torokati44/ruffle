@@ -1,0 +1,7 @@
+{
+    "name": "Ruffle devcontainer",
+    "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+    "features": {
+        "ghcr.io/devcontainers/features/rust": {}
+    }
+}
