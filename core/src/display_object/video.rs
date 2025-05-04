@@ -489,6 +489,18 @@ impl<'gc> TDisplayObject<'gc> for Video<'gc> {
     }
 
     fn self_bounds(&self) -> Rectangle<Twips> {
+        if let VideoSource::NetStream { stream } = self.0.source.get() {
+            if let Some(bm) = stream.last_decoded_bitmap() {
+                let w = bm.width;
+                let h = bm.height;
+                return Rectangle {
+                    x_min: Twips::ZERO,
+                    x_max: Twips::from_pixels_i32(w as i32),
+                    y_min: Twips::ZERO,
+                    y_max: Twips::from_pixels_i32(h as i32),
+                };
+            }
+        }
         let (size_x, size_y) = self.0.size.get();
         Rectangle {
             x_min: Twips::ZERO,
