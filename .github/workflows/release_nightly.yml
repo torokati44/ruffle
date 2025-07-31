@@ -125,6 +125,13 @@ jobs:
             DESKTOP_FEATURES: jpegxr
             MSI_ARCH: x64
 
+          - build_name: windows-aarch64
+            os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            RUSTFLAGS: -Ctarget-feature=+crt-static
+            DESKTOP_FEATURES: jpegxr
+            MSI_ARCH: arm64
+
     env:
       PACKAGE_FILE: ${{ needs.create-nightly-release.outputs.package_prefix }}-${{ matrix.build_name }}.${{ startsWith(matrix.build_name, 'win') && 'zip' || 'tar.gz' }}
       CARGO_BUILD_DIR: target/${{ matrix.target }}/release
