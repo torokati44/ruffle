@@ -192,6 +192,7 @@ impl BitmapCache {
 
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
+#[repr(align(8))]
 pub struct DisplayObjectBase<'gc> {
     cell: RefCell<DisplayObjectBaseMut>,
     parent: Lock<Option<DisplayObject<'gc>>>,
