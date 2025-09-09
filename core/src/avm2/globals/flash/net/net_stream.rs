@@ -156,3 +156,42 @@ pub fn get_time<'gc>(
 
     Ok(Value::Undefined)
 }
+
+pub fn append_bytes<'gc>(
+    activation: &mut Activation<'_, 'gc>,
+    this: Value<'gc>,
+    args: &[Value<'gc>],
+) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
+    if let Some(ns) = this.as_netstream() {
+        if let Some(Value::Object(obj)) = args.get(0) {
+            if let Some(byte_array) = obj.as_bytearray() {
+                let mut data = byte_array.bytes().to_vec();
+                ns.append_bytes(activation.context, &mut data);
+            } else {
+                return Err(make_error_2004(activation, Error2004Type::TypeError));
+            }
+        } else {
+            return Err(make_error_2004(activation, Error2004Type::TypeError));
+        }
+    }
+
+    Ok(Value::Undefined)
+}
+
+pub fn append_bytes_action<'gc>(
+    activation: &mut Activation<'_, 'gc>,
+    this: Value<'gc>,
+    args: &[Value<'gc>],
+) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
+    if let Some(ns) = this.as_netstream() {
+        let action = args.get_string(activation, 0);
+        let action_str = action.to_utf8_lossy();
+        ns.append_bytes_action(activation.context, &action_str);
+    }
+
+    Ok(Value::Undefined)
+}

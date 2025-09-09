@@ -390,6 +390,54 @@ impl<'gc> NetStream<'gc> {
         );
     }
 
+    /// Append bytes to the NetStream for dynamic video/audio content.
+    ///
+    /// This is the implementation for the Flash Player's appendBytes() method
+    /// which allows progressive streaming by manually feeding data to the stream.
+    pub fn append_bytes(self, context: &mut UpdateContext<'gc>, data: &mut Vec<u8>) {
+        // Reset buffer if this is the first append after a reset/begin action
+        if self.source().offset.get() == 0 && self.source().buffer.borrow().is_empty() {
+            self.reset_buffer(context);
+        }
+
+        self.load_buffer(context, data);
+    }
+
+    /// Handle appendBytesAction commands that control the append bytes behavior.
+    ///
+    /// This implements the Flash Player's appendBytesAction() method which supports:
+    /// - "resetBegin": Reset the stream and prepare for new data
+    /// - "resetSeek": Reset to allow seeking in appended data
+    /// - "endSequence": Signal end of appended data sequence
+    pub fn append_bytes_action(self, context: &mut UpdateContext<'gc>, action: &str) {
+        match action {
+            "resetBegin" => {
+                // Reset the buffer and prepare for new streaming data
+                self.reset_buffer(context);
+                self.0.playing.set(false); // Stop any current playback
+                StreamManager::activate(context, self);
+            }
+            "resetSeek" => {
+                // Reset but maintain the stream in a seekable state
+                self.reset_buffer(context);
+                // Keep the stream ready for seek operations
+                StreamManager::activate(context, self);
+            }
+            "endSequence" => {
+                // Signal that no more data will be appended
+                self.finish_buffer();
+                // Trigger appropriate status events
+                self.trigger_status_event(
+                    context,
+                    [("code", "NetStream.Buffer.Flush"), ("level", "status")],
+                );
+            }
+            _ => {
+                tracing::warn!("Unknown appendBytesAction: {}", action);
+            }
+        }
+    }
+
     /// Indicate that the buffer has finished loading and that no further data
     /// is expected to be downloaded to it.
     pub fn finish_buffer(self) {
@@ -903,7 +951,11 @@ impl<'gc> NetStream<'gc> {
                 frame_id,
                 ..
             }) => (video_stream, frame_id),
-            _ => unreachable!(),
+            _ => {
+                // Stream type not initialized yet, this can happen with appendBytes
+                tracing::warn!("FLV video tag processed before stream type was initialized");
+                return;
+            }
         };
         let codec = VideoCodec::from_u8(video_data.codec_id as u8);
         let buffer = slice.data();

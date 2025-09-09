@@ -20,13 +20,9 @@ package flash.net {
         public function NetStream(connection:NetConnection, peer:String = CONNECT_TO_FMS) {
         }
 
-        public function appendBytes(bytes:ByteArray) {
-            stub_method("flash.net.NetStream", "appendBytes");
-        }
+        public native function appendBytes(bytes:ByteArray);
 
-        public function appendBytesAction(action:String) {
-            stub_method("flash.net.NetStream", "appendBytesAction");
-        }
+        public native function appendBytesAction(action:String);
 
         public function attach(connection:NetConnection) {
             stub_method("flash.net.NetStream", "attach");
