@@ -46,6 +46,8 @@ impl MainWindow {
         if matches!(event, WindowEvent::RedrawRequested) {
             // Don't render when minimized to avoid potential swap chain errors in `wgpu`.
             if !self.minimized {
+                puffin::GlobalProfiler::lock().new_frame();
+
                 if let Some(mut player) = self.player.get() {
                     // Even if the movie is paused, user interaction with debug tools can change the render output
                     player.render();
@@ -54,6 +56,7 @@ impl MainWindow {
                     self.gui.render(None);
                 }
                 plot_stats_in_tracy(&self.gui.descriptors().wgpu_instance);
+                profiling::finish_frame!();
             }
 
             // Important that we return here, or we'll get a feedback loop with egui

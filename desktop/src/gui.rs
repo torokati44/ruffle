@@ -136,6 +136,8 @@ impl RuffleGui {
                 }
             }
         };
+
+        puffin_egui::profiler_window(egui_ctx);
     }
 
     pub fn show_context_menu(

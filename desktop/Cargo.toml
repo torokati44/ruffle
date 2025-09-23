@@ -14,10 +14,10 @@ workspace = true
 clap = { workspace = true }
 cpal = { workspace = true }
 egui = { workspace = true }
-egui_extras = { git = "https://github.com/emilk/egui.git", branch = "main", default-features = false, features = ["image"] }
-egui-wgpu = { git = "https://github.com/emilk/egui.git", branch = "main", features = ["winit"] }
+egui_extras = { version = "0.32.3", default-features = false, features = ["image"] }
+egui-wgpu = { version = "0.32.3", features = ["winit"] }
 image = { workspace = true, features = ["png"] }
-egui-winit = { git = "https://github.com/emilk/egui.git", branch = "main" }
+egui-winit = "0.32.3"
 fontdb = "0.23"
 ruffle_core = { path = "../core", features = ["audio", "clap", "mp3", "aac", "nellymoser", "default_compatibility_rules", "egui"] }
 ruffle_render = { path = "../render", features = ["clap"] }
@@ -45,6 +45,10 @@ fluent-templates = { workspace = true }
 toml_edit = { version = "0.22.27", features = ["parse"] }
 gilrs = "0.11"
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "fs"] }
+
+puffin = { git = "https://github.com/EmbarkStudios/puffin.git", branch = "main", optional = true }
+puffin_egui = { git = "https://github.com/EmbarkStudios/puffin.git", branch = "main", optional = true }
+profiling = { version = "1.0", default-features = false, optional = true }
 
 tracing-tracy = { version = "0.11.3", optional = true, features = ["demangle"] }
 rand = "0.9.1"
@@ -74,6 +78,7 @@ lzma = ["ruffle_core/lzma"]
 software_video = ["ruffle_video_software"]
 external_video = ["ruffle_video_external"]
 tracy = ["tracing-tracy", "ruffle_render_wgpu/profile-with-tracy"]
+puffin = ["dep:profiling", "dep:puffin", "dep:puffin_egui", "ruffle_render_wgpu/profile-with-puffin"]
 fontconfig = ["dep:fontconfig"]
 
 # wgpu features

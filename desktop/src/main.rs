@@ -186,6 +186,8 @@ async fn main() -> Result<(), Error> {
         subscriber.with(tracy_subscriber)
     };
 
+    puffin::set_scopes_on(true);
+
     subscriber.init();
 
     let result = App::new(preferences)
