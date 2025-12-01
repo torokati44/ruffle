@@ -1,0 +1,13 @@
+[package]
+name = "nihed-cros-libva"
+version = "0.0.4"
+license = "BSD-3-Clause"
+description = "Safe bindings over libva"
+authors = ["The Chromium OS Authors", "random nobody"]
+edition = "2021"
+
+[build-dependencies]
+pkg-config = "0.3.26"
+
+[dev-dependencies]
+crc32fast = "1.2.1"

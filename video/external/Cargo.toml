@@ -16,6 +16,10 @@ tracing = { workspace = true }
 ruffle_video_software = { path = "../software" }
 thiserror = { workspace = true }
 
+hwdec_vaapi = { path = "./vaapi/hwdec-vaapi", optional = false }
+
+nihav_core = { path = "../../../nihav-vp6/nihav-core" }
+
 # Needed for OpenH264:
 libloading = { version = "0.8.9", optional = true }
 reqwest = { version = "0.12.24", default-features = false, features = ["blocking"], optional = true }

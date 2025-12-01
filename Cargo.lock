@@ -2389,6 +2389,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 
 [[package]]
+name = "hwdec_vaapi"
+version = "0.1.0"
+dependencies = [
+ "nihav_codec_support 0.1.0",
+ "nihav_core 0.1.0",
+ "nihed-cros-libva",
+]
+
+[[package]]
 name = "hyper"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3215,10 +3224,21 @@ dependencies = [
 [[package]]
 name = "nihav_codec_support"
 version = "0.1.0"
+dependencies = [
+ "nihav_core 0.1.0",
+]
+
+[[package]]
+name = "nihav_codec_support"
+version = "0.1.0"
 source = "git+https://github.com/ruffle-rs/nihav-vp6?rev=83c7e1094d603d9fc1212d39d99abb17f3a3226b#83c7e1094d603d9fc1212d39d99abb17f3a3226b"
 dependencies = [
- "nihav_core",
+ "nihav_core 0.1.0 (git+https://github.com/ruffle-rs/nihav-vp6?rev=83c7e1094d603d9fc1212d39d99abb17f3a3226b)",
 ]
+
+[[package]]
+name = "nihav_core"
+version = "0.1.0"
 
 [[package]]
 name = "nihav_core"
@@ -3230,8 +3250,16 @@ name = "nihav_duck"
 version = "0.1.0"
 source = "git+https://github.com/ruffle-rs/nihav-vp6?rev=83c7e1094d603d9fc1212d39d99abb17f3a3226b#83c7e1094d603d9fc1212d39d99abb17f3a3226b"
 dependencies = [
- "nihav_codec_support",
- "nihav_core",
+ "nihav_codec_support 0.1.0 (git+https://github.com/ruffle-rs/nihav-vp6?rev=83c7e1094d603d9fc1212d39d99abb17f3a3226b)",
+ "nihav_core 0.1.0 (git+https://github.com/ruffle-rs/nihav-vp6?rev=83c7e1094d603d9fc1212d39d99abb17f3a3226b)",
+]
+
+[[package]]
+name = "nihed-cros-libva"
+version = "0.0.4"
+dependencies = [
+ "crc32fast",
+ "pkg-config",
 ]
 
 [[package]]
@@ -4746,8 +4774,10 @@ version = "0.1.0"
 dependencies = [
  "bzip2",
  "hex",
+ "hwdec_vaapi",
  "js-sys",
  "libloading",
+ "nihav_core 0.1.0",
  "reqwest",
  "ruffle_render",
  "ruffle_video",
@@ -4772,8 +4802,8 @@ dependencies = [
  "h263-rs",
  "h263-rs-deblock",
  "log",
- "nihav_codec_support",
- "nihav_core",
+ "nihav_codec_support 0.1.0 (git+https://github.com/ruffle-rs/nihav-vp6?rev=83c7e1094d603d9fc1212d39d99abb17f3a3226b)",
+ "nihav_core 0.1.0 (git+https://github.com/ruffle-rs/nihav-vp6?rev=83c7e1094d603d9fc1212d39d99abb17f3a3226b)",
  "nihav_duck",
  "ruffle_render",
  "ruffle_video",

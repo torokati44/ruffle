@@ -29,6 +29,8 @@ members = [
     "video",
     "video/software",
     "video/external",
+    "video/external/vaapi/nihed-cros-libva",
+    "video/external/vaapi/hwdec-vaapi",
 
     "tests",
     "tests/fs-tests-runner",

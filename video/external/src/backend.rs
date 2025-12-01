@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::decoder::VideoDecoder;
 #[cfg(feature = "openh264")]
 use crate::decoder::openh264::OpenH264Codec;
@@ -47,8 +49,57 @@ impl Default for ExternalVideoBackend {
     }
 }
 
+use hwdec_vaapi::{HWDecoder, HWWrapper, VaapiH264Decoder};
+use nihav_core::codecs::DecoderResult;
+use nihav_core::frame::{NACodecInfo, NACodecInfoRef, NAPacket, NAStream, NAStreamRef, NATimeInfo, NAVideoInfo, YUV420_FORMAT};
+
 impl ExternalVideoBackend {
+
+
+
+    fn decode_h264() -> DecoderResult<()> {
+
+        let mut dec = VaapiH264Decoder::new();
+
+        //dec.init(stream.get_info()).expect("inited");
+        //vstream_id = stream.get_id();
+
+        let mut hw = HWWrapper::new();
+        let videoinfo = NAVideoInfo::new(1920, 1080, false, YUV420_FORMAT);
+        let info = NACodecInfo::new("h264", nihav_core::frame::NACodecTypeInfo::Video(videoinfo), Some(vec![]));
+        let pkt = NAPacket::new(NAStreamRef::new(NAStream::new(nihav_core::frame::StreamType::Video, 0, info.clone(), 0, 0, 0)), NATimeInfo::new(None, None, None, 0, 0), false, vec![]);
+        hw.init(NACodecInfoRef::new(info));
+        hw.queue_pkt(&pkt);
+        //hw.get_frame().expect("got frame");
+        //hw.get_last_frames().expect("got last frames");
+/*
+        let frm = hw.get_last_frames().expect("get frame");
+        let timestamp = frm.get_dts().unwrap_or_else(|| frm.get_pts().unwrap_or(0));
+
+        let pic = frm.get_buffer().get_vbuf().expect("got picture");
+
+        //let nname = format!("assets/test_out/{}{:06}_{}.pgm", opfx, timestamp, frameno);
+        //frameno += 1;
+        //let mut file = std::fs::File::create(&nname).expect("create file");
+        let (w, h) = pic.get_dimensions(0);
+        //file.write_all(format!("P5\n{} {}\n255\n", w, h * 3 / 2).as_bytes()).expect("header written");
+        let data = pic.get_data();
+        for yline in data.chunks(pic.get_stride(0)).take(h) {
+            //file.write_all(&yline[..w]).expect("Y line written");
+        }
+        for (uline, vline) in data[pic.get_offset(1)..].chunks(pic.get_stride(1))
+                .zip(data[pic.get_offset(2)..].chunks(pic.get_stride(2))).take(h / 2) {
+            //file.write_all(&uline[..w / 2]).expect("U line written");
+            //file.write_all(&vline[..w / 2]).expect("V line written");
+        }
+*/
+        Ok(())
+    }
+
+
+
     fn make_decoder(&mut self) -> Result<Box<dyn VideoDecoder>, Error> {
+
         #[cfg(feature = "openh264")]
         if let Some(h264_codec) = self.openh264_codec.as_ref() {
             let decoder = Box::new(crate::decoder::openh264::H264Decoder::new(h264_codec));
@@ -71,6 +122,7 @@ impl ExternalVideoBackend {
 
     // Neither the `openh264` nor the `webcodecs` backend will be available.
     pub fn new() -> Self {
+        Self::decode_h264().expect("decoded");
         Self {
             streams: SlotMap::with_key(),
             #[cfg(feature = "openh264")]
@@ -83,6 +135,7 @@ impl ExternalVideoBackend {
 
     #[cfg(feature = "openh264")]
     pub fn new_with_openh264(openh264_codec: OpenH264Codec) -> Self {
+        Self::decode_h264().expect("decoded");
         Self {
             streams: SlotMap::with_key(),
             openh264_codec: Some(openh264_codec),
