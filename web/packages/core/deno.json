@@ -1,0 +1,32 @@
+{
+  "name": "@ruffle/core",
+  "version": "0.1.0",
+  "exports": "./dist/index.js",
+  "tasks": {
+    "prebuild": "deno run --allow-all tools/build_wasm.ts",
+    "build": "deno task prebuild && deno task compile && deno task postbuild",
+    "compile": "deno run --allow-all npm:typescript@^5.9.3/tsc --build --force",
+    "postbuild": "deno run --allow-all tools/set_version.ts && deno run --allow-all tools/bundle_texts.ts && deno run --allow-all tools/bundle_css.ts",
+    "test": "deno test --allow-read --allow-env test/",
+    "checkTypes": "deno run --allow-all npm:typescript@^5.9.3/tsc --noEmit && deno run --allow-all npm:typescript@^5.9.3/tsc --noEmit -p tools",
+    "docs": "deno run --allow-all npm:typedoc@^0.28.16"
+  },
+  "imports": {
+    "wasm-feature-detect": "npm:wasm-feature-detect@^1.8.0",
+    "@fluent/bundle": "npm:@fluent/bundle@^0.19.1",
+    "@fluent/langneg": "npm:@fluent/langneg@^0.7.0",
+    "autoprefixer": "npm:autoprefixer@^10.4.23",
+    "cssnano": "npm:cssnano@^7.1.2",
+    "cssnano-preset-advanced": "npm:cssnano-preset-advanced@^7.0.10",
+    "postcss": "npm:postcss@^8.5.6",
+    "postcss-nesting": "npm:postcss-nesting@^14.0.0",
+    "replace-in-file": "npm:replace-in-file@^8.4.0",
+    "tsx-dom": "npm:tsx-dom@^3.1.0"
+  },
+  "compilerOptions": {
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "strict": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "npm:tsx-dom@^3.1.0"
+  }
+}

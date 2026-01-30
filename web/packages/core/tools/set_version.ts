@@ -1,18 +1,22 @@
 import { replaceInFileSync } from "replace-in-file";
-import childProcess from "child_process";
-import fs from "fs";
-import path from "path";
+import { join } from "jsr:@std/path@1";
 
 let buildDate = new Date().toISOString();
-let versionNumber = process.env["npm_package_version"] ?? "";
-let versionChannel = process.env["CFG_RELEASE_CHANNEL"] || "local";
+let versionNumber = Deno.env.get("npm_package_version") ?? "";
+let versionChannel = Deno.env.get("CFG_RELEASE_CHANNEL") || "local";
 const firefoxExtensionId =
-    process.env["FIREFOX_EXTENSION_ID"] || "ruffle@ruffle.rs";
+    Deno.env.get("FIREFOX_EXTENSION_ID") || "ruffle@ruffle.rs";
 
 let commitHash = "unknown";
 
 try {
-    commitHash = childProcess.execSync("git rev-parse HEAD").toString().trim();
+    const command = new Deno.Command("git", {
+        args: ["rev-parse", "HEAD"],
+    });
+    const { stdout, success } = command.outputSync();
+    if (success) {
+        commitHash = new TextDecoder().decode(stdout).trim();
+    }
 } catch {
     console.log("Couldn't fetch latest git commit...");
 }
@@ -36,21 +40,20 @@ interface VersionInformation {
 
 let versionSeal: VersionInformation;
 
-if (process.env["ENABLE_VERSION_SEAL"] === "true") {
-    const sealFile = path.resolve(__dirname, "../../../version_seal.json");
-    if (fs.existsSync(sealFile)) {
+if (Deno.env.get("ENABLE_VERSION_SEAL") === "true") {
+    const sealFile = join(import.meta.dirname!, "../../../version_seal.json");
+    try {
+        const content = Deno.readTextFileSync(sealFile);
         console.log("Using version seal");
         // Using the version seal stored previously.
-        versionSeal = JSON.parse(
-            fs.readFileSync(sealFile, { encoding: "utf8" }),
-        ) as VersionInformation;
+        versionSeal = JSON.parse(content) as VersionInformation;
 
         versionNumber = versionSeal.version_number;
         versionName = versionSeal.version_name;
         versionChannel = versionSeal.version_channel;
         buildDate = versionSeal.build_date;
         commitHash = versionSeal.commitHash;
-    } else {
+    } catch {
         console.log("Creating version seal");
         versionSeal = {
             version_number: versionNumber,
@@ -58,16 +61,16 @@ if (process.env["ENABLE_VERSION_SEAL"] === "true") {
             version_channel: versionChannel,
             build_date: buildDate,
             commitHash: commitHash,
-            version4: process.env["VERSION4"] ?? "",
+            version4: Deno.env.get("VERSION4") ?? "",
             firefox_extension_id: firefoxExtensionId,
         };
 
-        fs.writeFileSync(sealFile, JSON.stringify(versionSeal));
+        Deno.writeTextFileSync(sealFile, JSON.stringify(versionSeal));
     }
 }
 
 const fallbackWasmName =
-    process.env["BUILD_WASM_MVP"] === "true"
+    Deno.env.get("BUILD_WASM_MVP") === "true"
         ? "ruffle_web-wasm_mvp"
         : "ruffle_web";
 

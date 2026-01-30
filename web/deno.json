@@ -1,0 +1,48 @@
+{
+  "workspace": [
+    "./packages/core",
+    "./packages/demo",
+    "./packages/extension",
+    "./packages/selfhosted"
+  ],
+  "tasks": {
+    "build": "deno task build:core && deno task build:demo && deno task build:extension && deno task build:selfhosted",
+    "build:core": "cd packages/core && deno task build",
+    "build:demo": "cd packages/demo && deno task build",
+    "build:extension": "cd packages/extension && deno task build",
+    "build:selfhosted": "cd packages/selfhosted && deno task build",
+    "build:debug": "NODE_ENV=development CARGO_FEATURES=avm_debug deno task build",
+    "build:dual-wasm": "BUILD_WASM_MVP=true deno task build",
+    "build:repro": "ENABLE_VERSION_SEAL=true deno task build",
+    "build:dual-wasm-repro": "BUILD_WASM_MVP=true ENABLE_VERSION_SEAL=true deno task build",
+    "test": "deno task test:core && deno task test:selfhosted",
+    "test:core": "cd packages/core && deno task test",
+    "test:selfhosted": "cd packages/selfhosted && deno task wdio",
+    "wdio": "cd packages/selfhosted && deno task wdio",
+    "lint": "deno task checkTypes && deno lint",
+    "checkTypes": "deno task checkTypes:core && deno task checkTypes:demo && deno task checkTypes:extension && deno task checkTypes:selfhosted",
+    "checkTypes:core": "cd packages/core && deno task checkTypes",
+    "checkTypes:demo": "cd packages/demo && deno task checkTypes",
+    "checkTypes:extension": "cd packages/extension && deno task checkTypes",
+    "checkTypes:selfhosted": "cd packages/selfhosted && deno task checkTypes",
+    "format": "deno fmt",
+    "version-seal": "ENABLE_VERSION_SEAL=true deno run --allow-all packages/core/tools/set_version.ts",
+    "demo": "cd packages/demo && deno task preview"
+  },
+  "fmt": {
+    "include": ["packages/"],
+    "exclude": ["**/dist/", "**/node_modules/", "**/docs/", "packages/selfhosted/test_assets/"]
+  },
+  "lint": {
+    "include": ["packages/"],
+    "exclude": ["**/dist/", "**/node_modules/", "**/docs/", "packages/selfhosted/test_assets/swfobject.js"],
+    "rules": {
+      "tags": ["recommended"],
+      "exclude": ["no-unused-vars"]
+    }
+  },
+  "compilerOptions": {
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "strict": true
+  }
+}

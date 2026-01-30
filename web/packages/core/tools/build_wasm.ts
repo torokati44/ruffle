@@ -1,15 +1,17 @@
-import { execFileSync } from "child_process";
-import { copyFileSync, mkdirSync, rmSync } from "fs";
-import * as process from "process";
-
 function runWasmOpt({ path, flags }: { path: string; flags?: string[] }) {
     let args = ["-o", path, "-O", "-g", path];
     if (flags) {
         args = args.concat(flags);
     }
-    execFileSync("wasm-opt", args, {
-        stdio: "inherit",
+    const command = new Deno.Command("wasm-opt", {
+        args,
+        stdout: "inherit",
+        stderr: "inherit",
     });
+    const { success } = command.outputSync();
+    if (!success) {
+        throw new Error("wasm-opt failed");
+    }
 }
 function runWasmBindgen({
     path,
@@ -34,9 +36,15 @@ function runWasmBindgen({
     if (flags) {
         args = args.concat(flags);
     }
-    execFileSync("wasm-bindgen", args, {
-        stdio: "inherit",
+    const command = new Deno.Command("wasm-bindgen", {
+        args,
+        stdout: "inherit",
+        stderr: "inherit",
     });
+    const { success } = command.outputSync();
+    if (!success) {
+        throw new Error("wasm-bindgen failed");
+    }
 }
 function cargoBuild({
     profile,
@@ -58,15 +66,15 @@ function cargoBuild({
     if (profile) {
         args.push("--profile", profile);
     }
-    if (process.env["CARGO_FEATURES"]) {
+    if (Deno.env.get("CARGO_FEATURES")) {
         features = (features || []).concat(
-            process.env["CARGO_FEATURES"].split(","),
+            Deno.env.get("CARGO_FEATURES")!.split(","),
         );
     }
     if (features) {
         args.push("--features", features.join(","));
     }
-    let totalRustFlags = process.env["RUSTFLAGS"] || "";
+    let totalRustFlags = Deno.env.get("RUSTFLAGS") || "";
     if (rustFlags) {
         if (totalRustFlags) {
             totalRustFlags += ` ${rustFlags.join(" ")}`;
@@ -74,16 +82,23 @@ function cargoBuild({
             totalRustFlags = rustFlags.join(" ");
         }
     }
-    if (process.env["CARGO_FLAGS"]) {
-        args = args.concat(process.env["CARGO_FLAGS"].split(" "));
+    if (Deno.env.get("CARGO_FLAGS")) {
+        args = args.concat(Deno.env.get("CARGO_FLAGS")!.split(" "));
     }
-    execFileSync("cargo", args, {
-        env: Object.assign(Object.assign({}, process.env), {
+    const command = new Deno.Command("cargo", {
+        args,
+        env: {
+            ...Deno.env.toObject(),
             RUSTFLAGS: totalRustFlags,
             RUSTC_BOOTSTRAP: extensions ? "0" : "1",
-        }),
-        stdio: "inherit",
+        },
+        stdout: "inherit",
+        stderr: "inherit",
     });
+    const { success } = command.outputSync();
+    if (!success) {
+        throw new Error("cargo build failed");
+    }
 }
 function buildWasm(
     profile: string,
@@ -120,7 +135,7 @@ function buildWasm(
         });
         originalWasmPath = `../../../target/wasm32-unknown-unknown/${profile}/ruffle_web.wasm`;
         if (wasmSource === "cargo_and_store") {
-            copyFileSync(originalWasmPath, `../../dist/${filename}.wasm`);
+            Deno.copyFileSync(originalWasmPath, `../../dist/${filename}.wasm`);
         }
     } else if (wasmSource === "existing") {
         originalWasmPath = `../../dist/${filename}.wasm`;
@@ -146,14 +161,19 @@ function buildWasm(
 }
 function detectWasmOpt() {
     try {
-        execFileSync("wasm-opt", ["--version"]);
-        return true;
+        const command = new Deno.Command("wasm-opt", {
+            args: ["--version"],
+            stdout: "null",
+            stderr: "null",
+        });
+        const { success } = command.outputSync();
+        return success;
     } catch (_a) {
         return false;
     }
 }
-const buildWasmMvp = !!process.env["BUILD_WASM_MVP"];
-const wasmSource = process.env["WASM_SOURCE"] || "cargo";
+const buildWasmMvp = !!Deno.env.get("BUILD_WASM_MVP");
+const wasmSource = Deno.env.get("WASM_SOURCE") || "cargo";
 const hasWasmOpt = detectWasmOpt();
 if (!hasWasmOpt) {
     console.log(
@@ -161,8 +181,12 @@ if (!hasWasmOpt) {
     );
 }
 if (wasmSource === "cargo_and_store") {
-    rmSync("../../dist", { recursive: true, force: true });
-    mkdirSync("../../dist");
+    try {
+        Deno.removeSync("../../dist", { recursive: true });
+    } catch {
+        // Directory might not exist
+    }
+    Deno.mkdirSync("../../dist");
 }
 buildWasm("web-wasm-extensions", "ruffle_web", hasWasmOpt, true, wasmSource);
 if (buildWasmMvp) {

@@ -1,5 +1,5 @@
-import { strict as assert } from "assert";
-import { Version } from "../src/version";
+import { assertEquals, assert } from "jsr:@std/assert@1";
+import { Version } from "../src/version.ts";
 
 // Each row should be a list of compatible versions.
 // Earlier entries in a row should be "greater than" later entries in the same row.
@@ -28,185 +28,178 @@ function flatten<T>(arr: T[][]): T[] {
     return arr.reduce((accumulator, value) => accumulator.concat(value), []);
 }
 
-describe("Version", function () {
-    describe("#from_semver()", function () {
-        it("should parse valid semver strings", function () {
-            assert.deepEqual(
-                Version.fromSemver("1.2"),
-                new Version(1, 2, 0, null, null),
-            );
-            assert.deepEqual(
-                Version.fromSemver("1.2.3"),
-                new Version(1, 2, 3, null, null),
-            );
-            assert.deepEqual(
-                Version.fromSemver("1.09.3"),
-                new Version(1, 9, 3, null, null),
-            );
-            assert.deepEqual(
-                Version.fromSemver("1.2.3-pr"),
-                new Version(1, 2, 3, ["pr"], null),
-            );
-            assert.deepEqual(
-                Version.fromSemver("1.2.3-pr1.pr2"),
-                new Version(1, 2, 3, ["pr1", "pr2"], null),
-            );
-            assert.deepEqual(
-                Version.fromSemver("1.2.3+build"),
-                new Version(1, 2, 3, null, ["build"]),
-            );
-            assert.deepEqual(
-                Version.fromSemver("1.2.3+build1.build2"),
-                new Version(1, 2, 3, null, ["build1", "build2"]),
-            );
-            assert.deepEqual(
-                Version.fromSemver("1-pr1.pr2+build1.build2"),
-                new Version(1, 0, 0, ["pr1", "pr2"], ["build1", "build2"]),
-            );
-        });
-    });
+Deno.test("Version - from_semver() - should parse valid semver strings", () => {
+    assertEquals(
+        Version.fromSemver("1.2"),
+        new Version(1, 2, 0, null, null),
+    );
+    assertEquals(
+        Version.fromSemver("1.2.3"),
+        new Version(1, 2, 3, null, null),
+    );
+    assertEquals(
+        Version.fromSemver("1.09.3"),
+        new Version(1, 9, 3, null, null),
+    );
+    assertEquals(
+        Version.fromSemver("1.2.3-pr"),
+        new Version(1, 2, 3, ["pr"], null),
+    );
+    assertEquals(
+        Version.fromSemver("1.2.3-pr1.pr2"),
+        new Version(1, 2, 3, ["pr1", "pr2"], null),
+    );
+    assertEquals(
+        Version.fromSemver("1.2.3+build"),
+        new Version(1, 2, 3, null, ["build"]),
+    );
+    assertEquals(
+        Version.fromSemver("1.2.3+build1.build2"),
+        new Version(1, 2, 3, null, ["build1", "build2"]),
+    );
+    assertEquals(
+        Version.fromSemver("1-pr1.pr2+build1.build2"),
+        new Version(1, 0, 0, ["pr1", "pr2"], ["build1", "build2"]),
+    );
+});
 
-    describe("#is_compatible_with()", function () {
-        it("is compatible with similar versions", function () {
-            for (const test of testMatrix) {
-                for (const a of test) {
-                    for (const b of test) {
-                        assert(
-                            Version.fromSemver(a).isCompatibleWith(
-                                Version.fromSemver(b),
-                            ),
-                            `${a} is compatible with ${b}`,
-                        );
-                    }
-                }
-            }
-        });
-        it("is not compatible with other versions", function () {
-            for (const test of testMatrix) {
-                for (const a of test) {
-                    for (const otherTest of testMatrix) {
-                        if (test === otherTest) {
-                            continue;
-                        }
-                        for (const b of otherTest) {
-                            assert(
-                                !Version.fromSemver(a).isCompatibleWith(
-                                    Version.fromSemver(b),
-                                ),
-                                `${a} is not compatible with ${b}`,
-                            );
-                        }
-                    }
-                }
-            }
-        });
-    });
-
-    describe("#has_precedence_over()", function () {
-        it("returns true when it should", function () {
-            const tests = flatten(testMatrix);
-            for (let a = 0; a < tests.length; a++) {
-                for (let b = a + 1; b < tests.length; b++) {
-                    assert(
-                        Version.fromSemver(tests[a]!).hasPrecedenceOver(
-                            Version.fromSemver(tests[b]!),
-                        ),
-                        `${tests[a]} has precedence over ${tests[b]}`,
-                    );
-                }
-            }
-        });
-        it("returns false when it should", function () {
-            const tests = flatten(testMatrix).reverse();
-            for (let a = 0; a < tests.length; a++) {
-                for (let b = a + 1; b < tests.length; b++) {
-                    assert(
-                        !Version.fromSemver(tests[a]!).hasPrecedenceOver(
-                            Version.fromSemver(tests[b]!),
-                        ),
-                        `${tests[a]} doesn't have precedence over ${tests[b]}`,
-                    );
-                }
-            }
-        });
-    });
-
-    describe("#is_equal()", function () {
-        it("returns true when it should", function () {
-            const tests = flatten(testMatrix);
-            for (const version of tests) {
+Deno.test("Version - is_compatible_with() - is compatible with similar versions", () => {
+    for (const test of testMatrix) {
+        for (const a of test) {
+            for (const b of test) {
                 assert(
-                    Version.fromSemver(version).isEqual(
-                        Version.fromSemver(version),
+                    Version.fromSemver(a).isCompatibleWith(
+                        Version.fromSemver(b),
                     ),
-                    `${version} is equal to itself`,
+                    `${a} is compatible with ${b}`,
                 );
             }
-        });
-        it("returns false when it should", function () {
-            const tests = flatten(testMatrix).reverse();
-            for (let a = 0; a < tests.length; a++) {
-                for (let b = a + 1; b < tests.length; b++) {
-                    if (
-                        tests[a]!.indexOf("+") > -1 ||
-                        tests[b]!.indexOf("+") > -1 ||
-                        tests[a]!.indexOf("-") > -1 ||
-                        tests[b]!.indexOf("-") > -1
-                    ) {
-                        // Skip "builds" and "identifiers" for purposes of this test.
-                        continue;
-                    }
-                    assert(
-                        !Version.fromSemver(tests[a]!).isEqual(
-                            Version.fromSemver(tests[b]!),
-                        ),
-                        `${tests[a]} does not equal ${tests[b]}`,
-                    );
-                }
-            }
-        });
-    });
+        }
+    }
+});
 
-    describe("#is_stable_or_compatible_prerelease()", function () {
-        it("returns true for own versions", function () {
-            const tests = flatten(testMatrix);
-            for (const version of tests) {
-                assert(
-                    Version.fromSemver(version).isStableOrCompatiblePrerelease(
-                        Version.fromSemver(version),
-                    ),
-                    `${version} is compatible with itself`,
-                );
-            }
-        });
-        it("returns true for compatible pre-releases", function () {
-            const tests = ["1.2.3", "1.2.3-alpha", "1.2.3-beta1.build2"];
-            for (const a of tests) {
-                for (const b of tests) {
-                    assert(
-                        Version.fromSemver(a).isStableOrCompatiblePrerelease(
-                            Version.fromSemver(b),
-                        ),
-                        `${a} is compatible with ${b}`,
-                    );
+Deno.test("Version - is_compatible_with() - is not compatible with other versions", () => {
+    for (const test of testMatrix) {
+        for (const a of test) {
+            for (const otherTest of testMatrix) {
+                if (test === otherTest) {
+                    continue;
                 }
-            }
-        });
-        it("returns false for incompatible pre-releases", function () {
-            const tests = ["1-dev", "1.2-alpha", "1.2.3-beta1.build2"];
-            for (const a of tests) {
-                for (const b of tests) {
-                    if (a === b) {
-                        continue;
-                    }
+                for (const b of otherTest) {
                     assert(
-                        !Version.fromSemver(a).isStableOrCompatiblePrerelease(
+                        !Version.fromSemver(a).isCompatibleWith(
                             Version.fromSemver(b),
                         ),
                         `${a} is not compatible with ${b}`,
                     );
                 }
             }
-        });
-    });
+        }
+    }
+});
+
+Deno.test("Version - has_precedence_over() - returns true when it should", () => {
+    const tests = flatten(testMatrix);
+    for (let a = 0; a < tests.length; a++) {
+        for (let b = a + 1; b < tests.length; b++) {
+            assert(
+                Version.fromSemver(tests[a]!).hasPrecedenceOver(
+                    Version.fromSemver(tests[b]!),
+                ),
+                `${tests[a]} has precedence over ${tests[b]}`,
+            );
+        }
+    }
+});
+
+Deno.test("Version - has_precedence_over() - returns false when it should", () => {
+    const tests = flatten(testMatrix).reverse();
+    for (let a = 0; a < tests.length; a++) {
+        for (let b = a + 1; b < tests.length; b++) {
+            assert(
+                !Version.fromSemver(tests[a]!).hasPrecedenceOver(
+                    Version.fromSemver(tests[b]!),
+                ),
+                `${tests[a]} doesn't have precedence over ${tests[b]}`,
+            );
+        }
+    }
+});
+
+Deno.test("Version - is_equal() - returns true when it should", () => {
+    const tests = flatten(testMatrix);
+    for (const version of tests) {
+        assert(
+            Version.fromSemver(version).isEqual(
+                Version.fromSemver(version),
+            ),
+            `${version} is equal to itself`,
+        );
+    }
+});
+
+Deno.test("Version - is_equal() - returns false when it should", () => {
+    const tests = flatten(testMatrix).reverse();
+    for (let a = 0; a < tests.length; a++) {
+        for (let b = a + 1; b < tests.length; b++) {
+            if (
+                tests[a]!.indexOf("+") > -1 ||
+                tests[b]!.indexOf("+") > -1 ||
+                tests[a]!.indexOf("-") > -1 ||
+                tests[b]!.indexOf("-") > -1
+            ) {
+                // Skip "builds" and "identifiers" for purposes of this test.
+                continue;
+            }
+            assert(
+                !Version.fromSemver(tests[a]!).isEqual(
+                    Version.fromSemver(tests[b]!),
+                ),
+                `${tests[a]} does not equal ${tests[b]}`,
+            );
+        }
+    }
+});
+
+Deno.test("Version - is_stable_or_compatible_prerelease() - returns true for own versions", () => {
+    const tests = flatten(testMatrix);
+    for (const version of tests) {
+        assert(
+            Version.fromSemver(version).isStableOrCompatiblePrerelease(
+                Version.fromSemver(version),
+            ),
+            `${version} is compatible with itself`,
+        );
+    }
+});
+
+Deno.test("Version - is_stable_or_compatible_prerelease() - returns true for compatible pre-releases", () => {
+    const tests = ["1.2.3", "1.2.3-alpha", "1.2.3-beta1.build2"];
+    for (const a of tests) {
+        for (const b of tests) {
+            assert(
+                Version.fromSemver(a).isStableOrCompatiblePrerelease(
+                    Version.fromSemver(b),
+                ),
+                `${a} is compatible with ${b}`,
+            );
+        }
+    }
+});
+
+Deno.test("Version - is_stable_or_compatible_prerelease() - returns false for incompatible pre-releases", () => {
+    const tests = ["1-dev", "1.2-alpha", "1.2.3-beta1.build2"];
+    for (const a of tests) {
+        for (const b of tests) {
+            if (a === b) {
+                continue;
+            }
+            assert(
+                !Version.fromSemver(a).isStableOrCompatiblePrerelease(
+                    Version.fromSemver(b),
+                ),
+                `${a} is not compatible with ${b}`,
+            );
+        }
+    }
 });
