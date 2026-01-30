@@ -2,7 +2,7 @@
 # rm -rf web/docker/docker_builds/packages/*
 # docker build --tag ruffle-web-docker -f web/docker/Dockerfile .
 # docker cp $(docker create ruffle-web-docker:latest):/ruffle/web/packages web/docker/docker_builds/packages
-FROM node:24
+FROM denoland/deno:2.0
 
 # Installing wasm-opt from GitHub:
 # Keep the version number in sync with the ones in the Actions workflows!
@@ -22,5 +22,4 @@ COPY . ruffle
 WORKDIR ruffle/web
 ENV CARGO_FEATURES=jpegxr
 ENV WASM_SOURCE=existing
-RUN npm ci
-RUN npm run build:dual-wasm-repro
+RUN deno task build:dual-wasm-repro

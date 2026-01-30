@@ -1,0 +1,13 @@
+{
+  "name": "@ruffle/selfhosted",
+  "version": "0.1.0",
+  "tasks": {
+    "build": "deno run --allow-all npm:webpack-cli@^6.0.1",
+    "serve": "deno run --allow-all npm:webpack-dev-server@^5.2.3",
+    "wdio": "deno run --allow-all npm:@wdio/cli@^9.23.2 run wdio.conf.ts",
+    "checkTypes": "deno run --allow-all npm:typescript@^5.9.3/tsc --noEmit"
+  },
+  "imports": {
+    "ruffle-core": "../core/dist/index.js"
+  }
+}

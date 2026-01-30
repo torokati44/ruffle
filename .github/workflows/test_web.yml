@@ -30,23 +30,21 @@ jobs:
   build:
     needs: changes
     if: needs.changes.outputs.should_run == 'true'
-    name: Test Node.js ${{ matrix.node_version }} / ${{ matrix.os }}
+    name: Test Deno ${{ matrix.deno_version }} / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        node_version: ["22", "24"]
+        deno_version: ["2.x"]
         os: [ubuntu-24.04, windows-2025]
 
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup Node.js ${{ matrix.node_version }}
-        uses: actions/setup-node@v6
+      - name: Setup Deno ${{ matrix.deno_version }}
+        uses: denoland/setup-deno@v2
         with:
-          node-version: ${{ matrix.node_version }}
-          cache: npm
-          cache-dependency-path: web/package-lock.json
+          deno-version: ${{ matrix.deno_version }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -84,18 +82,16 @@ jobs:
           CARGO_FLAGS: --all-features
         working-directory: web
         shell: bash -l {0}
-        run: |
-          npm ci
-          npm run build
+        run: deno task build
 
       - name: Check formatting
         if: matrix.os == 'ubuntu-24.04'
         working-directory: web
-        run: npm run lint
+        run: deno task lint
 
-      - name: Run node-based tests
+      - name: Run Deno tests
         working-directory: web
-        run: npm test
+        run: deno task test
 
   build-for-browser-tests:
     needs: changes
@@ -106,12 +102,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
         with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: web/package-lock.json
+          deno-version: 2.x
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -140,9 +134,8 @@ jobs:
         working-directory: web
         shell: bash -l {0}
         run: |
-          npm ci
-          npm run build --workspace=ruffle-core
-          npm run build --workspace=ruffle-selfhosted
+          deno task build:core
+          deno task build:selfhosted
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
@@ -164,12 +157,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup Node.js 24
-        uses: actions/setup-node@v6
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
         with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: web/package-lock.json
+          deno-version: 2.x
 
       - name: Download artifact
         uses: actions/download-artifact@v7
@@ -180,9 +171,7 @@ jobs:
       - name: Run browser-based tests
         working-directory: web
         shell: bash -l {0}
-        run: |
-          npm ci
-          npm run wdio -- --headless --parallel --${{ matrix.browser }}
+        run: deno task wdio -- --headless --parallel --${{ matrix.browser }}
 
   # The rest is needed only because otherwise the real jobs couldn't be made required for merging PRs,
   # as they would fail the entire workflow run if skipped - this makes GitHub happy instead.
@@ -193,11 +182,11 @@ jobs:
   build-dummy:
     needs: changes
     if: needs.changes.outputs.should_run == 'false'
-    name: Test Node.js ${{ matrix.node_version }} / ${{ matrix.os }}
+    name: Test Deno ${{ matrix.deno_version }} / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        node_version: ["22", "24"]
+        deno_version: ["2.x"]
         os: [ubuntu-24.04, windows-2025]
 
     steps:

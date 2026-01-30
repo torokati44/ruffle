@@ -1,0 +1,25 @@
+{
+  "name": "@ruffle/extension",
+  "version": "0.1.0",
+  "tasks": {
+    "build": "deno task typecheck && deno task build:generic && deno task build:firefox",
+    "typecheck": "deno run --allow-all npm:typescript@^5.9.3/tsc -p jsconfig.json",
+    "build:generic": "deno task webpack:generic && deno task inject-polyfill && deno task zip:generic",
+    "build:firefox": "deno task webpack:firefox && deno task inject-polyfill && deno task zip:firefox && deno task sign-firefox",
+    "webpack:generic": "deno run --allow-all npm:webpack-cli@^6.0.1 --env generic",
+    "webpack:firefox": "deno run --allow-all npm:webpack-cli@^6.0.1 --env firefox",
+    "inject-polyfill": "deno run --allow-all tools/inject_plugin_polyfill.ts",
+    "zip:generic": "deno run --allow-all tools/zip.ts dist/ruffle_extension.zip",
+    "zip:firefox": "deno run --allow-all tools/zip.ts dist/firefox_unsigned.xpi",
+    "sign-firefox": "deno run --allow-all tools/submit_xpi.ts dist/firefox_unsigned.xpi ../../../reproducible-source.zip",
+    "checkTypes": "deno run --allow-all npm:typescript@^5.9.3/tsc --noEmit && deno run --allow-all npm:typescript@^5.9.3/tsc --noEmit -p tools"
+  },
+  "imports": {
+    "ruffle-core": "../core/dist/index.js",
+    "archiver": "npm:archiver@^7.0.1",
+    "json5": "npm:json5@^2.2.3",
+    "axios": "npm:axios@^1.13.2",
+    "form-data": "npm:form-data@^4.0.5",
+    "jsonwebtoken": "npm:jsonwebtoken@^9.0.3"
+  }
+}

@@ -1,6 +1,3 @@
-import fs from "node:fs";
-import crypto from "node:crypto";
-import { setTimeout } from "node:timers/promises";
 import axios from "axios";
 import jwt from "jsonwebtoken";
 import FormData from "form-data";
@@ -11,7 +8,7 @@ import FormData from "form-data";
 function getJwtToken(apiKey: string, apiSecret: string) {
     const payload = {
         iss: apiKey,
-        jti: crypto.randomBytes(32).toString("hex"),
+        jti: crypto.randomUUID().replaceAll("-", ""),
         iat: Math.floor(Date.now() / 1000),
         exp: Math.floor(Date.now() / 1000) + 60,
     };
@@ -72,7 +69,8 @@ async function submit(
     console.log("Uploading unsigned add-on...");
     const addonFormData = new FormData();
     addonFormData.append("channel", "listed");
-    addonFormData.append("upload", fs.createReadStream(unsignedPath));
+    const unsignedFile = await Deno.open(unsignedPath, { read: true });
+    addonFormData.append("upload", unsignedFile.readable);
 
     const addonUploadResponse = await client.postForm(
         "upload/",
@@ -93,7 +91,7 @@ async function submit(
     // sure your code times out after a maximum of 10 minutes."
     for (let i = 0; i < 42; i++) {
         console.log("Sleeping for a couple seconds...");
-        await setTimeout(10000);
+        await new Promise(resolve => setTimeout(resolve, 10000));
 
         const uploadDetailResponse = await client.get(`upload/${uploadUuid}/`, {
             headers: {
@@ -162,7 +160,8 @@ As this is indeed a complicated build process, please let me know if there is an
 
     console.log("Uploading source code...");
     const sourceFormData = new FormData();
-    sourceFormData.append("source", fs.createReadStream(sourcePath));
+    const sourceFile = await Deno.open(sourcePath, { read: true });
+    sourceFormData.append("source", sourceFile.readable);
 
     const sourceUploadResponse = await client.patch(
         `addon/${extensionId}/versions/${version}/`,
@@ -184,18 +183,18 @@ As this is indeed a complicated build process, please let me know if there is an
 async function main() {
     try {
         if (
-            process.env["MOZILLA_API_KEY"] &&
-            process.env["MOZILLA_API_SECRET"] &&
-            process.env["FIREFOX_EXTENSION_ID"] &&
-            process.env["SOURCE_TAG"]
+            Deno.env.get("MOZILLA_API_KEY") &&
+            Deno.env.get("MOZILLA_API_SECRET") &&
+            Deno.env.get("FIREFOX_EXTENSION_ID") &&
+            Deno.env.get("SOURCE_TAG")
         ) {
             await submit(
-                process.env["MOZILLA_API_KEY"], // "user:12345678:123"
-                process.env["MOZILLA_API_SECRET"], // 64 hexadecimal characters
-                process.env["FIREFOX_EXTENSION_ID"], // "{UUID}"
-                process.argv[2] ?? "", // "firefox_unsigned.xpi"
-                process.argv[3] ?? "", // "reproducible-source.zip"
-                process.env["SOURCE_TAG"], // "nightly-YYYY-MM-DD"
+                Deno.env.get("MOZILLA_API_KEY")!, // "user:12345678:123"
+                Deno.env.get("MOZILLA_API_SECRET")!, // 64 hexadecimal characters
+                Deno.env.get("FIREFOX_EXTENSION_ID")!, // "{UUID}"
+                Deno.args[0] ?? "", // "firefox_unsigned.xpi"
+                Deno.args[1] ?? "", // "reproducible-source.zip"
+                Deno.env.get("SOURCE_TAG")!, // "nightly-YYYY-MM-DD"
             );
         } else {
             console.log(
@@ -205,7 +204,7 @@ async function main() {
     } catch (error) {
         console.error("Error while submitting Firefox extension:");
         console.error(error);
-        process.exit(-1);
+        Deno.exit(-1);
     }
 }
 main();

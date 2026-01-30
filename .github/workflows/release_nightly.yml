@@ -399,10 +399,10 @@ jobs:
           tag: version_124
           name: wasm-opt
 
-      - name: Install node packages
-        working-directory: web
-        shell: bash -l {0}
-        run: npm ci
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: 2.x
 
       - name: Seal version data
         shell: bash -l {0}
@@ -412,7 +412,7 @@ jobs:
           VERSION4: ${{ needs.create-nightly-release.outputs.version4 }}
           ENABLE_VERSION_SEAL: "true"
           FIREFOX_EXTENSION_ID: ${{ secrets.FIREFOX_EXTENSION_ID }} # Needed to inject into manifest.json
-        run: npm run version-seal
+        run: deno task version-seal
 
       - name: Build web
         env:
@@ -425,12 +425,12 @@ jobs:
           WASM_SOURCE: cargo_and_store
         working-directory: web
         shell: bash -l {0}
-        run: npm run build:dual-wasm-repro
+        run: deno task build:dual-wasm-repro
 
       - name: Produce reproducible source archive
         shell: bash -l {0}
         run: |
-          zip -r reproducible-source.zip . -x '/web/node_modules/*' '/web/*/node_modules/*' '/web/packages/*/dist/*' '/web/docker/docker_builds/packages/*' '/target/*' '/.git/*' '/tests/tests/swfs/*'
+          zip -r reproducible-source.zip . -x '/web/packages/*/dist/*' '/web/docker/docker_builds/packages/*' '/target/*' '/.git/*' '/tests/tests/swfs/*'
           cp reproducible-source.zip "${{ needs.create-nightly-release.outputs.package_prefix }}-reproducible-source.zip"
 
       - name: Upload reproducible source archive
@@ -506,11 +506,11 @@ jobs:
           SOURCE_TAG: ${{ needs.create-nightly-release.outputs.tag_name }}
         working-directory: web/packages/extension
         shell: bash -l {0}
-        run: npm run sign-firefox
+        run: deno task sign-firefox
 
       - name: Build web docs
         working-directory: web
-        run: npm run docs
+        run: deno run --allow-all npm:typedoc@^0.28.16
 
       - name: Publish npm package
         # npm scoped packages are private by default, explicitly make public

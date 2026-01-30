@@ -1,10 +1,9 @@
 import { replaceInFileSync } from "replace-in-file";
-import fs from "fs";
 
 // Search-and-replace the manual polyfill injection with the actual code it
 // needs to insert.
-const pluginPolyfillSource = fs
-    .readFileSync("assets/dist/pluginPolyfill.js", "utf8")
+const pluginPolyfillSource = Deno
+    .readTextFileSync("assets/dist/pluginPolyfill.js")
     .replaceAll("\r", "\\r")
     .replaceAll("\n", "\\n")
     .replaceAll('"', '\\"');

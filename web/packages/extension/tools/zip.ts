@@ -1,11 +1,21 @@
-import fs from "fs/promises";
-import path from "path";
-import url from "url";
+import { dirname } from "jsr:@std/path@1";
+import { ensureDir } from "jsr:@std/fs@1";
 import archiver from "archiver";
+import { Writable } from "node:stream";
 
 async function zip(source: string, destination: string) {
-    await fs.mkdir(path.dirname(destination), { recursive: true });
-    const output = (await fs.open(destination, "w")).createWriteStream();
+    await ensureDir(dirname(destination));
+
+    const file = await Deno.open(destination, { write: true, create: true, truncate: true });
+    const output = new Writable({
+        write(chunk, encoding, callback) {
+            file.write(chunk).then(() => callback()).catch(callback);
+        },
+        final(callback) {
+            file.close().then(() => callback()).catch(callback);
+        }
+    });
+
     const archive = archiver("zip");
 
     output.on("close", () => {
@@ -32,5 +42,5 @@ async function zip(source: string, destination: string) {
 
     await archive.finalize();
 }
-const assets = url.fileURLToPath(new URL("../assets/", import.meta.url));
-zip(assets, process.argv[2] ?? "").catch(console.error);
+const assets = new URL("../assets/", import.meta.url).pathname;
+zip(assets, Deno.args[0] ?? "").catch(console.error);

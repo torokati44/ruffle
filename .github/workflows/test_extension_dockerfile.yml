@@ -23,11 +23,10 @@ jobs:
           targets: wasm32-unknown-unknown
           components: rust-src
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
         with:
-          node-version: "24"
-          registry-url: https://registry.npmjs.org
+          deno-version: 2.x
 
       - name: Install wasm-bindgen
         run: cargo install wasm-bindgen-cli --version 0.2.108
@@ -44,17 +43,12 @@ jobs:
       - name: Install fclones
         run: cargo install fclones
 
-      - name: Install node packages
-        working-directory: web
-        shell: bash -l {0}
-        run: npm ci
-
       - name: Seal version data
         shell: bash -l {0}
         working-directory: web
         env:
           ENABLE_VERSION_SEAL: "true"
-        run: npm run version-seal
+        run: deno task version-seal
 
       - name: Build web normally
         working-directory: web
@@ -62,7 +56,7 @@ jobs:
         env:
           CARGO_FEATURES: jpegxr
           WASM_SOURCE: cargo_and_store
-        run: npm run build:dual-wasm-repro
+        run: deno task build:dual-wasm-repro
 
       - name: Build Docker image with Ruffle in it
         run: docker build --tag ruffle-web-docker -f web/docker/Dockerfile .
