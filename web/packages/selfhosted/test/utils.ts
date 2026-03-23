@@ -231,7 +231,10 @@ export function loadJsAPI(swf?: string) {
                 player,
                 swf,
             );
-            await playAndMonitor(browser, player);
+            await playAndMonitor(
+                browser,
+                player as unknown as ChainablePromiseElement,
+            );
         }
     });
 }
