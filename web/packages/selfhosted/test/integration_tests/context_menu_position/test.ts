@@ -20,10 +20,11 @@ async function setDirection(
     direction: string,
 ) {
     await browser.execute(
-        ({ el, dir }: { el: HTMLElement; dir: string }) => {
+        (el, dir) => {
             el.dir = dir;
         },
-        { el: element, dir: direction },
+        element,
+        direction,
     );
 }
 

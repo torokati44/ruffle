@@ -241,15 +241,12 @@ export async function closeAllModals(
     player: ChainablePromiseElement,
 ) {
     const modals = await player.$$(".modal:not(.hidden)");
-    await browser.execute(
-        ({ modals }) => {
-            for (const m of modals) {
-                const cl = m.querySelector(".close-modal")! as HTMLElement;
-                cl.click();
-            }
-        },
-        { modals },
-    );
+    await browser.execute((modals) => {
+        for (const m of modals) {
+            const cl = m.querySelector(".close-modal")! as HTMLElement;
+            cl.click();
+        }
+    }, modals);
 }
 
 export async function hideHardwareAccelerationModal(
