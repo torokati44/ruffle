@@ -76,6 +76,22 @@ pub trait RenderBackend: Any {
         false
     }
 
+    /// Copies a rectangular region of pixels from a source texture to a destination texture
+    /// without any blending (direct pixel replacement).
+    /// `source` must not equal `destination`.
+    ///
+    /// Returns None if the backend does not support this operation.
+    fn copy_pixels_with_offset(
+        &mut self,
+        _source: BitmapHandle,
+        _source_point: (u32, u32),
+        _source_size: (u32, u32),
+        _destination: BitmapHandle,
+        _dest_point: (u32, u32),
+    ) -> Option<Box<dyn SyncHandle>> {
+        None
+    }
+
     fn is_offscreen_supported(&self) -> bool {
         false
     }

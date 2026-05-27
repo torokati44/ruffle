@@ -1065,6 +1065,24 @@ pub fn copy_pixels<'gc>(
         return;
     }
 
+    let blend = (source_transparency && !transparency) || merge_alpha;
+
+    // Try GPU path when source and dest are different bitmaps and at least one
+    // has GPU-side data that would otherwise require an expensive readback.
+    if !source_bitmap.ptr_eq(target) && context.renderer.is_offscreen_supported() {
+        let source_is_cpu = source_bitmap.can_read(source_region);
+        let dest_is_cpu = target.can_read(dest_region);
+
+        if !source_is_cpu || !dest_is_cpu {
+            if !blend {
+                copy_pixels_gpu_direct(context, source_bitmap, target, source_region, dest_region);
+            } else {
+                copy_pixels_gpu_blend(context, source_bitmap, target, source_region, dest_region);
+            }
+            return;
+        }
+    }
+
     copy_on_cpu(
         context.gc(),
         context.renderer,
@@ -1072,7 +1090,7 @@ pub fn copy_pixels<'gc>(
         target,
         source_region,
         dest_region,
-        (source_transparency && !transparency) || merge_alpha,
+        blend,
     );
 }
 
@@ -1280,6 +1298,136 @@ pub fn apply_filter<'gc>(
         Some(sync_handle) => write.set_gpu_dirty(context.gc(), sync_handle, region),
         None => {
             tracing::warn!("BitmapData.apply_filter: Renderer not yet implemented")
+        }
+    }
+}
+
+/// GPU fast path for copyPixels without blending (direct pixel replacement).
+/// Uses texture-to-texture copy on the GPU.
+fn copy_pixels_gpu_direct<'gc>(
+    context: &mut UpdateContext<'gc>,
+    source: BitmapData<'gc>,
+    target: BitmapData<'gc>,
+    source_region: PixelRegion,
+    dest_region: PixelRegion,
+) {
+    println!("copy_pixels_gpu_direct");
+    let source_handle = source.bitmap_handle(context.gc(), context.renderer);
+    let target_handle = target.bitmap_handle(context.gc(), context.renderer);
+
+    let sync_handle = context.renderer.copy_pixels_with_offset(
+        source_handle,
+        (source_region.x_min, source_region.y_min),
+        (source_region.width(), source_region.height()),
+        target_handle,
+        (dest_region.x_min, dest_region.y_min),
+    );
+
+    if let Some(sync_handle) = sync_handle {
+        let (target_data, include_dirty_area) = target.overwrite_cpu_pixels_from_gpu(context.gc());
+        let mut write = target_data.borrow_mut(context.gc());
+        let mut dirty_region = dest_region;
+        if let Some(old) = include_dirty_area {
+            dirty_region.union(old);
+        }
+        write.set_gpu_dirty(context.gc(), sync_handle, dirty_region);
+    } else {
+        // Backend doesn't support this operation; fall back to CPU
+        copy_on_cpu(
+            context.gc(),
+            context.renderer,
+            source,
+            target,
+            source_region,
+            dest_region,
+            false,
+        );
+    }
+}
+
+/// GPU fast path for copyPixels with alpha blending.
+/// Uses render_offscreen to composite the source onto the target.
+fn copy_pixels_gpu_blend<'gc>(
+    context: &mut UpdateContext<'gc>,
+    source: BitmapData<'gc>,
+    target: BitmapData<'gc>,
+    source_region: PixelRegion,
+    dest_region: PixelRegion,
+) {
+    println!("copy_pixels_gpu_blend");
+    let source_handle = source.bitmap_handle(context.gc(), context.renderer);
+
+    let mut commands = CommandList::new();
+
+    // Mask rendering to the destination region
+    let clip_mat = Matrix {
+        a: dest_region.width() as f32,
+        b: 0.0,
+        c: 0.0,
+        d: dest_region.height() as f32,
+        tx: Twips::from_pixels(dest_region.x_min as f64),
+        ty: Twips::from_pixels(dest_region.y_min as f64),
+    };
+    commands.push_mask();
+    commands.draw_rect(swf::Color::BLACK, clip_mat);
+    commands.activate_mask();
+
+    // Render the source bitmap offset so that source_region lands on dest_region
+    let transform = Transform {
+        matrix: Matrix {
+            a: 1.0,
+            b: 0.0,
+            c: 0.0,
+            d: 1.0,
+            tx: Twips::from_pixels(
+                dest_region.x_min as f64 - source_region.x_min as f64,
+            ),
+            ty: Twips::from_pixels(
+                dest_region.y_min as f64 - source_region.y_min as f64,
+            ),
+        },
+        color_transform: ColorTransform::IDENTITY,
+        perspective_projection: None,
+    };
+    commands.render_bitmap(source_handle, transform, false, PixelSnapping::Never);
+
+    // Clean up mask
+    commands.deactivate_mask();
+    commands.draw_rect(swf::Color::BLACK, clip_mat);
+    commands.pop_mask();
+
+    let target_handle = target.bitmap_handle(context.gc(), context.renderer);
+    let (target_data, include_dirty_area) = target.overwrite_cpu_pixels_from_gpu(context.gc());
+    let mut write = target_data.borrow_mut(context.gc());
+    let mut dirty_region = dest_region;
+    if let Some(old) = include_dirty_area {
+        dirty_region.union(old);
+    }
+
+    let sync_handle = context.renderer.render_offscreen(
+        target_handle,
+        commands,
+        StageQuality::High,
+        dirty_region,
+    );
+
+    match sync_handle {
+        Some(sync_handle) => {
+            write.set_gpu_dirty(context.gc(), sync_handle, dirty_region);
+        }
+        None => {
+            // Backend doesn't support offscreen rendering; fall back to CPU.
+            // Need to drop the write lock first.
+            drop(write);
+            copy_on_cpu(
+                context.gc(),
+                context.renderer,
+                source,
+                target,
+                source_region,
+                dest_region,
+                true,
+            );
         }
     }
 }
