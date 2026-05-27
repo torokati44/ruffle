@@ -22,6 +22,7 @@ pub struct Shaders {
     pub glow_filter: wgpu::ShaderModule,
     pub bevel_filter: wgpu::ShaderModule,
     pub displacement_map_filter: wgpu::ShaderModule,
+    pub blit_shader: wgpu::ShaderModule,
 }
 
 impl Shaders {
@@ -86,6 +87,11 @@ impl Shaders {
             ComplexBlend::HardLight => make_shader(device, "blend/hardlight.wgsl", include_str!("../shaders/blend/hardlight.wgsl")),
         };
 
+        let blit_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: create_debug_label!("Shader blit.wgsl").as_deref(),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/blit.wgsl").into()),
+        });
+
         Self {
             color_shader,
             bitmap_shader,
@@ -99,6 +105,7 @@ impl Shaders {
             glow_filter,
             bevel_filter,
             displacement_map_filter,
+            blit_shader,
         }
     }
 }

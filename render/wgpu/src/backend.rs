@@ -8,11 +8,10 @@ use crate::pixel_bender::{ShaderMode, run_pixelbender_shader_impl};
 use crate::surface::{LayerRef, Surface};
 use crate::target::{MaybeOwnedBuffer, TextureTarget};
 use crate::target::{RenderTargetFrame, TextureBufferInfo};
-use crate::globals::Globals;
 use crate::utils::{BufferDimensions, create_buffer_with_data, run_copy_pipeline};
 use crate::{
-    Descriptors, Error, QueueSyncHandle, RenderTarget, SwapChainTarget, Texture, TextureTransforms,
-    Transforms, as_texture, format_list, get_backend_names,
+    Descriptors, Error, QueueSyncHandle, RenderTarget, SwapChainTarget, Texture, as_texture,
+    format_list, get_backend_names,
 };
 use image::imageops::FilterType;
 use ruffle_render::backend::{
@@ -899,84 +898,14 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
         Some(self.make_queue_sync_handle(target, None, destination, copy_area))
     }
 
-    fn copy_pixels_with_offset(
+    fn blit(
         &mut self,
         source: BitmapHandle,
         source_point: (u32, u32),
         source_size: (u32, u32),
         destination: BitmapHandle,
         dest_point: (u32, u32),
-    ) -> Option<Box<dyn SyncHandle>> {
-        let source_texture = as_texture(&source);
-        let dest_texture = as_texture(&destination);
-
-        let copy_width = source_size
-            .0
-            .min(source_texture.texture.width().saturating_sub(source_point.0))
-            .min(dest_texture.texture.width().saturating_sub(dest_point.0));
-        let copy_height = source_size
-            .1
-            .min(source_texture.texture.height().saturating_sub(source_point.1))
-            .min(dest_texture.texture.height().saturating_sub(dest_point.1));
-
-        if copy_width == 0 || copy_height == 0 {
-            return None;
-        }
-
-        self.active_frame.command_encoder.copy_texture_to_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &source_texture.texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d {
-                    x: source_point.0,
-                    y: source_point.1,
-                    z: 0,
-                },
-                aspect: Default::default(),
-            },
-            wgpu::TexelCopyTextureInfo {
-                texture: &dest_texture.texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d {
-                    x: dest_point.0,
-                    y: dest_point.1,
-                    z: 0,
-                },
-                aspect: Default::default(),
-            },
-            wgpu::Extent3d {
-                width: copy_width,
-                height: copy_height,
-                depth_or_array_layers: 1,
-            },
-        );
-
-        let copy_area = PixelRegion::for_whole_size(
-            dest_texture.texture.width(),
-            dest_texture.texture.height(),
-        );
-        let target = TextureTarget {
-            size: wgpu::Extent3d {
-                width: dest_texture.texture.width(),
-                height: dest_texture.texture.height(),
-                depth_or_array_layers: 1,
-            },
-            texture: dest_texture.texture.clone(),
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            buffer: None,
-        };
-
-        self.active_frame.maybe_flush(&self.descriptors);
-        Some(self.make_queue_sync_handle(target, None, destination, copy_area))
-    }
-
-    fn copy_pixels_with_blend(
-        &mut self,
-        source: BitmapHandle,
-        source_point: (u32, u32),
-        source_size: (u32, u32),
-        destination: BitmapHandle,
-        dest_point: (u32, u32),
+        blend: bool,
     ) -> Option<Box<dyn SyncHandle>> {
         let source_texture = as_texture(&source);
         let dest_texture = as_texture(&destination);
@@ -996,105 +925,49 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
 
         let dest_w = dest_texture.texture.width();
         let dest_h = dest_texture.texture.height();
-        let src_w = source_texture.texture.width() as f32;
-        let src_h = source_texture.texture.height() as f32;
 
-        // Create a Globals uniform for the dest texture dimensions (view_matrix)
-        let globals = Globals::new(
+        // Offset uniform: src_coord = ivec2(frag_coord.xy) + src_offset
+        let src_offset: [i32; 2] = [
+            source_point.0 as i32 - dest_point.0 as i32,
+            source_point.1 as i32 - dest_point.1 as i32,
+        ];
+        let params_buffer = create_buffer_with_data(
             &self.descriptors.device,
-            &self.descriptors.bind_layouts.globals,
-            dest_w,
-            dest_h,
-        );
-
-        // World matrix: positions the (0,0)-(1,1) quad at the dest region
-        let transforms = Transforms {
-            world_matrix: [
-                [copy_width as f32, 0.0, 0.0, 0.0],
-                [0.0, copy_height as f32, 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [dest_point.0 as f32, dest_point.1 as f32, 0.0, 1.0],
-            ],
-            mult_color: [1.0, 1.0, 1.0, 1.0],
-            add_color: [0.0, 0.0, 0.0, 0.0],
-        };
-        let transforms_buffer = create_buffer_with_data(
-            &self.descriptors.device,
-            bytemuck::bytes_of(&transforms),
+            bytemuck::cast_slice(&src_offset),
             wgpu::BufferUsages::UNIFORM,
-            create_debug_label!("Blend blit transforms"),
+            create_debug_label!("Blit params"),
         );
-        let transforms_bind_group =
+
+        // Bind group: source texture + offset params
+        let source_view = source_texture.texture.create_view(&Default::default());
+        let bind_group =
             self.descriptors
                 .device
                 .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: create_debug_label!("Blend blit transforms bind group").as_deref(),
-                    layout: &self.descriptors.bind_layouts.transforms,
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                            buffer: &transforms_buffer,
-                            offset: 0,
-                            size: wgpu::BufferSize::new(
-                                std::mem::size_of::<Transforms>() as u64,
-                            ),
-                        }),
-                    }],
-                });
-
-        // Texture transforms: maps quad UVs (0,0)-(1,1) to the source sub-region
-        let tex_transforms = TextureTransforms {
-            u_matrix: [
-                [copy_width as f32 / src_w, 0.0, 0.0, 0.0],
-                [0.0, copy_height as f32 / src_h, 0.0, 0.0],
-                [source_point.0 as f32 / src_w, source_point.1 as f32 / src_h, 1.0, 0.0],
-                [0.0, 0.0, 0.0, 1.0],
-            ],
-        };
-        let tex_transforms_buffer = create_buffer_with_data(
-            &self.descriptors.device,
-            bytemuck::bytes_of(&tex_transforms),
-            wgpu::BufferUsages::UNIFORM,
-            create_debug_label!("Blend blit tex transforms"),
-        );
-
-        // Bitmap bind group (texture_transforms + source texture + sampler)
-        let bitmap_bind_group =
-            self.descriptors
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: create_debug_label!("Blend blit bitmap bind group").as_deref(),
-                    layout: &self.descriptors.bind_layouts.bitmap,
+                    label: create_debug_label!("Blit bind group").as_deref(),
+                    layout: &self.descriptors.bind_layouts.blit,
                     entries: &[
                         wgpu::BindGroupEntry {
                             binding: 0,
-                            resource: tex_transforms_buffer.as_entire_binding(),
+                            resource: wgpu::BindingResource::TextureView(&source_view),
                         },
                         wgpu::BindGroupEntry {
                             binding: 1,
-                            resource: wgpu::BindingResource::TextureView(
-                                &source_texture.texture.create_view(&Default::default()),
-                            ),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: wgpu::BindingResource::Sampler(
-                                self.descriptors.bitmap_samplers.get_sampler(false, false),
-                            ),
+                            resource: params_buffer.as_entire_binding(),
                         },
                     ],
                 });
 
         let pipeline = self
             .descriptors
-            .blend_copy_pipeline(wgpu::TextureFormat::Rgba8Unorm, 1);
+            .blit_pipeline(wgpu::TextureFormat::Rgba8Unorm, blend);
 
         let dest_view = dest_texture.texture.create_view(&Default::default());
         let mut render_pass =
             self.active_frame
                 .command_encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: create_debug_label!("Blend blit render pass").as_deref(),
+                    label: create_debug_label!("Blit render pass").as_deref(),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                         view: &dest_view,
                         ops: wgpu::Operations {
@@ -1108,9 +981,15 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
                 });
 
         render_pass.set_pipeline(&pipeline);
-        render_pass.set_bind_group(0, globals.bind_group(), &[]);
-        render_pass.set_bind_group(1, &transforms_bind_group, &[0]);
-        render_pass.set_bind_group(2, &bitmap_bind_group, &[]);
+        render_pass.set_bind_group(0, &bind_group, &[]);
+        render_pass.set_viewport(
+            dest_point.0 as f32,
+            dest_point.1 as f32,
+            copy_width as f32,
+            copy_height as f32,
+            0.0,
+            1.0,
+        );
         render_pass.set_vertex_buffer(0, self.descriptors.quad.vertices_pos.slice(..));
         render_pass.set_index_buffer(
             self.descriptors.quad.indices.slice(..),
@@ -1119,8 +998,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
         render_pass.draw_indexed(0..6, 0, 0..1);
         drop(render_pass);
 
-        let copy_area =
-            PixelRegion::for_whole_size(dest_w, dest_h);
+        let copy_area = PixelRegion::for_whole_size(dest_w, dest_h);
         let target = TextureTarget {
             size: wgpu::Extent3d {
                 width: dest_w,

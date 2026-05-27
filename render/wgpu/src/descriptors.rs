@@ -23,7 +23,7 @@ pub struct Descriptors {
     pub quad: Quad,
     copy_pipeline: Mutex<FnvHashMap<(u32, wgpu::TextureFormat), wgpu::RenderPipeline>>,
     copy_srgb_pipeline: Mutex<FnvHashMap<(u32, wgpu::TextureFormat), wgpu::RenderPipeline>>,
-    blend_copy_pipeline: Mutex<FnvHashMap<(u32, wgpu::TextureFormat), wgpu::RenderPipeline>>,
+    blit_pipelines: Mutex<FnvHashMap<(wgpu::TextureFormat, bool), wgpu::RenderPipeline>>,
     pub shaders: Shaders,
     pipelines: Mutex<FnvHashMap<(u32, wgpu::TextureFormat), Arc<Pipelines>>>,
     pub filters: Filters,
@@ -62,7 +62,7 @@ impl Descriptors {
             quad,
             copy_pipeline: Default::default(),
             copy_srgb_pipeline: Default::default(),
-            blend_copy_pipeline: Default::default(),
+            blit_pipelines: Default::default(),
             shaders,
             pipelines: Default::default(),
             filters,
@@ -205,46 +205,50 @@ impl Descriptors {
             .clone()
     }
 
-    pub fn blend_copy_pipeline(
+    /// Returns a cached blit pipeline for the given format and blend mode.
+    /// When `blend` is true, uses premultiplied alpha compositing (SRC_OVER).
+    /// When `blend` is false, uses direct pixel replacement (REPLACE).
+    pub fn blit_pipeline(
         &self,
         format: wgpu::TextureFormat,
-        msaa_sample_count: u32,
+        blend: bool,
     ) -> wgpu::RenderPipeline {
         let mut pipelines = self
-            .blend_copy_pipeline
+            .blit_pipelines
             .lock()
             .expect("Pipelines should not be already locked");
         pipelines
-            .entry((msaa_sample_count, format))
+            .entry((format, blend))
             .or_insert_with(|| {
                 let layout =
                     &self
                         .device
                         .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                            label: create_debug_label!("Blend copy pipeline layout").as_deref(),
-                            bind_group_layouts: &[
-                                &self.bind_layouts.globals,
-                                &self.bind_layouts.transforms,
-                                &self.bind_layouts.bitmap,
-                            ],
+                            label: create_debug_label!("Blit pipeline layout").as_deref(),
+                            bind_group_layouts: &[&self.bind_layouts.blit],
                             push_constant_ranges: &[],
                         });
+                let blend_state = if blend {
+                    wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING
+                } else {
+                    wgpu::BlendState::REPLACE
+                };
                 self.device
                     .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                        label: create_debug_label!("Blend copy pipeline").as_deref(),
+                        label: create_debug_label!("Blit pipeline (blend={blend})").as_deref(),
                         layout: Some(layout),
                         vertex: wgpu::VertexState {
-                            module: &self.shaders.copy_shader,
-                            entry_point: Some("main_vertex"),
+                            module: &self.shaders.blit_shader,
+                            entry_point: Some("vs_main"),
                             buffers: &VERTEX_BUFFERS_DESCRIPTION_POS,
                             compilation_options: Default::default(),
                         },
                         fragment: Some(wgpu::FragmentState {
-                            module: &self.shaders.copy_shader,
-                            entry_point: Some("main_fragment"),
+                            module: &self.shaders.blit_shader,
+                            entry_point: Some("fs_main"),
                             targets: &[Some(wgpu::ColorTargetState {
                                 format,
-                                blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                                blend: Some(blend_state),
                                 write_mask: Default::default(),
                             })],
                             compilation_options: Default::default(),
@@ -260,7 +264,7 @@ impl Descriptors {
                         },
                         depth_stencil: None,
                         multisample: wgpu::MultisampleState {
-                            count: msaa_sample_count,
+                            count: 1,
                             mask: !0,
                             alpha_to_coverage_enabled: false,
                         },

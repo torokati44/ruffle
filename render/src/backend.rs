@@ -76,34 +76,20 @@ pub trait RenderBackend: Any {
         false
     }
 
-    /// Copies a rectangular region of pixels from a source texture to a destination texture
-    /// without any blending (direct pixel replacement).
+    /// Pixel-perfect blit from a source texture sub-region to a destination texture sub-region.
+    /// When `blend` is true, uses premultiplied alpha compositing (Porter-Duff SRC_OVER).
+    /// When `blend` is false, directly replaces destination pixels.
     /// `source` must not equal `destination`.
     ///
     /// Returns None if the backend does not support this operation.
-    fn copy_pixels_with_offset(
+    fn blit(
         &mut self,
         _source: BitmapHandle,
         _source_point: (u32, u32),
         _source_size: (u32, u32),
         _destination: BitmapHandle,
         _dest_point: (u32, u32),
-    ) -> Option<Box<dyn SyncHandle>> {
-        None
-    }
-
-    /// Copies a rectangular region of pixels from a source texture to a destination texture
-    /// with premultiplied alpha blending (Porter-Duff SRC_OVER).
-    /// `source` must not equal `destination`.
-    ///
-    /// Returns None if the backend does not support this operation.
-    fn copy_pixels_with_blend(
-        &mut self,
-        _source: BitmapHandle,
-        _source_point: (u32, u32),
-        _source_size: (u32, u32),
-        _destination: BitmapHandle,
-        _dest_point: (u32, u32),
+        _blend: bool,
     ) -> Option<Box<dyn SyncHandle>> {
         None
     }
