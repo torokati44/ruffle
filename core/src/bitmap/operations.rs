@@ -1081,6 +1081,7 @@ pub fn copy_pixels<'gc>(
             }
             return;
         }
+        println!("GPU path not used");
     }
 
     copy_on_cpu(
@@ -1346,7 +1347,7 @@ fn copy_pixels_gpu_direct<'gc>(
 }
 
 /// GPU fast path for copyPixels with alpha blending.
-/// Uses render_offscreen to composite the source onto the target.
+/// Uses a dedicated blend-copy shader pass (single draw call, no masking).
 fn copy_pixels_gpu_blend<'gc>(
     context: &mut UpdateContext<'gc>,
     source: BitmapData<'gc>,
@@ -1356,79 +1357,35 @@ fn copy_pixels_gpu_blend<'gc>(
 ) {
     println!("copy_pixels_gpu_blend");
     let source_handle = source.bitmap_handle(context.gc(), context.renderer);
-
-    let mut commands = CommandList::new();
-
-    // Mask rendering to the destination region
-    let clip_mat = Matrix {
-        a: dest_region.width() as f32,
-        b: 0.0,
-        c: 0.0,
-        d: dest_region.height() as f32,
-        tx: Twips::from_pixels(dest_region.x_min as f64),
-        ty: Twips::from_pixels(dest_region.y_min as f64),
-    };
-    commands.push_mask();
-    commands.draw_rect(swf::Color::BLACK, clip_mat);
-    commands.activate_mask();
-
-    // Render the source bitmap offset so that source_region lands on dest_region
-    let transform = Transform {
-        matrix: Matrix {
-            a: 1.0,
-            b: 0.0,
-            c: 0.0,
-            d: 1.0,
-            tx: Twips::from_pixels(
-                dest_region.x_min as f64 - source_region.x_min as f64,
-            ),
-            ty: Twips::from_pixels(
-                dest_region.y_min as f64 - source_region.y_min as f64,
-            ),
-        },
-        color_transform: ColorTransform::IDENTITY,
-        perspective_projection: None,
-    };
-    commands.render_bitmap(source_handle, transform, false, PixelSnapping::Never);
-
-    // Clean up mask
-    commands.deactivate_mask();
-    commands.draw_rect(swf::Color::BLACK, clip_mat);
-    commands.pop_mask();
-
     let target_handle = target.bitmap_handle(context.gc(), context.renderer);
-    let (target_data, include_dirty_area) = target.overwrite_cpu_pixels_from_gpu(context.gc());
-    let mut write = target_data.borrow_mut(context.gc());
-    let mut dirty_region = dest_region;
-    if let Some(old) = include_dirty_area {
-        dirty_region.union(old);
-    }
 
-    let sync_handle = context.renderer.render_offscreen(
+    let sync_handle = context.renderer.copy_pixels_with_blend(
+        source_handle,
+        (source_region.x_min, source_region.y_min),
+        (source_region.width(), source_region.height()),
         target_handle,
-        commands,
-        StageQuality::High,
-        dirty_region,
+        (dest_region.x_min, dest_region.y_min),
     );
 
-    match sync_handle {
-        Some(sync_handle) => {
-            write.set_gpu_dirty(context.gc(), sync_handle, dirty_region);
+    if let Some(sync_handle) = sync_handle {
+        let (target_data, include_dirty_area) = target.overwrite_cpu_pixels_from_gpu(context.gc());
+        let mut write = target_data.borrow_mut(context.gc());
+        let mut dirty_region = dest_region;
+        if let Some(old) = include_dirty_area {
+            dirty_region.union(old);
         }
-        None => {
-            // Backend doesn't support offscreen rendering; fall back to CPU.
-            // Need to drop the write lock first.
-            drop(write);
-            copy_on_cpu(
-                context.gc(),
-                context.renderer,
-                source,
-                target,
-                source_region,
-                dest_region,
-                true,
-            );
-        }
+        write.set_gpu_dirty(context.gc(), sync_handle, dirty_region);
+    } else {
+        // Backend doesn't support this operation; fall back to CPU
+        copy_on_cpu(
+            context.gc(),
+            context.renderer,
+            source,
+            target,
+            source_region,
+            dest_region,
+            true,
+        );
     }
 }
 
