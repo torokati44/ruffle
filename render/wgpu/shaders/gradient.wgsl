@@ -49,6 +49,18 @@ fn find_t(uv: vec2<f32>) -> f32 {
     }
 }
 
+fn bayer4x4(pos: vec2<f32>) -> f32 {
+    let x = u32(pos.x) % 4u;
+    let y = u32(pos.y) % 4u;
+    let m = array<u32, 16>(
+         0u,  8u,  2u, 10u,
+        12u,  4u, 14u,  6u,
+         3u, 11u,  1u,  9u,
+        15u,  7u, 13u,  5u
+    );
+    return f32(m[x + y * 4u]) / 16.0;
+}
+
 @fragment
 fn main_fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     // Calculate normalized `t` position in gradient, [0.0, 1.0] being the bounds of the ratios.
@@ -77,6 +89,16 @@ fn main_fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         color = common__linear_to_srgb(color);
     }
     let out = saturate(color * transforms.mult_color + transforms.add_color);
-    let alpha = saturate(out.a);
-    return vec4<f32>(out.rgb * alpha, alpha);
+
+    // Ordered dithering (4x4 Bayer) to reduce 8-bit banding
+    let bayer = bayer4x4(in.position.xy);
+    let dithered = vec4<f32>(
+        floor(out.r * 255.0 + bayer) / 255.0,
+        floor(out.g * 255.0 + bayer) / 255.0,
+        floor(out.b * 255.0 + bayer) / 255.0,
+        out.a
+    );
+
+    let alpha = saturate(dithered.a);
+    return vec4<f32>(dithered.rgb * alpha, alpha);
 }
