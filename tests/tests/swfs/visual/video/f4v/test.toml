@@ -1,0 +1,17 @@
+num_ticks = 75
+
+[player_options]
+with_renderer = { optional = false, quality = "low" }
+with_video = true
+
+[image_comparisons."output.70"]
+trigger = 70
+tolerance = 16
+max_outliers = 360
+
+[[compilers]]
+type = "Asc"
+target = "test.swf"
+class = "Test"
+scripts = ["Test.as"]
+swf_version = 9
