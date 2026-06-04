@@ -741,6 +741,10 @@ impl FormatSpans {
         reader_config.expand_empty_elements = true;
         reader_config.check_end_names = false;
         reader_config.allow_unmatched_ends = true;
+        // quick-xml emits entities/character references as separate `GeneralRef`
+        // events; a lone `&` that is not part of a reference must be treated as
+        // literal text rather than causing a parse error.
+        reader_config.allow_dangling_amp = true;
 
         fn class_name_to_selector(class: &WStr) -> WString {
             let mut selector = WString::from_utf8(".");
@@ -999,6 +1003,36 @@ impl FormatSpans {
                 }
                 Ok(Event::Text(e)) if !e.is_empty() => 'text: {
                     let e = decode_to_wstr(&e.into_inner());
+                    let e = process_html_entity(&e).unwrap_or(e);
+                    let format = format_stack.last().unwrap().clone();
+                    if let Some(TextDisplay::None) = format.display {
+                        break 'text;
+                    }
+
+                    if swf_version <= 7 && e.trim().is_empty() {
+                        // SWFs version 6,7 ignore whitespace-only text.
+                        // But whitespace is preserved when there
+                        // is any non-whitespace character.
+                        break 'text;
+                    }
+                    let e = if condense_white {
+                        Self::condense_white_in_text(e)
+                    } else {
+                        e.replace(swf_is_newline, WStr::from_units(&[HTML_NEWLINE]))
+                    };
+                    text.push_str(&e);
+                    spans.push(TextSpan::with_length_and_format(e.len(), &format));
+                }
+                Ok(Event::GeneralRef(e)) => 'text: {
+                    // quick-xml reports entities/character references (e.g. `&amp;`,
+                    // `&#229;`) as separate events. Reconstruct the original `&...;`
+                    // sequence and decode it the same way as regular text.
+                    let inner = e.into_inner();
+                    let mut raw = Vec::with_capacity(inner.len() + 2);
+                    raw.push(b'&');
+                    raw.extend_from_slice(&inner);
+                    raw.push(b';');
+                    let e = decode_to_wstr(&raw);
                     let e = process_html_entity(&e).unwrap_or(e);
                     let format = format_stack.last().unwrap().clone();
                     if let Some(TextDisplay::None) = format.display {

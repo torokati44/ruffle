@@ -786,9 +786,11 @@ impl<'gc> E4XNode<'gc> {
 
         let data_utf8 = string.to_utf8_lossy();
         let mut parser = NsReader::from_str(&data_utf8);
+        parser.config_mut().allow_dangling_amp = true;
         let mut open_tags: Vec<E4XNode<'gc>> = vec![];
 
         let mut top_level = vec![];
+        let mut pending_text: Vec<u8> = Vec::new();
 
         // This can't be a closure that captures these variables, because we need to modify them
         // outside of this body.
@@ -871,9 +873,10 @@ impl<'gc> E4XNode<'gc> {
                 }
                 Err(XmlError::Syntax(syntax_error)) => {
                     let code = match syntax_error {
-                        XmlSyntaxError::UnclosedPIOrXmlDecl => {
+                        XmlSyntaxError::UnclosedPI => {
                             XmlErrorCode::UnterminatedProcessingInstruction
                         }
+                        XmlSyntaxError::UnclosedXmlDecl => XmlErrorCode::UnterminatedXmlDecl,
                         XmlSyntaxError::UnclosedComment => XmlErrorCode::UnterminatedComment,
                         XmlSyntaxError::UnclosedDoctype => XmlErrorCode::UnterminatedDoctype,
                         XmlSyntaxError::UnclosedCData => XmlErrorCode::UnterminatedCData,
@@ -887,6 +890,20 @@ impl<'gc> E4XNode<'gc> {
                 // TODO: handle other errors properly
                 _ => return Err(make_xml_error(activation, XmlErrorCode::ElementMalformed)),
             };
+
+            if !matches!(event, Event::Text(_) | Event::GeneralRef(_)) && !pending_text.is_empty() {
+                let text = avm2_unescape(&pending_text)
+                    .map_err(|_| make_xml_error(activation, XmlErrorCode::ElementMalformed))?;
+                handle_text_cdata(
+                    text.as_bytes(),
+                    ignore_white,
+                    &mut open_tags,
+                    &mut top_level,
+                    true,
+                    activation,
+                );
+                pending_text.clear();
+            }
 
             match &event {
                 Event::Start(bs) => {
@@ -908,18 +925,12 @@ impl<'gc> E4XNode<'gc> {
                     }
                 }
                 Event::Text(bt) => {
-                    handle_text_cdata(
-                        avm2_unescape(bt)
-                            .map_err(|_| {
-                                make_xml_error(activation, XmlErrorCode::ElementMalformed)
-                            })?
-                            .as_bytes(),
-                        ignore_white,
-                        &mut open_tags,
-                        &mut top_level,
-                        true,
-                        activation,
-                    );
+                    pending_text.extend_from_slice(bt);
+                }
+                Event::GeneralRef(br) => {
+                    pending_text.push(b'&');
+                    pending_text.extend_from_slice(br);
+                    pending_text.push(b';');
                 }
                 Event::CData(bt) => {
                     // This is already unescaped
@@ -1036,7 +1047,7 @@ impl<'gc> E4XNode<'gc> {
                 .map_err(|_| make_xml_error(activation, XmlErrorCode::ElementMalformed))?;
             let value = AvmString::new_utf8(activation.gc(), value_str);
 
-            let (ns, local_name) = parser.resolve_attribute(attribute.key);
+            let (ns, local_name) = parser.resolver().resolve_attribute(attribute.key);
 
             let local_name = ruffle_wstr::from_utf8_bytes(local_name.into_inner());
             let name = activation.strings().intern_wstr(local_name).into();
@@ -1085,7 +1096,7 @@ impl<'gc> E4XNode<'gc> {
             attribute_nodes.push(attribute);
         }
 
-        let (ns, local_name) = parser.resolve_element(bs.name());
+        let (ns, local_name) = parser.resolver().resolve_element(bs.name());
 
         let local_name = ruffle_wstr::from_utf8_bytes(local_name.into_inner());
         let name = activation.strings().intern_wstr(local_name).into();

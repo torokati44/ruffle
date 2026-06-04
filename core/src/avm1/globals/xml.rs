@@ -141,37 +141,68 @@ impl<'gc> Xml<'gc> {
     ) -> Result<(), quick_xml::Error> {
         let data_utf8 = data.to_utf8_lossy();
         let mut parser = Reader::from_str(&data_utf8);
+        parser.config_mut().allow_dangling_amp = true;
         let mut open_tags = vec![self.root()];
+        let mut pending_text: Vec<u8> = Vec::new();
+
+        // Flushes any buffered text (accumulated from `Text`/`GeneralRef` events)
+        // into a text node. Returns whether any unescaping error occurred.
+        let flush_pending_text =
+            |pending_text: &mut Vec<u8>,
+             open_tags: &[XmlNode<'gc>],
+             activation: &mut Activation<'_, 'gc>|
+             -> Result<(), quick_xml::Error> {
+                if !pending_text.is_empty() {
+                    let text = avm1_unescape(pending_text)
+                        .map_err(|e| quick_xml::Error::Encoding(EncodingError::Utf8(e)))?;
+                    Self::handle_text_cdata(text.as_bytes(), ignore_white, open_tags, activation);
+                    pending_text.clear();
+                }
+                Ok(())
+            };
 
         self.0.status.set(XmlStatus::NoError);
 
         loop {
-            let event = parser.read_event().map_err(|error| {
-                self.0.status.set(match error {
-                    quick_xml::Error::Syntax(_)
-                    | quick_xml::Error::InvalidAttr(AttrError::ExpectedEq(_))
-                    | quick_xml::Error::InvalidAttr(AttrError::Duplicated(_, _)) => {
-                        XmlStatus::ElementMalformed
-                    }
-                    quick_xml::Error::IllFormed(
-                        IllFormedError::MismatchedEndTag { .. }
-                        | IllFormedError::UnmatchedEndTag { .. },
-                    ) => XmlStatus::MismatchedEnd,
-                    quick_xml::Error::IllFormed(IllFormedError::MissingDeclVersion(_)) => {
-                        XmlStatus::DeclNotTerminated
-                    }
-                    quick_xml::Error::InvalidAttr(AttrError::UnquotedValue(_)) => {
-                        XmlStatus::AttributeNotTerminated
-                    }
-                    _ => XmlStatus::OutOfMemory,
-                    // Not accounted for:
-                    // quick_xml::Error::UnexpectedToken(_)
-                    // quick_xml::Error::UnexpectedBang
-                    // quick_xml::Error::TextNotFound
-                    // quick_xml::Error::EscapeError(_)
-                });
-                error
-            })?;
+            let event = match parser.read_event() {
+                Ok(event) => event,
+                Err(error) => {
+                    // A parse error is recoverable for AVM1: the nodes parsed so
+                    // far are kept. Flush any text buffered before the error so it
+                    // is not lost (`quick-xml` reports entities as separate events,
+                    // which we accumulate and flush lazily).
+                    let _ = flush_pending_text(&mut pending_text, &open_tags, activation);
+
+                    self.0.status.set(match error {
+                        quick_xml::Error::Syntax(_)
+                        | quick_xml::Error::InvalidAttr(AttrError::ExpectedEq(_))
+                        | quick_xml::Error::InvalidAttr(AttrError::Duplicated(_, _)) => {
+                            XmlStatus::ElementMalformed
+                        }
+                        quick_xml::Error::IllFormed(
+                            IllFormedError::MismatchedEndTag { .. }
+                            | IllFormedError::UnmatchedEndTag { .. },
+                        ) => XmlStatus::MismatchedEnd,
+                        quick_xml::Error::IllFormed(IllFormedError::MissingDeclVersion(_)) => {
+                            XmlStatus::DeclNotTerminated
+                        }
+                        quick_xml::Error::InvalidAttr(AttrError::UnquotedValue(_)) => {
+                            XmlStatus::AttributeNotTerminated
+                        }
+                        _ => XmlStatus::OutOfMemory,
+                        // Not accounted for:
+                        // quick_xml::Error::UnexpectedToken(_)
+                        // quick_xml::Error::UnexpectedBang
+                        // quick_xml::Error::TextNotFound
+                        // quick_xml::Error::EscapeError(_)
+                    });
+                    return Err(error);
+                }
+            };
+
+            if !matches!(event, Event::Text(_) | Event::GeneralRef(_)) {
+                flush_pending_text(&mut pending_text, &open_tags, activation)?;
+            }
 
             match event {
                 Event::Start(bs) => {
@@ -193,18 +224,16 @@ impl<'gc> Xml<'gc> {
                     open_tags.pop();
                 }
                 Event::Text(bt) => {
-                    Self::handle_text_cdata(
-                        avm1_unescape(&bt)
-                            .map_err(|e| quick_xml::Error::Encoding(EncodingError::Utf8(e)))?
-                            .as_bytes(),
-                        ignore_white,
-                        &open_tags,
-                        activation,
-                    );
+                    pending_text.extend_from_slice(&bt);
                 }
                 Event::CData(bt) => {
                     // This is already unescaped
                     Self::handle_text_cdata(&bt.into_inner(), ignore_white, &open_tags, activation);
+                }
+                Event::GeneralRef(br) => {
+                    pending_text.push(b'&');
+                    pending_text.extend_from_slice(&br);
+                    pending_text.push(b';');
                 }
                 Event::Decl(bd) => {
                     let mut xml_decl = WString::from_buf(b"<?".to_vec());
