@@ -284,4 +284,13 @@ impl VideoDecoder for H264Decoder {
             )),
         }
     }
+
+    fn flush_frame(&mut self) -> Result<Option<DecodedFrame>, Error> {
+        // The webcodecs backend has a one-frame async pipeline delay: the
+        // callback for frame N fires only after frame N+1 is submitted.
+        // At end-of-stream there is no N+1, so the last decoded frame sits
+        // in `last_frame` and would never be returned by `decode_frame`.
+        // Draining it here makes it available to the caller.
+        Ok(self.last_frame.borrow_mut().take())
+    }
 }

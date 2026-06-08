@@ -68,4 +68,12 @@ impl VideoBackend for NullVideoBackend {
     ) -> Result<BitmapInfo, Error> {
         Err(Error::DecodingNotSupported)
     }
+
+    fn flush_video_stream(
+        &mut self,
+        _stream: VideoStreamHandle,
+        _renderer: &mut dyn RenderBackend,
+    ) -> Result<Option<BitmapInfo>, Error> {
+        Ok(None)
+    }
 }

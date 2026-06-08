@@ -206,6 +206,50 @@ impl VideoBackend for ExternalVideoBackend {
             }
         }
     }
+
+    fn flush_video_stream(
+        &mut self,
+        stream: VideoStreamHandle,
+        renderer: &mut dyn RenderBackend,
+    ) -> Result<Option<BitmapInfo>, Error> {
+        let stream = self
+            .streams
+            .get_mut(stream)
+            .ok_or(Error::VideoStreamIsNotRegistered)?;
+
+        match stream {
+            ProxyOrStream::Proxied(handle) => {
+                self.software.flush_video_stream(*handle, renderer)
+            }
+            ProxyOrStream::Owned(stream) => {
+                let frame = match stream.decoder.flush_frame()? {
+                    Some(f) => f,
+                    None => return Ok(None),
+                };
+
+                let width = frame.width();
+                let height = frame.height();
+
+                let handle = if let Some(bitmap) = stream.bitmap.clone() {
+                    renderer.update_texture(
+                        &bitmap,
+                        frame,
+                        PixelRegion::for_whole_size(width, height),
+                    )?;
+                    bitmap
+                } else {
+                    renderer.register_bitmap(frame)?
+                };
+                stream.bitmap = Some(handle.clone());
+
+                Ok(Some(BitmapInfo {
+                    handle,
+                    width,
+                    height,
+                }))
+            }
+        }
+    }
 }
 
 /// A single preloaded video stream.

@@ -43,4 +43,14 @@ pub trait VideoDecoder {
     /// The decoded frame should be returned. An `Error` can be returned if
     /// a drawable bitmap can not be produced.
     fn decode_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<DecodedFrame, Error>;
+
+    /// Flush any frames remaining in the decoder's internal pipeline.
+    ///
+    /// Should be called repeatedly after the last encoded frame has been
+    /// submitted, until `Ok(None)` is returned to signal that the pipeline is
+    /// empty. The default implementation signals immediately that no frames
+    /// are buffered, which is correct for decoders without internal delay.
+    fn flush_frame(&mut self) -> Result<Option<DecodedFrame>, Error> {
+        Ok(None)
+    }
 }

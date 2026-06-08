@@ -408,4 +408,66 @@ impl VideoDecoder for H264Decoder {
             ))
         }
     }
+
+    fn flush_frame(&mut self) -> Result<Option<DecodedFrame>, Error> {
+        if self.length_size == 0 {
+            // Decoder was never configured; nothing to flush.
+            return Ok(None);
+        }
+        unsafe {
+            let decoder_vtbl = (*self.decoder).as_ref().unwrap();
+
+            let mut output = [ptr::null_mut() as *mut c_uchar; 3];
+            let mut dest_buf_info: openh264_sys::SBufferInfo = std::mem::zeroed();
+
+            let ret = decoder_vtbl.FlushFrame.unwrap()(
+                self.decoder,
+                output.as_mut_ptr(),
+                &mut dest_buf_info as *mut openh264_sys::SBufferInfo,
+            );
+
+            if ret != 0 {
+                // Non-zero return just means no more frames available.
+                return Ok(None);
+            }
+            if dest_buf_info.iBufferStatus != 1 {
+                return Ok(None);
+            }
+
+            let buffer_info = dest_buf_info.UsrData.sSystemBuffer;
+            if buffer_info.iFormat != videoFormatI420 as c_int {
+                return Ok(None);
+            }
+
+            let mut yuv: Vec<u8> = Vec::with_capacity(
+                buffer_info.iWidth as usize * buffer_info.iHeight as usize * 3 / 2,
+            );
+
+            for i in 0..buffer_info.iHeight {
+                yuv.extend_from_slice(slice::from_raw_parts(
+                    output[0].offset((i * buffer_info.iStride[0]) as isize),
+                    buffer_info.iWidth as usize,
+                ));
+            }
+            for i in 0..buffer_info.iHeight / 2 {
+                yuv.extend_from_slice(slice::from_raw_parts(
+                    output[1].offset((i * buffer_info.iStride[1]) as isize),
+                    buffer_info.iWidth as usize / 2,
+                ));
+            }
+            for i in 0..buffer_info.iHeight / 2 {
+                yuv.extend_from_slice(slice::from_raw_parts(
+                    output[2].offset((i * buffer_info.iStride[1]) as isize),
+                    buffer_info.iWidth as usize / 2,
+                ));
+            }
+
+            Ok(Some(DecodedFrame::new(
+                buffer_info.iWidth as u32,
+                buffer_info.iHeight as u32,
+                BitmapFormat::Yuv420p,
+                yuv,
+            )))
+        }
+    }
 }

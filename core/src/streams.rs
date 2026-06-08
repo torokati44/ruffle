@@ -1545,6 +1545,28 @@ impl<'gc> NetStream<'gc> {
                             }
                         }
                     } // video loop
+
+                    // Once all encoded frames are submitted, drain any frames
+                    // still buffered inside the decoder (e.g. due to B-frame
+                    // reordering or the one-frame async delay in webcodecs).
+                    if video_exhausted {
+                        loop {
+                            match context.video.flush_video_stream(video_handle, context.renderer) {
+                                Ok(Some(frame)) => {
+                                    self.0.last_decoded_bitmap.replace(Some(frame));
+                                    if let Some(mc) = self.0.attached_to.get() {
+                                        mc.invalidate_cached_bitmap();
+                                        *context.needs_render = true;
+                                    }
+                                }
+                                Ok(None) => break,
+                                Err(e) => {
+                                    tracing::warn!("F4V decoder flush produced no frame: {}", e);
+                                    break;
+                                }
+                            }
+                        }
+                    }
                 }
             } // if let Some(vti)
 

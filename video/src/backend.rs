@@ -74,4 +74,17 @@ pub trait VideoBackend {
         encoded_frame: EncodedFrame<'_>,
         renderer: &mut dyn RenderBackend,
     ) -> Result<BitmapInfo, Error>;
+
+    /// Flush any frames remaining in the decoder's internal pipeline for the
+    /// given stream and render them.
+    ///
+    /// Returns `Ok(Some(BitmapInfo))` for each buffered frame still available,
+    /// and `Ok(None)` once the pipeline is empty. Should be called repeatedly
+    /// after the last encoded frame has been submitted (i.e. at end-of-stream)
+    /// until `Ok(None)` is returned.
+    fn flush_video_stream(
+        &mut self,
+        stream: VideoStreamHandle,
+        renderer: &mut dyn RenderBackend,
+    ) -> Result<Option<BitmapInfo>, Error>;
 }
