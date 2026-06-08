@@ -1311,6 +1311,8 @@ impl<'gc> NetStream<'gc> {
 
         let max_time = source.stream_time.get() + dt.as_millis();
         let mut buffer_underrun = false;
+        let mut video_exhausted = false;
+        let mut audio_exhausted = false;
         let mut error = false;
         let mut max_lookahead_audio_tags = 5;
         let mut is_lookahead_tag = false;
@@ -1420,11 +1422,6 @@ impl<'gc> NetStream<'gc> {
                             }
                         }
 
-                        // If no recognised tracks were found, signal end-of-stream immediately.
-                        if video_track_index.is_none() && audio_track_index.is_none() {
-                            buffer_underrun = true;
-                        }
-
                         media_context.replace(Rc::new(mp4));
                     }
                     Err(_) => {
@@ -1498,7 +1495,7 @@ impl<'gc> NetStream<'gc> {
                         let smpl = match trk.samples.get(sample_id as usize) {
                             Some(smpl) => smpl,
                             None => {
-                                buffer_underrun = true;
+                                video_exhausted = true;
                                 break;
                             }
                         };
@@ -1596,10 +1593,7 @@ impl<'gc> NetStream<'gc> {
                     let smpl = match audio_trk.samples.get(*next_audio_sample as usize) {
                         Some(s) => s,
                         None => {
-                            // All audio samples consumed; treat as end-of-stream.
-                            // This also covers audio-only files where the video loop
-                            // is skipped entirely and never sets buffer_underrun.
-                            buffer_underrun = true;
+                            audio_exhausted = true;
                             break;
                         }
                     };
@@ -1624,6 +1618,14 @@ impl<'gc> NetStream<'gc> {
                     }
                 }
             } // if let Some(ati)
+
+            // Signal buffer underrun only when every present track is exhausted,
+            // so audio-only or video-only completion doesn't cut the other track short.
+            let video_done = video_track_index.is_none() || video_exhausted;
+            let audio_done = audio_track_index.is_none() || audio_exhausted;
+            if video_done && audio_done {
+                buffer_underrun = true;
+            }
         }
 
         source.stream_time.set(max_time);

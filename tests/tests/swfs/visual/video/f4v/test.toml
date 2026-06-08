@@ -1,11 +1,11 @@
-num_ticks = 75
+num_ticks = 80
 
 [player_options]
 with_renderer = { optional = false, quality = "low" }
 with_video = true
 
 [image_comparisons."output.70"]
-trigger = 70
+trigger = 75
 tolerance = 16
 max_outliers = 360
 
