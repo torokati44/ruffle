@@ -16,14 +16,13 @@ use crate::context::UpdateContext;
 use crate::display_object::MovieClip;
 use crate::loader::Error;
 use crate::string::AvmString;
-use flv_rs::Header as FlvHeader;
+use flv::FlvState;
 use gc_arena::barrier::unlock;
 use gc_arena::{Collect, DynamicRoot, Gc, Lock, Mutation, Rootable};
 use ruffle_common::buffer::{Buffer, Substream, SubstreamError};
 use ruffle_common::duration::FloatDuration;
 use ruffle_macros::istr;
 use ruffle_render::bitmap::BitmapInfo;
-use ruffle_video::VideoStreamHandle;
 use std::cell::{Cell, RefCell};
 use thiserror::Error;
 use url::Url;
@@ -173,21 +172,8 @@ impl NetStreamHandle {
 /// The current type of the data in the stream buffer.
 #[derive(Clone, Debug)]
 pub enum NetStreamType {
-    /// The stream is an FLV.
-    Flv {
-        #[expect(dead_code)] // set but never read
-        header: FlvHeader,
-
-        /// The currently playing video track's stream instance.
-        video_stream: Option<VideoStreamHandle>,
-
-        /// The index of the last processed frame.
-        ///
-        /// FLV does not store this information directly and we are not holding
-        /// onto a table of data buffers like `Video` does, so we must maintain
-        /// frame IDs ourselves for various API related purposes.
-        frame_id: u32,
-    },
+    /// The stream is an FLV. Per-format state lives in [`FlvState`].
+    Flv(FlvState),
 }
 
 #[derive(Clone, Debug, Collect)]
@@ -486,10 +472,7 @@ impl<'gc> NetStream<'gc> {
             source.audio_stream.replace(None);
         }
 
-        if matches!(
-            &*source.stream_type.borrow(),
-            Some(NetStreamType::Flv { .. })
-        ) {
+        if matches!(&*source.stream_type.borrow(), Some(NetStreamType::Flv(_))) {
             self.flv_seek(offset);
         }
 
@@ -738,15 +721,20 @@ impl<'gc> NetStream<'gc> {
         let mut buffer_underrun = false;
         let mut error = false;
 
-        // At this point we should know our stream type.
-        if matches!(
-            &*source.stream_type.borrow(),
-            Some(NetStreamType::Flv { .. })
-        ) {
-            let (flv_underrun, flv_error) = self.flv_tick(context, max_time);
-            buffer_underrun |= flv_underrun;
-            error |= flv_error;
+        // At this point we should know our stream type. Take the per-format
+        // state out of the cell for the duration of processing so the format
+        // driver can mutate it directly (and so re-entrant script callbacks
+        // don't observe a borrowed cell), then put it back.
+        let mut stream_type = source.stream_type.borrow_mut().take();
+        match &mut stream_type {
+            Some(NetStreamType::Flv(state)) => {
+                let (flv_underrun, flv_error) = self.flv_tick(context, state, max_time);
+                buffer_underrun |= flv_underrun;
+                error |= flv_error;
+            }
+            None => {}
         }
+        *source.stream_type.borrow_mut() = stream_type;
 
         source.stream_time.set(max_time);
         if let Err(e) = self.commit_sound_stream(context) {

@@ -22,9 +22,30 @@ use flv_rs::{
 };
 use ruffle_common::buffer::{Slice, Substream};
 use ruffle_video::frame::EncodedFrame;
+use ruffle_video::VideoStreamHandle;
 use std::cmp::max;
 use std::io::{Seek, SeekFrom};
 use swf::{AudioCompression, SoundFormat, VideoCodec, VideoDeblocking};
+
+/// Per-stream state for an in-progress FLV.
+///
+/// Held by [`NetStreamType::Flv`](super::NetStreamType::Flv) and threaded into
+/// the FLV tag handlers as they process the stream.
+#[derive(Clone, Debug)]
+pub struct FlvState {
+    #[expect(dead_code)] // set but never read
+    header: FlvHeader,
+
+    /// The currently playing video track's stream instance.
+    video_stream: Option<VideoStreamHandle>,
+
+    /// The index of the last processed frame.
+    ///
+    /// FLV does not store this information directly and we are not holding
+    /// onto a table of data buffers like `Video` does, so we must maintain
+    /// frame IDs ourselves for various API related purposes.
+    frame_id: u32,
+}
 
 impl<'gc> NetStream<'gc> {
     /// Attempt to recognize and set up an FLV stream from the current buffer.
@@ -49,11 +70,11 @@ impl<'gc> NetStream<'gc> {
             Ok(header) => {
                 source.offset.set(reader.into_parts().1);
                 source.preload_offset.set(source.offset.get());
-                source.stream_type.replace(Some(NetStreamType::Flv {
+                source.stream_type.replace(Some(NetStreamType::Flv(FlvState {
                     header,
                     video_stream: None,
                     frame_id: 0,
-                }));
+                })));
                 Some(true)
             }
             Err(FlvError::EndOfData) => Some(false),
@@ -165,19 +186,13 @@ impl<'gc> NetStream<'gc> {
     pub(super) fn flv_video_tag(
         self,
         context: &mut UpdateContext<'gc>,
+        state: &mut FlvState,
         slice: &Slice,
         video_data: FlvVideoData<'_>,
         tag_needs_preloading: bool,
     ) {
-        let source = self.source();
-        let (video_handle, frame_id) = match *source.stream_type.borrow() {
-            Some(NetStreamType::Flv {
-                video_stream,
-                frame_id,
-                ..
-            }) => (video_stream, frame_id),
-            _ => unreachable!(),
-        };
+        let video_handle = state.video_stream;
+        let frame_id = state.frame_id;
         let codec = VideoCodec::from_u8(video_data.codec_id as u8);
         let buffer = slice.data();
 
@@ -205,13 +220,7 @@ impl<'gc> NetStream<'gc> {
                             VideoDeblocking::UseVideoPacketValue,
                         ) {
                             Ok(new_handle) => {
-                                match &mut *source.stream_type.borrow_mut() {
-                                    Some(NetStreamType::Flv { video_stream, .. }) => {
-                                        *video_stream = Some(new_handle)
-                                    }
-                                    _ => unreachable!(),
-                                }
-
+                                state.video_stream = Some(new_handle);
                                 new_handle
                             }
                             Err(e) => {
@@ -334,10 +343,7 @@ impl<'gc> NetStream<'gc> {
             }
         }
 
-        match &mut *source.stream_type.borrow_mut() {
-            Some(NetStreamType::Flv { frame_id, .. }) => *frame_id += 1,
-            _ => unreachable!(),
-        };
+        state.frame_id += 1;
     }
 
     /// Process a parsed FLV script tag.
@@ -350,14 +356,11 @@ impl<'gc> NetStream<'gc> {
     pub(super) fn flv_script_tag(
         self,
         context: &mut UpdateContext<'gc>,
+        state: &mut FlvState,
         script_data: FlvScriptData<'_>,
         tag_needs_preloading: bool,
     ) {
-        let source = self.source();
-        let has_stream_already = match &*source.stream_type.borrow() {
-            Some(NetStreamType::Flv { video_stream, .. }) => video_stream.is_some(),
-            _ => unreachable!(),
-        };
+        let has_stream_already = state.video_stream.is_some();
 
         let mut width = None;
         let mut height = None;
@@ -410,12 +413,7 @@ impl<'gc> NetStream<'gc> {
                     video_codec,
                     VideoDeblocking::UseVideoPacketValue,
                 ) {
-                    Ok(stream_handle) => match &mut *source.stream_type.borrow_mut() {
-                        Some(NetStreamType::Flv { video_stream, .. }) => {
-                            *video_stream = Some(stream_handle)
-                        }
-                        _ => unreachable!(),
-                    },
+                    Ok(stream_handle) => state.video_stream = Some(stream_handle),
                     Err(e) => {
                         tracing::error!("Got error when registering FLV video stream: {}", e)
                     }
@@ -566,6 +564,7 @@ impl<'gc> NetStream<'gc> {
     pub(super) fn flv_tick(
         self,
         context: &mut UpdateContext<'gc>,
+        state: &mut FlvState,
         max_time: f64,
     ) -> (bool, bool) {
         let source = self.source();
@@ -618,10 +617,10 @@ impl<'gc> NetStream<'gc> {
                     }
                 }
                 FlvTagData::Video(video_data) if !is_lookahead_tag => {
-                    self.flv_video_tag(context, &slice, video_data, tag_needs_preloading)
+                    self.flv_video_tag(context, state, &slice, video_data, tag_needs_preloading)
                 }
                 FlvTagData::Script(script_data) if !is_lookahead_tag => {
-                    self.flv_script_tag(context, script_data, tag_needs_preloading);
+                    self.flv_script_tag(context, state, script_data, tag_needs_preloading);
                 }
                 FlvTagData::Invalid(e) => {
                     tracing::error!("FLV data parsing failed: {}", e)
