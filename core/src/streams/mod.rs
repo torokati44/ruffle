@@ -4,13 +4,11 @@ mod flv;
 
 use crate::avm1::{
     Activation as Avm1Activation, ActivationIdentifier as Avm1ActivationIdentifier,
-    ExecutionReason as Avm1ExecutionReason, FlvValueAvm1Ext, Object as Avm1Object,
-    Value as Avm1Value,
+    ExecutionReason as Avm1ExecutionReason, Object as Avm1Object, Value as Avm1Value,
 };
 use crate::avm2::object::NetStreamObject;
 use crate::avm2::{
-    Activation as Avm2Activation, Avm2, Error as Avm2Error, EventObject as Avm2EventObject,
-    FlvValueAvm2Ext, FunctionArgs, Object as Avm2Object, Value as Avm2Value,
+    Activation as Avm2Activation, Avm2, EventObject as Avm2EventObject, Object as Avm2Object,
 };
 use crate::backend::audio::{DecodeError, SoundInstanceHandle, SoundStreamInfo};
 use crate::backend::navigator::Request;
@@ -18,7 +16,7 @@ use crate::context::UpdateContext;
 use crate::display_object::MovieClip;
 use crate::loader::Error;
 use crate::string::AvmString;
-use flv_rs::{Error as FlvError, FlvReader, Header as FlvHeader, Value as FlvValue};
+use flv_rs::Header as FlvHeader;
 use gc_arena::barrier::unlock;
 use gc_arena::{Collect, DynamicRoot, Gc, Lock, Mutation, Rootable};
 use ruffle_common::buffer::{Buffer, Substream, SubstreamError};
@@ -27,7 +25,6 @@ use ruffle_macros::istr;
 use ruffle_render::bitmap::BitmapInfo;
 use ruffle_video::VideoStreamHandle;
 use std::cell::{Cell, RefCell};
-use std::rc::Rc;
 use thiserror::Error;
 use url::Url;
 
@@ -668,8 +665,6 @@ impl<'gc> NetStream<'gc> {
     /// stop stream processing until new data has been retrieved.
     pub fn sniff_stream_type(self, context: &mut UpdateContext<'gc>) -> bool {
         let source = self.source();
-        let slice = source.buffer.borrow().to_full_slice();
-        let buffer = slice.data();
 
         // A nonzero preload offset indicates that we tried and failed to
         // sniff the container format, so in that case do not process the
@@ -678,30 +673,16 @@ impl<'gc> NetStream<'gc> {
             return false;
         }
 
+        // Try each known container format in turn. Each format inspects the
+        // buffer itself and returns `None` if it doesn't recognize the data.
+        if let Some(result) = self.flv_sniff() {
+            return result;
+        }
+
+        // No known container format recognized the data.
+        let slice = source.buffer.borrow().to_full_slice();
+        let buffer = slice.data();
         match buffer.get(0..8) {
-            // Only version 1 is valid.
-            Some([b'F', b'L', b'V', 1, _, _, _, _]) => {
-                let mut reader = FlvReader::from_parts(&buffer, source.offset.get());
-                match FlvHeader::parse(&mut reader) {
-                    Ok(header) => {
-                        source.offset.set(reader.into_parts().1);
-                        source.preload_offset.set(source.offset.get());
-                        source.stream_type.replace(Some(NetStreamType::Flv {
-                            header,
-                            video_stream: None,
-                            frame_id: 0,
-                        }));
-                        true
-                    }
-                    Err(FlvError::EndOfData) => false,
-                    Err(e) => {
-                        //TODO: Fire an error event to AS & stop playing too
-                        tracing::error!("FLV header parsing failed: {}", e);
-                        source.preload_offset.set(8); // ???
-                        false
-                    }
-                }
-            }
             Some(magic) => {
                 //Unrecognized signature
                 //TODO: Fire an error event to AS & stop playing too
@@ -858,60 +839,5 @@ impl<'gc> NetStream<'gc> {
             }
             None => {}
         }
-    }
-
-    fn handle_script_data(
-        self,
-        avm_object: Option<NetStreamKind<'gc>>,
-        context: &mut UpdateContext<'gc>,
-        variable_name: &[u8],
-        variable_data: FlvValue,
-    ) -> Result<(), Avm2Error<'gc>> {
-        match avm_object {
-            Some(NetStreamKind::Avm1(object)) => {
-                let avm_string_name = AvmString::new_utf8_bytes(context.gc(), variable_name);
-                let activation_name = format!("[FLV {avm_string_name}]");
-
-                let root = context.stage.root_clip().expect("root");
-                let mut activation = Avm1Activation::from_nothing(
-                    context,
-                    Avm1ActivationIdentifier::root(&activation_name),
-                    root,
-                );
-
-                let avm1_object_value = variable_data.to_avm1_value(&mut activation);
-
-                if let Err(e) = object.call_method(
-                    avm_string_name,
-                    &[avm1_object_value],
-                    &mut activation,
-                    Avm1ExecutionReason::Special,
-                ) {
-                    tracing::error!(
-                        "Got error when dispatching AVM1 {} script data handler from NetStream: {}",
-                        avm_string_name,
-                        e,
-                    );
-                }
-            }
-            Some(NetStreamKind::Avm2(_)) => {
-                let mut activation = Avm2Activation::from_nothing(context);
-                let client_object = self
-                    .client()
-                    .expect("Client should be initialized if script data is being accessed");
-
-                let data_object = variable_data.to_avm2_value(activation.context);
-                let args = &[data_object];
-
-                Avm2Value::from(client_object).call_public_property(
-                    AvmString::new_utf8_bytes(activation.gc(), variable_name),
-                    FunctionArgs::from_slice(args),
-                    &mut activation,
-                )?;
-            }
-            None => {}
-        };
-
-        Ok(())
     }
 }
