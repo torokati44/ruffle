@@ -36,7 +36,7 @@ optional = true
 features = [
     "CodecState", "DomException", "DomRectReadOnly", "EncodedVideoChunk",
     "EncodedVideoChunkInit", "EncodedVideoChunkType", "PlaneLayout", "VideoDecoder",
-    "VideoDecoderConfig", "VideoDecoderInit", "VideoFrame", "VideoPixelFormat",
+    "VideoDecoderConfig", "HardwareAcceleration", "VideoDecoderInit", "VideoFrame", "VideoPixelFormat",
 ]
 
 [features]
