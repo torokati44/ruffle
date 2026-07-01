@@ -66,9 +66,9 @@ pub use loader::LoadBehavior;
 pub use player::{Player, PlayerBuilder, PlayerMode, PlayerRuntime, StaticCallstack};
 pub use ruffle_common::duration::FloatDuration;
 pub use ruffle_render::backend::ViewportDimensions;
+pub use skrifa;
 pub use swf;
 pub use swf::Color;
-pub use ttf_parser;
 
 /// The newest Flash Player version known to Ruffle.
 pub const NEWEST_PLAYER_VERSION: u8 = 51;

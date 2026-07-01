@@ -10,6 +10,10 @@ use ruffle_render::bitmap::{Bitmap, BitmapHandle};
 use ruffle_render::error::Error;
 use ruffle_render::shape_utils::{DrawCommand, FillRule};
 use ruffle_render::transform::Transform;
+use skrifa::instance::{LocationRef, Size};
+use skrifa::outline::OutlinePen;
+use skrifa::raw::TableProvider;
+use skrifa::{FontRef, GlyphId, MetadataProvider};
 
 use std::cell::{Cell, OnceCell, Ref, RefCell};
 use std::hash::{Hash, Hasher};
@@ -156,35 +160,48 @@ pub trait FontRenderer: std::fmt::Debug {
     fn calculate_kerning(&self, left: char, right: char) -> Twips;
 }
 
-struct GlyphToDrawing<'a>(&'a mut Drawing);
+struct GlyphToDrawing<'a> {
+    drawing: &'a mut Drawing,
+
+    /// Whether any path command has been emitted.
+    ///
+    /// This mirrors `ttf_parser`'s `outline_glyph`, which returns `None` for
+    /// glyphs that have no outline (e.g. whitespace), whereas `skrifa` happily
+    /// draws them as empty outlines.
+    has_outline: bool,
+}
 
 /// Convert from a TTF outline, to a flash Drawing.
 ///
 /// Note that the Y axis is flipped. I do not know why, but Flash does this.
-impl ttf_parser::OutlineBuilder for GlyphToDrawing<'_> {
+impl OutlinePen for GlyphToDrawing<'_> {
     fn move_to(&mut self, x: f32, y: f32) {
-        self.0.draw_command(DrawCommand::MoveTo(Point::new(
+        self.has_outline = true;
+        self.drawing.draw_command(DrawCommand::MoveTo(Point::new(
             Twips::new(x as i32),
             Twips::new(-y as i32),
         )));
     }
 
     fn line_to(&mut self, x: f32, y: f32) {
-        self.0.draw_command(DrawCommand::LineTo(Point::new(
+        self.has_outline = true;
+        self.drawing.draw_command(DrawCommand::LineTo(Point::new(
             Twips::new(x as i32),
             Twips::new(-y as i32),
         )));
     }
 
     fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
-        self.0.draw_command(DrawCommand::QuadraticCurveTo {
+        self.has_outline = true;
+        self.drawing.draw_command(DrawCommand::QuadraticCurveTo {
             control: Point::new(Twips::new(x1 as i32), Twips::new(-y1 as i32)),
             anchor: Point::new(Twips::new(x as i32), Twips::new(-y as i32)),
         });
     }
 
     fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
-        self.0.draw_command(DrawCommand::CubicCurveTo {
+        self.has_outline = true;
+        self.drawing.draw_command(DrawCommand::CubicCurveTo {
             control_a: Point::new(Twips::new(x1 as i32), Twips::new(-y1 as i32)),
             control_b: Point::new(Twips::new(x2 as i32), Twips::new(-y2 as i32)),
             anchor: Point::new(Twips::new(x as i32), Twips::new(-y as i32)),
@@ -192,7 +209,25 @@ impl ttf_parser::OutlineBuilder for GlyphToDrawing<'_> {
     }
 
     fn close(&mut self) {
-        self.0.close_path();
+        self.drawing.close_path();
+    }
+}
+
+/// Returns the horizontal kerning value for a glyph pair from a `kern` subtable.
+///
+/// Returns `None` for state-machine (format 1) subtables, mirroring
+/// `ttf_parser`'s `Subtable::glyphs_kerning`.
+fn subtable_kerning(
+    subtable: &skrifa::raw::tables::kern::Subtable<'_>,
+    left: GlyphId,
+    right: GlyphId,
+) -> Option<i32> {
+    use skrifa::raw::tables::kern::SubtableKind;
+    match subtable.kind().ok()? {
+        SubtableKind::Format0(subtable) => subtable.kerning(left, right),
+        SubtableKind::Format2(subtable) => subtable.kerning(left, right),
+        SubtableKind::Format3(subtable) => subtable.kerning(left, right),
+        SubtableKind::Format1(_) => None,
     }
 }
 
@@ -226,7 +261,7 @@ impl std::fmt::Debug for FontFileData {
 /// Represents a raw font file (ie .ttf).
 /// This should be shared and reused where possible, and it's reparsed every time a new glyph is required.
 ///
-/// Parsing of a font is near-free (according to [ttf_parser::Face::parse]), but the storage isn't.
+/// Parsing of a font is near-free (according to [skrifa::FontRef::new]), but the storage isn't.
 ///
 /// Font files may contain multiple individual font faces, but those font faces may reuse the same
 /// Glyph from the same file. For this reason, glyphs are reused where possible.
@@ -244,27 +279,27 @@ pub struct FontFace {
 }
 
 impl FontFace {
-    pub fn new(data: FontFileData, font_index: u32) -> Result<Self, ttf_parser::FaceParsingError> {
+    pub fn new(data: FontFileData, font_index: u32) -> Result<Self, skrifa::raw::ReadError> {
         // TODO: Support font collections
 
         // We validate that the font is good here, so we can just `.expect()` it later
-        let face = ttf_parser::Face::parse(&data, font_index)?;
+        let font = FontRef::from_index(&data, font_index)?;
 
-        let ascender = face.ascender() as i32;
-        let descender = -face.descender() as i32;
-        let leading = face.line_gap();
-        let scale = face.units_per_em() as f32;
-        let glyphs = vec![OnceCell::new(); face.number_of_glyphs() as usize];
+        let metrics = font.metrics(Size::unscaled(), LocationRef::default());
+        let ascender = metrics.ascent as i32;
+        let descender = -metrics.descent as i32;
+        let leading = metrics.leading as i16;
+        let scale = metrics.units_per_em as f32;
+        let glyphs = vec![OnceCell::new(); metrics.glyph_count as usize];
 
         // [NA] TODO: This is technically correct for just Kerning, but in practice kerning comes in many forms.
         // We need to support GPOS to do better at this, but that's a bigger change to font rendering as a whole.
-        let might_have_kerning = face
-            .tables()
-            .kern
-            .map(|k| {
-                k.subtables
-                    .into_iter()
-                    .any(|sub| sub.horizontal && !sub.has_state_machine)
+        let might_have_kerning = font
+            .kern()
+            .map(|kern| {
+                kern.subtables()
+                    .filter_map(|sub| sub.ok())
+                    .any(|sub| sub.is_horizontal() && !sub.is_state_machine())
             })
             .unwrap_or_default();
 
@@ -281,22 +316,35 @@ impl FontFace {
     }
 
     pub fn get_glyph(&self, character: char) -> Option<&Glyph> {
-        let face = ttf_parser::Face::parse(&self.data, self.font_index)
+        let font = FontRef::from_index(&self.data, self.font_index)
             .expect("Font was already checked to be valid");
-        if let Some(glyph_id) = face.glyph_index(character) {
-            return self.glyphs[glyph_id.0 as usize]
+        if let Some(glyph_id) = font.charmap().map(character) {
+            return self.glyphs[glyph_id.to_u32() as usize]
                 .get_or_init(|| {
+                    let glyph_metrics =
+                        font.glyph_metrics(Size::unscaled(), LocationRef::default());
                     let mut drawing = Drawing::new();
                     // TTF uses NonZero
                     drawing.new_fill(
                         Some(FillStyle::Color(Color::WHITE)),
                         Some(FillRule::NonZero),
                     );
-                    if face
-                        .outline_glyph(glyph_id, &mut GlyphToDrawing(&mut drawing))
-                        .is_some()
-                    {
-                        let advance = face.glyph_hor_advance(glyph_id).map_or_else(
+                    // `skrifa` draws whitespace glyphs as empty outlines, so we track
+                    // whether any path command was actually emitted to reproduce
+                    // `ttf_parser`'s `outline_glyph` returning `None` for them.
+                    let has_outline = {
+                        let mut pen = GlyphToDrawing {
+                            drawing: &mut drawing,
+                            has_outline: false,
+                        };
+                        font.outline_glyphs()
+                            .get(glyph_id)
+                            .map(|glyph| glyph.draw(Size::unscaled(), &mut pen).is_ok())
+                            .unwrap_or(false)
+                            && pen.has_outline
+                    };
+                    if has_outline {
+                        let advance = glyph_metrics.advance_width(glyph_id).map_or_else(
                             || drawing.self_bounds().width(),
                             |a| Twips::new(a as i32),
                         );
@@ -306,7 +354,7 @@ impl FontFace {
                             character,
                         })
                     } else {
-                        let advance = Twips::new(face.glyph_hor_advance(glyph_id)? as i32);
+                        let advance = Twips::new(glyph_metrics.advance_width(glyph_id)? as i32);
                         // If we have advance, then this is either an image, SVG or simply missing (ie whitespace)
                         Some(Glyph {
                             shape: GlyphShape::None,
@@ -325,18 +373,18 @@ impl FontFace {
     }
 
     pub fn get_kerning_offset(&self, left: char, right: char) -> Twips {
-        let face = ttf_parser::Face::parse(&self.data, self.font_index)
+        let font = FontRef::from_index(&self.data, self.font_index)
             .expect("Font was already checked to be valid");
 
-        if let Some(kern) = face.tables().kern
-            && let (Some(left_glyph), Some(right_glyph)) =
-                (face.glyph_index(left), face.glyph_index(right))
+        let charmap = font.charmap();
+        if let Ok(kern) = font.kern()
+            && let (Some(left_glyph), Some(right_glyph)) = (charmap.map(left), charmap.map(right))
         {
-            for subtable in kern.subtables {
-                if subtable.horizontal
-                    && let Some(value) = subtable.glyphs_kerning(left_glyph, right_glyph)
+            for subtable in kern.subtables().filter_map(|sub| sub.ok()) {
+                if subtable.is_horizontal()
+                    && let Some(value) = subtable_kerning(&subtable, left_glyph, right_glyph)
                 {
-                    return Twips::new(value as i32);
+                    return Twips::new(value);
                 }
             }
         }
@@ -593,7 +641,7 @@ impl<'gc> Font<'gc> {
         data: FontFileData,
         font_index: u32,
         font_type: FontType,
-    ) -> Result<Font<'gc>, ttf_parser::FaceParsingError> {
+    ) -> Result<Font<'gc>, skrifa::raw::ReadError> {
         let face = FontFace::new(data, font_index)?;
 
         Ok(Font(Gc::new(
@@ -703,7 +751,7 @@ impl<'gc> Font<'gc> {
         gc_context: &Mutation<'gc>,
         tag: swf::Font4,
         encoding: &'static swf::Encoding,
-    ) -> Result<Font<'gc>, ttf_parser::FaceParsingError> {
+    ) -> Result<Font<'gc>, skrifa::raw::ReadError> {
         let name = tag.name.to_str_lossy(encoding);
         let descriptor = FontDescriptor::from_parts(&name, tag.is_bold, tag.is_italic);
 

@@ -63,7 +63,7 @@ async-channel = { workspace = true }
 jpegxr = { workspace = true, optional = true }
 image = { workspace = true, features = ["tiff"] }
 enum-map = { workspace = true }
-ttf-parser = "0.25"
+skrifa = "0.43"
 num-bigint = "0.4"
 unicode-segmentation = "1.13.3"
 id3 = "1.17.0"

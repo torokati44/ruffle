@@ -12,7 +12,7 @@ use ruffle_core::compatibility_rules::CompatibilityRules;
 use ruffle_core::config::{Letterbox, NetworkingAccessMode};
 use ruffle_core::events::{GamepadButton, KeyCode};
 use ruffle_core::font::{DefaultFont, FontFileData};
-use ruffle_core::ttf_parser;
+use ruffle_core::skrifa;
 use ruffle_core::{Color, Player, PlayerBuilder, PlayerRuntime, StageAlign, StageScaleMode, swf};
 use ruffle_render::backend::RenderBackend;
 use ruffle_render::quality::StageQuality;
@@ -377,22 +377,48 @@ impl RuffleInstanceBuilder {
     }
 }
 
+/// Mirrors `ttf_parser`'s `Face::is_bold`: the OS/2 `fsSelection` BOLD bit.
+fn font_is_bold(font: &skrifa::FontRef<'_>) -> bool {
+    use skrifa::raw::{TableProvider, tables::os2::SelectionFlags};
+    font.os2()
+        .map(|os2| os2.fs_selection().contains(SelectionFlags::BOLD))
+        .unwrap_or(false)
+}
+
+/// Mirrors `ttf_parser`'s `Face::is_italic`: the OS/2 `fsSelection` ITALIC bit,
+/// or a non-zero `post` table italic angle.
+fn font_is_italic(font: &skrifa::FontRef<'_>) -> bool {
+    use skrifa::raw::{TableProvider, tables::os2::SelectionFlags};
+    let os2_italic = font
+        .os2()
+        .map(|os2| os2.fs_selection().contains(SelectionFlags::ITALIC))
+        .unwrap_or(false);
+    let has_italic_angle = font
+        .post()
+        .map(|post| post.italic_angle().to_f32() != 0.0)
+        .unwrap_or(false);
+    os2_italic || has_italic_angle
+}
+
 impl RuffleInstanceBuilder {
     pub fn setup_fonts(&self, player: &mut Player) {
         for (font_name, bytes) in &self.custom_fonts {
             let bytes_slice = &bytes[..];
-            if let Ok(face) = ttf_parser::Face::parse(bytes_slice, 0) {
+            if let Ok(font) = skrifa::FontRef::from_index(bytes_slice, 0) {
                 tracing::debug!("Loading font {font_name} as TTF/OTF/TTC/OTC font");
 
                 // Check if font collection
-                let number_of_fonts = ttf_parser::fonts_in_collection(bytes_slice).unwrap_or(1u32);
+                let number_of_fonts = match skrifa::raw::FileRef::new(bytes_slice) {
+                    Ok(skrifa::raw::FileRef::Collection(collection)) => collection.len(),
+                    _ => 1u32,
+                };
 
-                Self::register_ttf_face_by_name(font_name, bytes.clone(), face, 0, player);
+                Self::register_ttf_face_by_name(font_name, bytes.clone(), font, 0, player);
 
                 // Register all remaining fonts in the collection if it is a collection
                 for i in 1u32..number_of_fonts {
-                    if let Ok(face) = ttf_parser::Face::parse(bytes_slice, i) {
-                        Self::register_ttf_face_by_name(font_name, bytes.clone(), face, i, player);
+                    if let Ok(font) = skrifa::FontRef::from_index(bytes_slice, i) {
+                        Self::register_ttf_face_by_name(font_name, bytes.clone(), font, i, player);
                     } else {
                         tracing::warn!(
                             "Failed to parse font {font_name} at index {i} in font collection"
@@ -457,18 +483,17 @@ impl RuffleInstanceBuilder {
     fn register_ttf_face_by_name(
         url: &String,
         bytes: Vec<u8>,
-        face: ttf_parser::Face<'_>,
+        font: skrifa::FontRef<'_>,
         index: u32,
         player: &mut Player,
     ) {
+        use skrifa::MetadataProvider;
+
         // TODO A font may have multiple full names, what then?
-        let full_name = face
-            .names()
-            .into_iter()
-            // Currently only unicode names are supported
-            .filter(|name| name.is_unicode())
-            .find(|name| name.name_id == ttf_parser::name_id::FULL_NAME)
-            .and_then(|name| name.to_string());
+        let full_name = font
+            .localized_strings(skrifa::string::StringId::FULL_NAME)
+            .english_or_first()
+            .map(|name| name.to_string());
 
         let name = if let Some(full_name) = full_name {
             full_name
@@ -479,8 +504,8 @@ impl RuffleInstanceBuilder {
 
         player.register_device_font(FontDefinition::FontFile {
             name,
-            is_bold: face.is_bold(),
-            is_italic: face.is_italic(),
+            is_bold: font_is_bold(&font),
+            is_italic: font_is_italic(&font),
             data: FontFileData::new(bytes),
             index,
         });

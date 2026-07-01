@@ -14,7 +14,7 @@ pub enum Error {
     InvalidBitmap(#[from] ruffle_render::error::Error),
 
     #[error("Couldn't register font: {0}")]
-    InvalidFont(#[from] ttf_parser::FaceParsingError),
+    InvalidFont(#[from] skrifa::raw::ReadError),
 
     #[error("Attempted to preload video frames into non-video character {0}")]
     PreloadVideoIntoInvalidCharacter(CharacterId),
