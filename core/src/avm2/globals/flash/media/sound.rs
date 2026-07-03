@@ -221,25 +221,57 @@ pub fn play<'gc>(
 }
 
 /// `Sound.extract`
+///
+/// Extracts raw sound samples from the sound and writes them into `target`.
+/// The extracted audio is always 44,100 Hz stereo, with each sample frame
+/// written as two little/big-endian (per the target's endianness) 32-bit
+/// floats: the left channel followed by the right channel.
+///
+/// Returns the number of sample frames written.
 pub fn extract<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    _this: Value<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    avm2_stub_method!(activation, "flash.media.Sound", "extract");
+    let sound_object = this
+        .as_object()
+        .and_then(|o| o.as_sound_object())
+        .expect("Sound.extract called on a non-Sound object");
 
-    let bytearray = args.try_get_object(0);
+    let target = args.get_object(activation, 0, "target")?;
     let length = args.get_f64(1);
+    let start_position = args.get_f64(2);
 
-    if let Some(bytearray) = bytearray
-        && let Some(mut bytearray) = bytearray.as_bytearray_mut()
-    {
-        bytearray
-            .write_bytes(vec![0u8; length.ceil() as usize].as_slice())
-            .map_err(|e| e.to_avm(activation))?;
+    // Number of stereo sample frames requested. Non-positive or non-finite
+    // lengths extract nothing.
+    let length = if length.is_finite() && length > 0.0 {
+        length as usize
+    } else {
+        0
+    };
+
+    // `startPosition` defaults to -1, which means "continue from where the
+    // previous call left off".
+    let start_position = if start_position >= 0.0 {
+        Some(start_position as usize)
+    } else {
+        None
+    };
+
+    let frames = sound_object.extract_samples(activation.context, length, start_position);
+
+    if let Some(mut target) = target.as_bytearray_mut() {
+        for frame in &frames {
+            target
+                .write_float(frame[0])
+                .map_err(|e| e.to_avm(activation))?;
+            target
+                .write_float(frame[1])
+                .map_err(|e| e.to_avm(activation))?;
+        }
     }
 
-    Ok(Value::Undefined)
+    Ok((frames.len() as f64).into())
 }
 
 /// `Sound.close`

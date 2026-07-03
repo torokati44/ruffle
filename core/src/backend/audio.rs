@@ -180,6 +180,14 @@ pub trait AudioBackend: Any {
     /// Get the sound format that a given sound was added with.
     fn get_sound_format(&self, sound: SoundHandle) -> Option<&swf::SoundFormat>;
 
+    /// Decodes a registered sound into 44,100 Hz stereo `f32` sample frames.
+    ///
+    /// This is used to implement `Sound.extract()`, which always yields
+    /// 44,100 Hz stereo output regardless of the sound's native sample rate.
+    ///
+    /// Returns `None` if the sound is not registered or cannot be decoded.
+    fn get_sound_samples(&self, sound: SoundHandle) -> Option<Vec<[f32; 2]>>;
+
     /// Set the volume transform for a sound instance.
     fn set_sound_transform(&mut self, instance: SoundInstanceHandle, transform: SoundTransform);
 
@@ -338,6 +346,10 @@ impl AudioBackend for NullAudioBackend {
 
     fn get_sound_format(&self, sound: SoundHandle) -> Option<&swf::SoundFormat> {
         self.sounds.get(sound).map(|s| &s.format)
+    }
+
+    fn get_sound_samples(&self, _sound: SoundHandle) -> Option<Vec<[f32; 2]>> {
+        None
     }
 
     fn set_sound_transform(&mut self, _instance: SoundInstanceHandle, _transform: SoundTransform) {}

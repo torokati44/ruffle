@@ -13,6 +13,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use swf::AudioCompression;
 
+/// The fixed sample rate, in Hz, of the audio produced by `Sound.extract()`.
+const EXTRACT_SAMPLE_RATE: u32 = 44100;
+
 /// Holds the last 2048 output audio frames. Frames can be written to it one by
 /// one, and the last completely filled 1024-wide window can be read from it.
 struct CircBuf {
@@ -710,6 +713,38 @@ impl AudioMixer {
         self.sounds.get(sound).map(|s| &s.format)
     }
 
+    /// Decodes a registered sound into 44,100 Hz stereo `f32` sample frames.
+    ///
+    /// This is used to implement `Sound.extract()`, which always produces
+    /// 44,100 Hz stereo output regardless of the sound's native sample rate.
+    ///
+    /// Returns `None` if the sound is not registered or cannot be decoded.
+    pub fn get_sound_samples(&self, sound: SoundHandle) -> Option<Vec<[f32; 2]>> {
+        use dasp::Sample;
+
+        let sound = self.sounds.get(sound)?;
+        let data = Cursor::new(ArcAsRef(Arc::clone(&sound.data)));
+        let decoder = match decoders::make_decoder(&sound.format, data) {
+            Ok(decoder) => decoder,
+            Err(e) => {
+                tracing::warn!("Sound.extract: unable to decode sound: {}", e);
+                return None;
+            }
+        };
+        let source_sample_rate = u32::from(decoder.sample_rate());
+
+        // Decode every sample frame, skipping the encoder-delay frames at the
+        // start and trimming to the sound's real length, exactly as playback
+        // does (see `EventSoundStream`).
+        let native: Vec<[f32; 2]> = decoder
+            .skip(usize::from(sound.skip_sample_frames))
+            .take(sound.num_sample_frames as usize)
+            .map(|[left, right]| [left.to_sample::<f32>(), right.to_sample::<f32>()])
+            .collect();
+
+        Some(resample_frames(native, source_sample_rate, EXTRACT_SAMPLE_RATE))
+    }
+
     /// Sets the sound transform for the given playing sound.
     pub fn set_sound_transform(
         &mut self,
@@ -733,6 +768,36 @@ impl AudioMixer {
     pub fn set_volume(&mut self, volume: f32) {
         *self.volume.write().expect("Cannot be called reentrant") = volume
     }
+}
+
+/// Resamples stereo `f32` sample frames from `source_rate` to `target_rate`
+/// using linear interpolation.
+///
+/// The input is returned unchanged when the rates already match or there is
+/// nothing to interpolate.
+fn resample_frames(input: Vec<[f32; 2]>, source_rate: u32, target_rate: u32) -> Vec<[f32; 2]> {
+    if source_rate == target_rate || input.len() < 2 {
+        return input;
+    }
+
+    let out_len =
+        (input.len() as f64 * f64::from(target_rate) / f64::from(source_rate)).round() as usize;
+    let ratio = f64::from(source_rate) / f64::from(target_rate);
+    let last = input.len() - 1;
+
+    let mut output = Vec::with_capacity(out_len);
+    for i in 0..out_len {
+        let pos = i as f64 * ratio;
+        let index = pos.floor() as usize;
+        let frac = (pos - index as f64) as f32;
+        let current = input[index.min(last)];
+        let next = input[(index + 1).min(last)];
+        output.push([
+            current[0] + (next[0] - current[0]) * frac,
+            current[1] + (next[1] - current[1]) * frac,
+        ]);
+    }
+    output
 }
 
 /// A thread-safe proxy to the main `AudioMixer`, allowing for mixing audio from a different thread.
@@ -1243,6 +1308,11 @@ macro_rules! impl_audio_mixer_backend {
         }
 
         #[inline]
+        fn get_sound_samples(&self, sound: SoundHandle) -> Option<Vec<[f32; 2]>> {
+            self.$mixer.get_sound_samples(sound)
+        }
+
+        #[inline]
         fn set_sound_transform(
             &mut self,
             instance: SoundInstanceHandle,
@@ -1270,4 +1340,119 @@ macro_rules! impl_audio_mixer_backend {
             self.$mixer.get_sample_history()
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dasp::Sample;
+
+    /// Encodes 16-bit signed PCM sample frames as little-endian bytes, the
+    /// layout `PcmDecoder` expects.
+    fn pcm_le_bytes(samples: &[i16]) -> Vec<u8> {
+        samples.iter().flat_map(|s| s.to_le_bytes()).collect()
+    }
+
+    fn register_pcm(
+        mixer: &mut AudioMixer,
+        samples: &[u8],
+        num_frames: u32,
+        sample_rate: u16,
+        is_stereo: bool,
+    ) -> SoundHandle {
+        mixer
+            .register_sound(&swf::Sound {
+                id: 1,
+                format: swf::SoundFormat {
+                    compression: AudioCompression::Uncompressed,
+                    sample_rate,
+                    is_stereo,
+                    is_16_bit: true,
+                },
+                num_samples: num_frames,
+                data: samples,
+            })
+            .expect("sound registers")
+    }
+
+    #[test]
+    fn resample_frames_is_identity_when_rates_match() {
+        let input = vec![[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]];
+        assert_eq!(resample_frames(input.clone(), 44100, 44100), input);
+    }
+
+    #[test]
+    fn resample_frames_upsamples_length_and_preserves_start() {
+        let input = vec![[0.0, 0.0], [1.0, -1.0]];
+        // Doubling the rate doubles the number of frames.
+        let output = resample_frames(input, 22050, 44100);
+        assert_eq!(output.len(), 4);
+        // The first output frame is exactly the first input frame.
+        assert_eq!(output[0], [0.0, 0.0]);
+        // Linear interpolation never leaves the input range.
+        for frame in &output {
+            assert!((0.0..=1.0).contains(&frame[0]));
+            assert!((-1.0..=0.0).contains(&frame[1]));
+        }
+    }
+
+    #[test]
+    fn get_sound_samples_round_trips_44100_stereo_pcm() {
+        let mut mixer = AudioMixer::new(2, 44100);
+        // Interleaved stereo, one (left, right) pair per frame.
+        let samples: [i16; 8] = [0, 100, 16384, -16384, -32768, 32767, 1234, -5678];
+        let data = pcm_le_bytes(&samples);
+        let handle = register_pcm(&mut mixer, &data, 4, 44100, true);
+
+        let extracted = mixer.get_sound_samples(handle).expect("decodes");
+
+        // No resampling at 44,100 Hz: one output frame per input frame, each
+        // channel converted from i16 to f32 exactly as playback does.
+        let expected: Vec<[f32; 2]> = samples
+            .chunks_exact(2)
+            .map(|f| [f[0].to_sample::<f32>(), f[1].to_sample::<f32>()])
+            .collect();
+        assert_eq!(extracted, expected);
+    }
+
+    #[test]
+    fn get_sound_samples_duplicates_mono_channels() {
+        let mut mixer = AudioMixer::new(2, 44100);
+        let samples: [i16; 3] = [1000, -2000, 3000];
+        let data = pcm_le_bytes(&samples);
+        let handle = register_pcm(&mut mixer, &data, 3, 44100, false);
+
+        let extracted = mixer.get_sound_samples(handle).expect("decodes");
+
+        assert_eq!(extracted.len(), 3);
+        for (frame, &sample) in extracted.iter().zip(samples.iter()) {
+            let value = sample.to_sample::<f32>();
+            assert_eq!(*frame, [value, value]);
+        }
+    }
+
+    #[test]
+    fn get_sound_samples_always_targets_44100_regardless_of_output_rate() {
+        // Even when the output device runs at 48 kHz, extracting a 44,100 Hz
+        // sound must not resample it — `extract()` is always 44,100 Hz.
+        let mut mixer = AudioMixer::new(2, 48000);
+        let samples: [i16; 4] = [10, 20, 30, 40];
+        let data = pcm_le_bytes(&samples);
+        let handle = register_pcm(&mut mixer, &data, 2, 44100, true);
+
+        let extracted = mixer.get_sound_samples(handle).expect("decodes");
+        assert_eq!(extracted.len(), 2);
+    }
+
+    #[test]
+    fn get_sound_samples_upsamples_lower_rate_sound() {
+        // A 22,050 Hz sound is resampled up to 44,100 Hz, doubling its frames.
+        let mut mixer = AudioMixer::new(2, 44100);
+        let samples: [i16; 8] = [0, 0, 8192, 8192, 16384, 16384, 0, 0];
+        let data = pcm_le_bytes(&samples);
+        let handle = register_pcm(&mut mixer, &data, 4, 22050, true);
+
+        let extracted = mixer.get_sound_samples(handle).expect("decodes");
+        assert_eq!(extracted.len(), 8);
+    }
 }
