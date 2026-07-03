@@ -19,7 +19,7 @@ use gc_arena::{
 };
 use id3::{Tag, TagLike};
 use ruffle_common::utils::HasPrefixField;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::io::Cursor;
 use swf::SoundInfo;
 
@@ -39,6 +39,7 @@ pub fn sound_allocator<'gc>(
             loading_state: Cell::new(SoundLoadingState::New),
             sound_data: RefLock::new(SoundData::Empty),
             id3: Lock::new(None),
+            extract_data: RefCell::new(None),
         },
     ))
     .into())
@@ -88,6 +89,23 @@ pub struct SoundObjectData<'gc> {
 
     /// ID3Info Object
     id3: Lock<Option<Object<'gc>>>,
+
+    /// Cached decoded audio and read cursor for `Sound.extract()`.
+    ///
+    /// Populated lazily on the first `extract()` call. Contains no GC pointers.
+    #[collect(require_static)]
+    extract_data: RefCell<Option<ExtractData>>,
+}
+
+/// State backing `Sound.extract()`: the sound decoded to 44,100 Hz stereo `f32`
+/// frames, plus the read cursor used for sequential extraction.
+struct ExtractData {
+    /// The whole sound, decoded to 44,100 Hz stereo `f32` sample frames.
+    samples: Vec<[f32; 2]>,
+
+    /// The current read position, in sample frames. Used when `extract()` is
+    /// called without an explicit `startPosition`.
+    position: usize,
 }
 
 #[derive(Collect)]
@@ -131,6 +149,61 @@ impl<'gc> SoundObject<'gc> {
             SoundData::Loaded { sound } => Some(*sound),
             _ => None,
         }
+    }
+
+    /// Ensures this sound has been decoded to 44,100 Hz stereo samples for
+    /// `Sound.extract()`, decoding and caching it on first use.
+    ///
+    /// Returns `false` if the sound has no decodable data (e.g. it has not
+    /// finished loading, or is a generated sound).
+    fn ensure_extract_data(self, context: &mut UpdateContext<'gc>) -> bool {
+        if self.0.extract_data.borrow().is_some() {
+            return true;
+        }
+
+        let Some(handle) = self.sound_handle() else {
+            return false;
+        };
+        let Some(samples) = context.audio.get_sound_samples(handle) else {
+            return false;
+        };
+
+        *self.0.extract_data.borrow_mut() = Some(ExtractData {
+            samples,
+            position: 0,
+        });
+        true
+    }
+
+    /// Extracts up to `length` stereo sample frames (44,100 Hz `f32`) from this
+    /// sound, as used by `Sound.extract()`.
+    ///
+    /// Extraction begins at `start_position` (in sample frames), or at the
+    /// internal cursor left by the previous call when `start_position` is
+    /// `None`. The internal cursor is advanced past the returned frames so that
+    /// subsequent calls without a `start_position` read sequentially.
+    pub fn extract_samples(
+        self,
+        context: &mut UpdateContext<'gc>,
+        length: usize,
+        start_position: Option<usize>,
+    ) -> Vec<[f32; 2]> {
+        if !self.ensure_extract_data(context) {
+            return Vec::new();
+        }
+
+        let mut extract_data = self.0.extract_data.borrow_mut();
+        let extract_data = extract_data
+            .as_mut()
+            .expect("extract data was just ensured");
+
+        let start = start_position
+            .unwrap_or(extract_data.position)
+            .min(extract_data.samples.len());
+        let end = start.saturating_add(length).min(extract_data.samples.len());
+        extract_data.position = end;
+
+        extract_data.samples[start..end].to_vec()
     }
 
     pub fn loading_state(self) -> SoundLoadingState {
