@@ -112,6 +112,13 @@ impl H264Decoder {
                     error!("Unsupported pixel format: {:?}", other_format);
                 }
             };
+
+            // The pixel data has been copied out, so the frame's underlying (potentially
+            // GPU-backed) media resource can be released right away. This is not just to
+            // save memory: decoders hand out frames from a small fixed-size pool, and if
+            // these are only reclaimed whenever the JS garbage collector gets around to it,
+            // the pool runs dry, and the decoder stops producing output entirely.
+            output.close();
         };
 
         let log_subscriber_for_error = log_subscriber.clone();
