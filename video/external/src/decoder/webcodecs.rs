@@ -9,12 +9,13 @@ use ruffle_video::error::Error;
 use ruffle_video::frame::{DecodedFrame, EncodedFrame, FrameDependency};
 
 use js_sys::Uint8Array;
+use js_sys::futures::{JsFuture, spawn_local};
 use tracing::{debug, error, trace, warn};
 use tracing_subscriber::{Registry, layer::Layered};
 use tracing_wasm::WASMLayer;
 use wasm_bindgen::prelude::*;
 use web_sys::{
-    DomException, EncodedVideoChunk, EncodedVideoChunkInit, EncodedVideoChunkType,
+    CodecState, DomException, EncodedVideoChunk, EncodedVideoChunkInit, EncodedVideoChunkType,
     VideoDecoder as WebVideoDecoder, VideoDecoderConfig, VideoDecoderInit, VideoFrame,
     VideoPixelFormat,
 };
@@ -53,7 +54,8 @@ pub struct H264Decoder {
     /// The decoder output callback writes this, and the decode_frame method reads it.
     ///
     /// This in itself results in one frame of delay (because we can't block decode_frame
-    /// until the callback is invoked), but it shouldn't matter in practice.
+    /// until the callback is invoked, nor until the pixel data is copied out of the frame
+    /// that was passed to it), but it shouldn't matter in practice.
     last_frame: Rc<RefCell<Option<DecodedFrame>>>,
 
     // Simply keeping these objects alive, as they are used by the JS side.
@@ -74,44 +76,66 @@ impl H264Decoder {
         let lf = last_frame.clone();
 
         let log_subscriber_for_output = log_subscriber.clone();
-        let output = move |output: &VideoFrame| {
+        let output = move |frame: VideoFrame| {
             let _subscriber = tracing::subscriber::set_default(log_subscriber_for_output.clone());
-            let visible_rect = output.visible_rect().unwrap();
+            let visible_rect = frame.visible_rect().unwrap();
+            let width = visible_rect.width() as u32;
+            let height = visible_rect.height() as u32;
 
-            match output.format().unwrap() {
-                VideoPixelFormat::I420 => {
-                    let mut data: Vec<u8> =
-                        vec![
-                            0;
-                            visible_rect.width() as usize * visible_rect.height() as usize * 3 / 2
-                        ];
-                    let _ = output.copy_to_with_u8_slice(&mut data);
-                    last_frame.replace(Some(DecodedFrame::new(
-                        visible_rect.width() as u32,
-                        visible_rect.height() as u32,
-                        BitmapFormat::Yuv420p,
-                        data,
-                    )));
-                }
+            let pixel_format = frame.format().unwrap();
+            let (buffer_size, bitmap_format) = match pixel_format {
+                VideoPixelFormat::I420 => (
+                    width as usize * height as usize * 3 / 2,
+                    BitmapFormat::Yuv420p,
+                ),
                 VideoPixelFormat::Bgrx => {
-                    let mut data: Vec<u8> =
-                        vec![0; visible_rect.width() as usize * visible_rect.height() as usize * 4];
-                    let _ = output.copy_to_with_u8_slice(&mut data);
-                    for pixel in data.chunks_mut(4) {
-                        pixel.swap(0, 2);
-                        pixel[3] = 0xff;
-                    }
-                    last_frame.replace(Some(DecodedFrame::new(
-                        visible_rect.width() as u32,
-                        visible_rect.height() as u32,
-                        BitmapFormat::Rgba,
-                        data,
-                    )));
+                    (width as usize * height as usize * 4, BitmapFormat::Rgba)
                 }
                 other_format => {
                     error!("Unsupported pixel format: {:?}", other_format);
+                    frame.close();
+                    return;
                 }
             };
+
+            // The pixel data is copied into a buffer on the JS heap, rather than directly
+            // into a `Vec`, because `copyTo` is asynchronous, and the WASM linear memory a
+            // `Vec` lives in may be grown (and thus moved, detaching any view JS holds of
+            // it) while the copy is still in flight.
+            let buffer = Uint8Array::new_with_length(buffer_size as u32);
+            let copy_done = frame.copy_to_with_u8_array(&buffer);
+
+            let last_frame = last_frame.clone();
+            let log_subscriber_for_copy = log_subscriber_for_output.clone();
+            spawn_local(async move {
+                let _subscriber = tracing::subscriber::set_default(log_subscriber_for_copy);
+
+                match JsFuture::from(copy_done).await {
+                    Ok(_) => {
+                        let mut data = buffer.to_vec();
+                        if pixel_format == VideoPixelFormat::Bgrx {
+                            for pixel in data.chunks_mut(4) {
+                                pixel.swap(0, 2);
+                                pixel[3] = 0xff;
+                            }
+                        }
+                        last_frame.replace(Some(DecodedFrame::new(
+                            width,
+                            height,
+                            bitmap_format,
+                            data,
+                        )));
+                    }
+                    Err(e) => error!("Failed to copy pixel data out of the frame: {:?}", e),
+                }
+
+                // Now that the copy is done (or has failed), the frame's underlying
+                // (potentially GPU-backed) media resource can be released. This is not just
+                // to save memory: decoders hand out frames from a small fixed-size pool, and
+                // if these are only reclaimed whenever the JS garbage collector gets around
+                // to it, the pool runs dry, and the decoder stops producing output entirely.
+                frame.close();
+            });
         };
 
         let log_subscriber_for_error = log_subscriber.clone();
@@ -120,7 +144,7 @@ impl H264Decoder {
             error!("WebCodecs error: {:}", error.message());
         };
 
-        let output_callback = Closure::new(move |frame| output(&frame));
+        let output_callback = Closure::new(output);
         let error_callback = Closure::new(move |exception| error(&exception));
 
         let decoder = WebVideoDecoder::new(&VideoDecoderInit::new(
@@ -136,6 +160,21 @@ impl H264Decoder {
             error_callback,
             last_frame: lf,
         })
+    }
+}
+
+impl Drop for H264Decoder {
+    fn drop(&mut self) {
+        // Frees the underlying (potentially hardware) decoder instance immediately,
+        // rather than leaving it to the JS garbage collector.
+        // Closing an already closed decoder would throw, hence the state check.
+        if self.decoder.state() != CodecState::Closed {
+            // This aborts any work still in the queue, which is fine, as no one is
+            // going to be interested in the results of it anymore.
+            if let Err(e) = self.decoder.close() {
+                warn!("Error closing WebCodecs decoder: {:?}", e);
+            }
+        }
     }
 }
 
