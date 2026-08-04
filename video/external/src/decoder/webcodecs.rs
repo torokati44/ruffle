@@ -93,6 +93,40 @@ impl H264Decoder {
                         data,
                     )));
                 }
+                VideoPixelFormat::Nv12 => {
+                    // NV12 is "semi-planar": a full resolution plane of Y samples, followed
+                    // by a single half resolution plane in which the U and V samples are
+                    // interleaved. Only the fully planar layout is understood further down
+                    // the line, so the second plane has to be split in two. The total amount
+                    // of data is the same either way.
+                    let luma_len = visible_rect.width() as usize * visible_rect.height() as usize;
+                    let chroma_len = (visible_rect.width() as usize).div_ceil(2)
+                        * (visible_rect.height() as usize).div_ceil(2);
+
+                    let mut data: Vec<u8> = vec![0; luma_len + chroma_len * 2];
+                    let _ = output.copy_to_with_u8_slice(&mut data);
+
+                    // The U samples are only ever moved to a lower index than the one they
+                    // are read from, so they can be compacted towards the front of the
+                    // chroma plane in place. The V samples, on the other hand, all belong
+                    // past the end of the (not yet complete) U plane, so they have to be
+                    // parked in a buffer of their own until the pass is over.
+                    let chroma = &mut data[luma_len..];
+                    let mut v_plane: Vec<u8> = Vec::with_capacity(chroma_len);
+                    for i in 0..chroma_len {
+                        let (u, v) = (chroma[i * 2], chroma[i * 2 + 1]);
+                        chroma[i] = u;
+                        v_plane.push(v);
+                    }
+                    chroma[chroma_len..].copy_from_slice(&v_plane);
+
+                    last_frame.replace(Some(DecodedFrame::new(
+                        visible_rect.width() as u32,
+                        visible_rect.height() as u32,
+                        BitmapFormat::Yuv420p,
+                        data,
+                    )));
+                }
                 VideoPixelFormat::Bgrx => {
                     let mut data: Vec<u8> =
                         vec![0; visible_rect.width() as usize * visible_rect.height() as usize * 4];
