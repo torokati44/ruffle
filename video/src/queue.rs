@@ -189,3 +189,162 @@ impl PresentationQueue {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ruffle_render::backend::ViewportDimensions;
+    use ruffle_render::backend::null::NullRenderer;
+    use ruffle_render::bitmap::BitmapFormat;
+
+    fn renderer() -> NullRenderer {
+        NullRenderer::new(ViewportDimensions {
+            width: 1,
+            height: 1,
+            scale_factor: 1.0,
+        })
+    }
+
+    /// A one-pixel-tall picture whose width identifies it, so that assertions
+    /// can tell which one ended up on screen.
+    fn picture(id: u32) -> DecodedFrame {
+        DecodedFrame::new(id, 1, BitmapFormat::Rgba, vec![0; id as usize * 4])
+    }
+
+    fn submit(queue: &mut PresentationQueue, frame_id: u32, pts: PresentationTime) {
+        queue.submitted(frame_id, pts);
+    }
+
+    fn deliver(queue: &mut PresentationQueue, frame_id: u32) {
+        queue.absorb(&mut vec![DecodedFrameOut {
+            frame_id,
+            frame: picture(frame_id),
+        }]);
+    }
+
+    fn shown(queue: &mut PresentationQueue, up_to: PresentationTime) -> Option<u32> {
+        match queue
+            .present(up_to, &mut renderer())
+            .expect("null renderer never fails")
+        {
+            Presentation::Changed(info) => Some(info.width),
+            Presentation::Unchanged | Presentation::Empty => None,
+        }
+    }
+
+    #[test]
+    fn presents_in_presentation_order_not_delivery_order() {
+        let mut queue = PresentationQueue::new();
+
+        // Decode order 1, 2, 3 against presentation order 1, 3, 2 - the shape
+        // an H.264 stream with a B-frame has.
+        submit(&mut queue, 1, 1000);
+        submit(&mut queue, 2, 3000);
+        submit(&mut queue, 3, 2000);
+        deliver(&mut queue, 1);
+        deliver(&mut queue, 3);
+        deliver(&mut queue, 2);
+
+        assert_eq!(shown(&mut queue, 1000), Some(1));
+        assert_eq!(shown(&mut queue, 2000), Some(3));
+        assert_eq!(shown(&mut queue, 3000), Some(2));
+    }
+
+    #[test]
+    fn holds_frames_back_until_they_are_due() {
+        let mut queue = PresentationQueue::new();
+        submit(&mut queue, 1, 1000);
+        deliver(&mut queue, 1);
+
+        assert_eq!(shown(&mut queue, 999), None);
+        assert_eq!(shown(&mut queue, 1000), Some(1));
+    }
+
+    #[test]
+    fn nothing_decoded_yet_reads_as_empty_not_unchanged() {
+        let mut queue = PresentationQueue::new();
+        assert!(matches!(
+            queue.present(1000, &mut renderer()),
+            Ok(Presentation::Empty)
+        ));
+
+        submit(&mut queue, 1, 1000);
+        deliver(&mut queue, 1);
+        let _ = shown(&mut queue, 1000);
+
+        assert!(matches!(
+            queue.present(1500, &mut renderer()),
+            Ok(Presentation::Unchanged)
+        ));
+    }
+
+    #[test]
+    fn skips_over_frames_that_are_already_late() {
+        let mut queue = PresentationQueue::new();
+        for id in 1..=4 {
+            submit(&mut queue, id, id as PresentationTime * 1000);
+            deliver(&mut queue, id);
+        }
+
+        // Jumping the clock past three of them shows the newest that is due,
+        // and the ones passed over are gone rather than shown afterwards.
+        assert_eq!(shown(&mut queue, 3000), Some(3));
+        assert_eq!(shown(&mut queue, 3999), None);
+        assert_eq!(shown(&mut queue, 4000), Some(4));
+    }
+
+    #[test]
+    fn never_goes_backwards() {
+        let mut queue = PresentationQueue::new();
+        submit(&mut queue, 1, 1000);
+        submit(&mut queue, 2, 2000);
+        deliver(&mut queue, 2);
+        assert_eq!(shown(&mut queue, 2000), Some(2));
+
+        // An earlier picture turning up after a later one has been shown has
+        // missed its turn; it must not replace what is on screen.
+        deliver(&mut queue, 1);
+        assert_eq!(shown(&mut queue, 2000), None);
+    }
+
+    #[test]
+    fn reset_drops_pending_frames_but_keeps_the_picture_on_screen() {
+        let mut queue = PresentationQueue::new();
+        submit(&mut queue, 1, 1000);
+        submit(&mut queue, 2, 2000);
+        deliver(&mut queue, 1);
+        deliver(&mut queue, 2);
+        assert_eq!(shown(&mut queue, 1000), Some(1));
+
+        queue.reset();
+        assert!(queue.is_drained());
+        assert!(queue.current().is_some());
+        assert_eq!(shown(&mut queue, 2000), None);
+    }
+
+    #[test]
+    fn drained_only_once_everything_delivered_has_been_shown() {
+        let mut queue = PresentationQueue::new();
+        assert!(queue.is_drained());
+
+        submit(&mut queue, 1, 1000);
+        // Still drained: the decoder owes us a picture, but there is nothing
+        // waiting to go on screen, and waiting on a frame that may never
+        // arrive would leave a stream unable to end.
+        assert!(queue.is_drained());
+
+        deliver(&mut queue, 1);
+        assert!(!queue.is_drained());
+
+        assert_eq!(shown(&mut queue, 1000), Some(1));
+        assert!(queue.is_drained());
+    }
+
+    #[test]
+    fn a_picture_that_was_never_submitted_is_ignored() {
+        let mut queue = PresentationQueue::new();
+        deliver(&mut queue, 7);
+        assert!(queue.is_drained());
+        assert_eq!(shown(&mut queue, i64::MAX), None);
+    }
+}
