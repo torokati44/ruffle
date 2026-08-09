@@ -1,5 +1,3 @@
-#[cfg(feature = "webcodecs")]
-use crate::decoder::LowDelay;
 use crate::decoder::VideoDecoder;
 #[cfg(feature = "openh264")]
 use crate::decoder::openh264::OpenH264Codec;
@@ -64,8 +62,7 @@ impl ExternalVideoBackend {
                 .clone()
                 .ok_or(Error::DecoderError("log subscriber not set".into()))?;
             let decoder = crate::decoder::webcodecs::H264Decoder::new(log_subscriber);
-            return decoder
-                .map(|decoder| Box::new(LowDelay::new(decoder)) as Box<dyn VideoDecoder>);
+            return decoder.map(|decoder| Box::new(decoder) as Box<dyn VideoDecoder>);
         }
 
         #[allow(unreachable_code)]
