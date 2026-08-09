@@ -139,9 +139,14 @@ impl PresentationQueue {
         self.current.as_ref().map(|(_, info)| info.clone())
     }
 
-    /// Whether everything submitted has now been shown or dropped.
+    /// Whether every picture that has come out of the decoder has now been
+    /// shown or dropped.
+    ///
+    /// Frames the decoder still owes are deliberately not counted: once it has
+    /// been flushed, anything that has not appeared is not going to, and
+    /// waiting on it would leave the stream unable to ever end.
     pub fn is_drained(&self) -> bool {
-        self.ready.is_empty() && self.in_flight.is_empty()
+        self.ready.is_empty()
     }
 
     /// Forget everything that has not been shown yet, because the stream has

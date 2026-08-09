@@ -77,4 +77,16 @@ impl VideoBackend for NullVideoBackend {
     ) -> Result<Presentation, Error> {
         Ok(Presentation::Empty)
     }
+
+    fn flush_video_stream(&mut self, _stream: VideoStreamHandle) -> Result<(), Error> {
+        Ok(())
+    }
+
+    fn video_stream_is_drained(&self, _stream: VideoStreamHandle) -> bool {
+        true
+    }
+
+    fn reset_video_stream(&mut self, _stream: VideoStreamHandle) -> Result<(), Error> {
+        Ok(())
+    }
 }

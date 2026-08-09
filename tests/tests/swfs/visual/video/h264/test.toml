@@ -1,33 +1,34 @@
 num_ticks = 120
 
-# Because H.264 has B-frames (bidirectional prediction),
-# the order in which frames are decoded (contained in the
-# stream), and should be put on screen, is not the same.
+# This 2 FPS video has B-frames, so the order its frames are
+# decoded in - which is the order they are stored in - is not
+# the order they are shown in:
 #
-# In the case of this 2 FPS video:
+#   decode_time + composition_offset = presentation_time
+#      0 + 1000 = 1000
+#    500 + 2500 = 3000
+#   1000 + 1000 = 2000
+#   1500 +    0 = 1500
+#   2000 +  500 = 2500
+#   2500 + 2500 = 5000
+#   3000 + 1000 = 4000
+#   3500 +    0 = 3500
+#   4000 +  500 = 4500
 #
-#  decode_time + presentation_offset = presentation_time
-#     0 + 2500 = 2500 <- no frame to show yet
-#   500 + 1000 = 1500 <- no frame to show yet
-#  1000 +    0 = 1000 <- catching up point!
-#  1500 +  500 = 2000
-#  2000 + 2500 = 4500
-#  2500 + 1000 = 3500
-#
-# So, there is a constant 2-frame delay between the decoded
-# and presented frames.
-#
-# And, since the SWF is 20 FPS, it means that for the first
-# 20 frames, we're not guaranteed a video frame to show.
-# Anyway, keeping them here for reference:
+# Presentation therefore runs from 1000 ms to 5000 ms in even
+# 500 ms steps, two frames behind the decode timeline, and the
+# last frame is due a full second after the last tag in the
+# file. The SWF is 20 FPS, so nothing is on screen for the
+# first 20 of its frames, and the two checks below confirm
+# that rather than skipping over it.
 
-#[image_comparisons.frame0]
-#tolerance = 2
-#trigger = 5
+[image_comparisons.frame0]
+tolerance = 2
+trigger = 5
 
-#[image_comparisons.frame1]
-#tolerance = 2
-#trigger = 15
+[image_comparisons.frame1]
+tolerance = 2
+trigger = 15
 
 [image_comparisons.frame2]
 tolerance = 2

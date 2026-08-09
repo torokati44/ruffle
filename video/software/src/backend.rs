@@ -109,6 +109,26 @@ impl VideoBackend for SoftwareVideoBackend {
             .queue
             .present(pts, renderer)
     }
+
+    fn flush_video_stream(&mut self, stream: VideoStreamHandle) -> Result<(), Error> {
+        self.streams
+            .get_mut(stream)
+            .ok_or(Error::VideoStreamIsNotRegistered)?
+            .flush()
+    }
+
+    fn video_stream_is_drained(&self, stream: VideoStreamHandle) -> bool {
+        self.streams
+            .get(stream)
+            .is_none_or(|stream| stream.queue.is_drained())
+    }
+
+    fn reset_video_stream(&mut self, stream: VideoStreamHandle) -> Result<(), Error> {
+        self.streams
+            .get_mut(stream)
+            .ok_or(Error::VideoStreamIsNotRegistered)?
+            .reset()
+    }
 }
 
 /// A single preloaded video stream.
@@ -136,11 +156,25 @@ impl VideoStream {
         let frame_id = encoded_frame.frame_id;
         self.decoder.submit_frame(encoded_frame)?;
         self.queue.submitted(frame_id, pts);
+        self.pump()
+    }
 
+    /// Collect whatever the decoder has finished into the queue.
+    fn pump(&mut self) -> Result<(), Error> {
         self.polled.clear();
         self.decoder.poll_frames(&mut self.polled)?;
         self.queue.absorb(&mut self.polled);
-
         Ok(())
+    }
+
+    fn flush(&mut self) -> Result<(), Error> {
+        self.decoder.flush()?;
+        self.pump()
+    }
+
+    fn reset(&mut self) -> Result<(), Error> {
+        self.queue.reset();
+        self.polled.clear();
+        self.decoder.reset()
     }
 }

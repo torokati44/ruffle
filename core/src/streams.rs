@@ -40,6 +40,30 @@ use swf::{AudioCompression, SoundFormat, VideoCodec, VideoDeblocking};
 use thiserror::Error;
 use url::Url;
 
+/// How far past the playhead the feed cursor runs, in milliseconds.
+///
+/// The audio backend is fed from the same cursor as the video decoders, and
+/// wants a little more than the current tick's worth of samples so that it does
+/// not run dry in between. This replaces what used to be a count of five audio
+/// tags, which could not bound anything at all on a stream with no audio track.
+const AUDIO_LOOKAHEAD_MS: f64 = 100.0;
+
+/// Why a cursor stopped walking the tag stream.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CursorStop {
+    /// It reached the point it was asked to reach.
+    CaughtUp,
+
+    /// The stream has no more data.
+    OutOfData,
+
+    /// The tag stream is corrupt.
+    Corrupt,
+
+    /// A script callback replaced the stream's source out from under it.
+    SourceReplaced,
+}
+
 #[derive(Debug, Error)]
 enum NetstreamError {
     #[error("Decoding failed because {0}")]
@@ -199,6 +223,26 @@ pub enum NetStreamType {
         /// onto a table of data buffers like `Video` does, so we must maintain
         /// frame IDs ourselves for various API related purposes.
         frame_id: u32,
+
+        /// The largest composition time offset seen in the stream so far, in
+        /// milliseconds.
+        ///
+        /// This is how much earlier than its presentation time the stream
+        /// expects a frame to be decoded, and so how far ahead of the playhead
+        /// the feed cursor has to run for the decoder to have caught up by the
+        /// time the frame is due. It stays at zero for every codec without
+        /// bidirectional prediction, which is all of them but H.264.
+        max_composition_offset: i64,
+
+        /// The gap between the last two video tags, in milliseconds.
+        ///
+        /// Used as a one-frame margin on top of `max_composition_offset`, for a
+        /// decoder that releases a picture a frame later than it strictly has
+        /// to.
+        video_frame_interval: i64,
+
+        /// The decode timestamp of the last video tag handed to the decoder.
+        last_video_dts: i64,
     },
 }
 
@@ -208,8 +252,20 @@ pub struct NetStreamSource {
     /// All data currently loaded in the stream.
     buffer: RefCell<Buffer>,
 
-    /// The buffer position that we are currently seeking to.
+    /// The buffer position of the presentation cursor.
+    ///
+    /// Tags before this point have been presented: their script callbacks have
+    /// run, and any video frame they carry is either on screen or has been
+    /// passed over.
     offset: Cell<usize>,
+
+    /// The buffer position of the feed cursor.
+    ///
+    /// Tags before this point have been handed to the audio and video decoders.
+    /// This runs ahead of `offset`, so that a decoder which cannot produce a
+    /// picture the moment it is given a frame still has it ready in time. It is
+    /// always greater than or equal to the offset position.
+    feed_offset: Cell<usize>,
 
     /// The expected length of the buffer once downloading is complete.
     ///
@@ -221,7 +277,7 @@ pub struct NetStreamSource {
     ///
     /// This points to the first byte that the stream has *never* processed
     /// before in the buffer. It should always be greater than or equal to the
-    /// offset position.
+    /// feed position.
     ///
     /// Certain data, such as the header or metadata of an FLV, should only
     /// ever be processed one time, even if we seek backwards to it later on.
@@ -280,11 +336,21 @@ pub struct NetStreamData<'gc> {
     playing: Cell<bool>,
 }
 
+impl NetStreamSource {
+    /// Move both cursors to the same place in the buffer, because the stream
+    /// has jumped and nothing between them is wanted any more.
+    fn rewind_cursors_to(&self, offset: usize) {
+        self.offset.set(offset);
+        self.feed_offset.set(offset);
+    }
+}
+
 impl Default for NetStreamSource {
     fn default() -> Self {
         Self {
             buffer: RefCell::new(Buffer::new()),
             offset: Cell::new(0),
+            feed_offset: Cell::new(0),
             expected_length: Cell::new(Some(0)),
             preload_offset: Cell::new(0),
             stream_type: RefCell::new(None),
@@ -571,7 +637,18 @@ impl<'gc> NetStream<'gc> {
             let offset = reader
                 .stream_position()
                 .expect("FLV reader stream position") as usize;
-            source.offset.set(offset);
+            source.rewind_cursors_to(offset);
+        }
+
+        // Anything the decoder is still holding on to belongs to where we just
+        // came from, so it must not be allowed to surface after the jump.
+        if let Some(NetStreamType::Flv {
+            video_stream: Some(video_stream),
+            ..
+        }) = &*source.stream_type.borrow()
+            && let Err(e) = context.video.reset_video_stream(*video_stream)
+        {
+            tracing::error!("Resetting video stream failed: {}", e);
         }
 
         if let Some(NetStreamKind::Avm2(_)) = self.0.avm_object.get() {
@@ -866,12 +943,15 @@ impl<'gc> NetStream<'gc> {
                 let mut reader = FlvReader::from_parts(&buffer, source.offset.get());
                 match FlvHeader::parse(&mut reader) {
                     Ok(header) => {
-                        source.offset.set(reader.into_parts().1);
+                        source.rewind_cursors_to(reader.into_parts().1);
                         source.preload_offset.set(source.offset.get());
                         source.stream_type.replace(Some(NetStreamType::Flv {
                             header,
                             video_stream: None,
                             frame_id: 0,
+                            max_composition_offset: 0,
+                            video_frame_interval: 0,
+                            last_video_dts: 0,
                         }));
                         true
                     }
@@ -912,33 +992,38 @@ impl<'gc> NetStream<'gc> {
         }
     }
 
-    /// Decode one video frame and put it straight on screen.
-    ///
-    /// Feeding the decoder and presenting its output still happen together
-    /// here, which only works because the presentation time used is the frame's
-    /// own position in the stream. Separating the two is what lets H.264 be
-    /// shown at the right time, and comes later.
-    fn decode_and_present(
-        self,
+    /// Hand one video frame to the decoder, to be shown at `pts`.
+    fn submit_video_frame(
         context: &mut UpdateContext<'gc>,
         video_handle: VideoStreamHandle,
         encoded_frame: EncodedFrame<'_>,
+        pts: PresentationTime,
     ) {
         let frame_id = encoded_frame.frame_id;
-        let pts = frame_id as PresentationTime;
 
         if let Err(e) = context
             .video
             .submit_video_stream_frame(video_handle, encoded_frame, pts)
         {
             tracing::error!("Decoding video frame {} failed: {}", frame_id, e);
-            return;
         }
+    }
 
-        match context
-            .video
-            .present_video_stream_frame(video_handle, pts, context.renderer)
-        {
+    /// Put whatever video frame is due at `playhead` on screen.
+    fn present_video_frame(self, context: &mut UpdateContext<'gc>, playhead: f64) {
+        let video_handle = match &*self.source().stream_type.borrow() {
+            Some(NetStreamType::Flv { video_stream, .. }) => *video_stream,
+            None => None,
+        };
+        let Some(video_handle) = video_handle else {
+            return;
+        };
+
+        match context.video.present_video_stream_frame(
+            video_handle,
+            playhead as PresentationTime,
+            context.renderer,
+        ) {
             Ok(Presentation::Changed(bitmap_info)) => {
                 self.0.last_decoded_bitmap.replace(Some(bitmap_info));
                 if let Some(mc) = self.0.attached_to.get() {
@@ -947,9 +1032,7 @@ impl<'gc> NetStream<'gc> {
                 }
             }
             Ok(Presentation::Unchanged | Presentation::Empty) => {}
-            Err(e) => {
-                tracing::error!("Presenting video frame {} failed: {}", frame_id, e);
-            }
+            Err(e) => tracing::error!("Presenting video frame at {}ms failed: {}", playhead, e),
         }
     }
 
@@ -958,6 +1041,10 @@ impl<'gc> NetStream<'gc> {
     /// `write` must be an active borrow of the current `NetStream`. `slice`
     /// must reference the underlying backing buffer.
     ///
+    /// `dts` is the tag's own timestamp, which is when the frame has to be
+    /// *decoded*. When it has to be *shown* can be later than that, and is
+    /// carried separately by the bitstream's composition time offset.
+    ///
     /// `tag_needs_preloading` indicates that this video tag has not been
     /// encountered before.
     fn flv_video_tag(
@@ -965,6 +1052,7 @@ impl<'gc> NetStream<'gc> {
         context: &mut UpdateContext<'gc>,
         slice: &Slice,
         video_data: FlvVideoData<'_>,
+        dts: PresentationTime,
         tag_needs_preloading: bool,
     ) {
         let source = self.source();
@@ -1056,7 +1144,10 @@ impl<'gc> NetStream<'gc> {
                     frame_id,
                 };
 
-                self.decode_and_present(context, video_handle, encoded_frame);
+                // None of these codecs reorder, so a frame is shown at the same
+                // time it is decoded.
+                self.note_video_timing(dts, 0);
+                Self::submit_video_frame(context, video_handle, encoded_frame, dts);
             }
             (_, _, FlvVideoPacket::CommandFrame(_command)) => {
                 tracing::warn!("Stub: FLV command frame processing")
@@ -1076,7 +1167,7 @@ impl<'gc> NetStream<'gc> {
                 Some(video_handle),
                 Some(codec),
                 FlvVideoPacket::AvcNalu {
-                    composition_time_offset: _,
+                    composition_time_offset,
                     data,
                 },
             ) => {
@@ -1086,7 +1177,12 @@ impl<'gc> NetStream<'gc> {
                     frame_id,
                 };
 
-                self.decode_and_present(context, video_handle, encoded_frame);
+                // H.264 frames arrive in the order they have to be decoded in,
+                // which with bidirectional prediction is not the order they are
+                // shown in. The composition time offset is the difference.
+                let pts = dts + composition_time_offset as PresentationTime;
+                self.note_video_timing(dts, composition_time_offset as i64);
+                Self::submit_video_frame(context, video_handle, encoded_frame, pts);
             }
             (_, _, FlvVideoPacket::AvcEndOfSequence) => {
                 tracing::warn!("Stub: FLV AVC/H.264 End of Sequence processing")
@@ -1108,24 +1204,49 @@ impl<'gc> NetStream<'gc> {
         };
     }
 
-    /// Process a parsed FLV script tag.
+    /// Note how far ahead of presentation this stream decodes, so the feed
+    /// cursor knows how far ahead of the playhead it has to run.
+    fn note_video_timing(self, dts: PresentationTime, composition_offset: i64) {
+        let source = self.source();
+        let Some(NetStreamType::Flv {
+            max_composition_offset,
+            video_frame_interval,
+            last_video_dts,
+            ..
+        }) = &mut *source.stream_type.borrow_mut()
+        else {
+            return;
+        };
+
+        *max_composition_offset = (*max_composition_offset).max(composition_offset);
+
+        let delta = dts - *last_video_dts;
+        if delta > 0 {
+            *video_frame_interval = delta;
+        }
+        *last_video_dts = dts;
+    }
+
+    /// Set up the video stream a script tag's `onMetaData` describes.
     ///
-    /// This function attempts to borrow the current `NetStream`, you must drop
-    /// any existing borrows and pick them back up when you're done.
-    ///
-    /// `tag_needs_preloading` indicates that this script tag has not been
-    /// encountered before.
-    fn flv_script_tag(
+    /// This is the half of script tag processing that belongs to the feed
+    /// cursor: the decoder has to exist before any frame can be handed to it,
+    /// and that has to happen whether or not the playhead has reached the tag
+    /// yet. Only the first `onMetaData` in a stream is acted on.
+    fn flv_script_tag_preload(
         self,
         context: &mut UpdateContext<'gc>,
         script_data: FlvScriptData<'_>,
-        tag_needs_preloading: bool,
     ) {
         let source = self.source();
         let has_stream_already = match &*source.stream_type.borrow() {
             Some(NetStreamType::Flv { video_stream, .. }) => video_stream.is_some(),
             _ => unreachable!(),
         };
+
+        if has_stream_already {
+            return;
+        }
 
         let mut width = None;
         let mut height = None;
@@ -1134,63 +1255,76 @@ impl<'gc> NetStream<'gc> {
         let mut duration = None;
 
         for var in script_data.0 {
-            if var.name == b"onMetaData" && !has_stream_already {
-                match var.data.clone() {
-                    FlvValue::Object(subvars) | FlvValue::EcmaArray(subvars) => {
-                        for subvar in subvars {
-                            match (subvar.name, subvar.data) {
-                                (b"width", FlvValue::Number(val)) => width = Some(val),
-                                (b"height", FlvValue::Number(val)) => height = Some(val),
-                                (b"videocodecid", FlvValue::Number(val)) => {
-                                    video_codec_id = Some(val)
-                                }
-                                (b"framerate", FlvValue::Number(val)) => frame_rate = Some(val),
-                                (b"duration", FlvValue::Number(val)) => duration = Some(val),
-                                _ => {}
-                            }
+            if var.name != b"onMetaData" {
+                continue;
+            }
+
+            match var.data {
+                FlvValue::Object(subvars) | FlvValue::EcmaArray(subvars) => {
+                    for subvar in subvars {
+                        match (subvar.name, subvar.data) {
+                            (b"width", FlvValue::Number(val)) => width = Some(val),
+                            (b"height", FlvValue::Number(val)) => height = Some(val),
+                            (b"videocodecid", FlvValue::Number(val)) => video_codec_id = Some(val),
+                            (b"framerate", FlvValue::Number(val)) => frame_rate = Some(val),
+                            (b"duration", FlvValue::Number(val)) => duration = Some(val),
+                            _ => {}
                         }
                     }
-                    _ => tracing::error!("Invalid FLV metadata tag!"),
+                }
+                _ => tracing::error!("Invalid FLV metadata tag!"),
+            }
+        }
+
+        let (Some(width), Some(height), Some(video_codec_id), Some(frame_rate), Some(duration)) =
+            (width, height, video_codec_id, frame_rate, duration)
+        else {
+            return;
+        };
+
+        let num_frames = frame_rate * duration;
+        if let Some(video_codec) = VideoCodec::from_u8(video_codec_id as u8) {
+            match context.video.register_video_stream(
+                num_frames as u32,
+                (width as u16, height as u16),
+                video_codec,
+                VideoDeblocking::UseVideoPacketValue,
+            ) {
+                Ok(stream_handle) => match &mut *source.stream_type.borrow_mut() {
+                    Some(NetStreamType::Flv { video_stream, .. }) => {
+                        *video_stream = Some(stream_handle)
+                    }
+                    _ => unreachable!(),
+                },
+                Err(e) => {
+                    tracing::error!("Got error when registering FLV video stream: {}", e)
                 }
             }
+        } else {
+            tracing::error!("FLV video stream has invalid codec ID {}", video_codec_id);
+        }
+    }
+
+    /// Hand a script tag's variables to the AVM.
+    ///
+    /// This is the half of script tag processing that belongs to the
+    /// presentation cursor, so that callbacks stay in step with what the viewer
+    /// is seeing instead of running as early as the decoders are fed.
+    ///
+    /// This function attempts to borrow the current `NetStream`, you must drop
+    /// any existing borrows and pick them back up when you're done.
+    fn flv_script_tag_dispatch(
+        self,
+        context: &mut UpdateContext<'gc>,
+        script_data: FlvScriptData<'_>,
+    ) {
+        for var in script_data.0 {
             let avm_object = self.0.avm_object.get();
             // This is necessary because the script callback functions can call back into
             // these methods, (e.g. NetStream::play), so we need to avoid holding a borrow
             // while the script data is being handled.
             let _ = self.handle_script_data(avm_object, context, var.name, var.data);
             // Any errors while trying to lookup or call AVM2 properties are silently swallowed.
-        }
-
-        if tag_needs_preloading
-            && let (
-                Some(width),
-                Some(height),
-                Some(video_codec_id),
-                Some(frame_rate),
-                Some(duration),
-            ) = (width, height, video_codec_id, frame_rate, duration)
-        {
-            let num_frames = frame_rate * duration;
-            if let Some(video_codec) = VideoCodec::from_u8(video_codec_id as u8) {
-                match context.video.register_video_stream(
-                    num_frames as u32,
-                    (width as u16, height as u16),
-                    video_codec,
-                    VideoDeblocking::UseVideoPacketValue,
-                ) {
-                    Ok(stream_handle) => match &mut *source.stream_type.borrow_mut() {
-                        Some(NetStreamType::Flv { video_stream, .. }) => {
-                            *video_stream = Some(stream_handle)
-                        }
-                        _ => unreachable!(),
-                    },
-                    Err(e) => {
-                        tracing::error!("Got error when registering FLV video stream: {}", e)
-                    }
-                }
-            } else {
-                tracing::error!("FLV video stream has invalid codec ID {}", video_codec_id);
-            }
         }
     }
 
@@ -1216,93 +1350,32 @@ impl<'gc> NetStream<'gc> {
         }
 
         self.cleanup_sound_stream(context);
-        let slice = source.buffer.borrow().to_full_slice();
-        let buffer = slice.data();
 
-        let max_time = source.stream_time.get() + dt.as_millis();
-        let mut buffer_underrun = false;
-        let mut error = false;
-        let mut max_lookahead_audio_tags = 5;
-        let mut is_lookahead_tag = false;
+        let playhead = source.stream_time.get() + dt.as_millis();
 
-        // At this point we should know our stream type.
-        if matches!(
-            &*source.stream_type.borrow(),
-            Some(NetStreamType::Flv { .. })
-        ) {
-            let mut reader = FlvReader::from_parts(&buffer, source.offset.get());
+        // Hand the decoders everything up to the feed horizon first, so that
+        // whatever is due at the playhead has had as long as possible to come
+        // back out again.
+        self.run_feed_cursor(context, playhead + self.feed_lookahead());
 
-            loop {
-                let tag = FlvTag::parse(&mut reader);
-                if let Err(e) = tag {
-                    // `is_lookahead_tag` gets set once we start reading tags
-                    // after the end & won't ever be set back. We don't want
-                    // error states or playback ending to trip until we run
-                    // those tags "for realsies"
-                    if !is_lookahead_tag && matches!(e, FlvError::EndOfData) {
-                        buffer_underrun = true;
-                    } else if !is_lookahead_tag {
-                        //Corrupt tag or out of data
-                        tracing::error!("FLV tag parsing failed: {}", e);
-                        error = true;
-                    }
+        // Then move the playhead itself. Script callbacks run from here rather
+        // than from the feed cursor, so the lookahead cannot make them fire
+        // early.
+        let stop = self.run_presentation_cursor(context, playhead);
 
-                    break;
-                }
+        self.present_video_frame(context, playhead);
 
-                let tag = tag.expect("valid tag");
-                is_lookahead_tag = tag.timestamp as f64 >= max_time; //FLV timestamps are also ms
-                if is_lookahead_tag && max_lookahead_audio_tags == 0 {
-                    break;
-                }
-
-                let tag_needs_preloading = reader.stream_position().expect("valid position")
-                    as usize
-                    >= source.preload_offset.get();
-
-                match tag.data {
-                    FlvTagData::Audio(audio_data) => {
-                        if is_lookahead_tag {
-                            max_lookahead_audio_tags -= 1;
-                        }
-
-                        if let Err(e) = self.flv_audio_tag(&slice, audio_data) {
-                            //TODO: Fire an error event at AS.
-                            tracing::error!("Error committing sound stream: {}", e);
-                        }
-                    }
-                    FlvTagData::Video(video_data) if !is_lookahead_tag => {
-                        self.flv_video_tag(context, &slice, video_data, tag_needs_preloading)
-                    }
-                    FlvTagData::Script(script_data) if !is_lookahead_tag => {
-                        self.flv_script_tag(context, script_data, tag_needs_preloading);
-                    }
-                    FlvTagData::Invalid(e) => {
-                        tracing::error!("FLV data parsing failed: {}", e)
-                    }
-                    FlvTagData::Video(_) | FlvTagData::Script(_) => {}
-                }
-
-                if !is_lookahead_tag {
-                    let offset = reader
-                        .stream_position()
-                        .expect("FLV reader stream position")
-                        as usize;
-                    source.offset.set(offset);
-                    source
-                        .preload_offset
-                        .set(max(source.offset.get(), source.preload_offset.get()));
-                }
-            }
-        }
-
-        source.stream_time.set(max_time);
+        source.stream_time.set(playhead);
         if let Err(e) = self.commit_sound_stream(context) {
             //TODO: Fire an error event at AS.
             tracing::error!("Error committing sound stream: {}", e);
         }
 
-        if buffer_underrun {
+        // Running out of tags is not the end of playback on its own: several
+        // pictures can still be waiting for their turn on screen, and with
+        // bidirectional prediction the last of them is due well after the last
+        // tag's own timestamp.
+        if stop == CursorStop::OutOfData && self.video_is_drained(context) {
             let is_end_of_video = source.expected_length.get().is_none();
 
             self.trigger_status_event(
@@ -1330,9 +1403,197 @@ impl<'gc> NetStream<'gc> {
             }
         }
 
-        if error {
+        if stop == CursorStop::Corrupt {
             //TODO: Fire an error event at AS.
             self.pause(context, false);
+        }
+    }
+
+    /// Whether the video decoder has no pictures left to show.
+    ///
+    /// True when there is no video at all, so that an audio-only stream is not
+    /// held open waiting for one.
+    fn video_is_drained(self, context: &mut UpdateContext<'gc>) -> bool {
+        let video_stream = match &*self.source().stream_type.borrow() {
+            Some(NetStreamType::Flv { video_stream, .. }) => *video_stream,
+            None => None,
+        };
+
+        video_stream.is_none_or(|handle| context.video.video_stream_is_drained(handle))
+    }
+
+    /// How far past the playhead the feed cursor runs, in milliseconds.
+    ///
+    /// For video this comes from the stream itself rather than from a guess:
+    /// the largest composition time offset it uses is exactly how far ahead of
+    /// presentation it expects to be decoded, and one more frame on top covers
+    /// a decoder that releases a picture a little later than it has to.
+    fn feed_lookahead(self) -> f64 {
+        let video = match &*self.source().stream_type.borrow() {
+            Some(NetStreamType::Flv {
+                max_composition_offset,
+                video_frame_interval,
+                ..
+            }) => (*max_composition_offset + *video_frame_interval) as f64,
+            None => 0.0,
+        };
+
+        video.max(AUDIO_LOOKAHEAD_MS)
+    }
+
+    /// Hand the decoders every tag up to `horizon`.
+    ///
+    /// This runs ahead of the playhead, so that a decoder which cannot produce
+    /// a picture the moment it is given a frame still has it ready by the time
+    /// it is due, and so that the audio backend does not run dry between ticks.
+    /// Script tags are only looked at here for the stream setup they carry;
+    /// their callbacks belong to the presentation cursor.
+    fn run_feed_cursor(self, context: &mut UpdateContext<'gc>, horizon: f64) {
+        let source = self.source();
+        if !matches!(
+            &*source.stream_type.borrow(),
+            Some(NetStreamType::Flv { .. })
+        ) {
+            return;
+        }
+
+        let slice = source.buffer.borrow().to_full_slice();
+        let buffer = slice.data();
+        let mut reader = FlvReader::from_parts(&buffer, source.feed_offset.get());
+
+        loop {
+            // Out of data, or the stream is corrupt; either way there is
+            // nothing more to feed. The presentation cursor is what reports
+            // both of those, once the playhead gets there.
+            let Ok(tag) = FlvTag::parse(&mut reader) else {
+                self.flush_video_at_end_of_stream(context);
+                break;
+            };
+
+            // FLV timestamps are also ms. Leaving `feed_offset` where it is
+            // means this tag gets picked up again on a later tick.
+            if tag.timestamp as f64 >= horizon {
+                break;
+            }
+
+            let tag_needs_preloading = reader.stream_position().expect("valid position") as usize
+                >= source.preload_offset.get();
+
+            match tag.data {
+                FlvTagData::Audio(audio_data) => {
+                    if let Err(e) = self.flv_audio_tag(&slice, audio_data) {
+                        //TODO: Fire an error event at AS.
+                        tracing::error!("Error queueing sound stream: {}", e);
+                    }
+                }
+                FlvTagData::Video(video_data) => self.flv_video_tag(
+                    context,
+                    &slice,
+                    video_data,
+                    tag.timestamp as PresentationTime,
+                    tag_needs_preloading,
+                ),
+                FlvTagData::Script(script_data) => {
+                    if tag_needs_preloading {
+                        self.flv_script_tag_preload(context, script_data);
+                    }
+                }
+                FlvTagData::Invalid(e) => {
+                    tracing::error!("FLV data parsing failed: {}", e)
+                }
+            }
+
+            let offset = reader
+                .stream_position()
+                .expect("FLV reader stream position") as usize;
+            source.feed_offset.set(offset);
+            source
+                .preload_offset
+                .set(max(offset, source.preload_offset.get()));
+        }
+    }
+
+    /// Let the decoder know that the last frame has been handed over, once the
+    /// feed cursor has run out of tags and there is no more data coming.
+    ///
+    /// A decoder holding frames back for reordering has no way to know that the
+    /// stream has ended, so without this the final few pictures are never
+    /// produced at all. Draining a decoder that has nothing buffered is a
+    /// no-op, so it does not matter that this happens on every tick from here
+    /// on.
+    fn flush_video_at_end_of_stream(self, context: &mut UpdateContext<'gc>) {
+        let source = self.source();
+
+        // More data is still on its way, so running out of tags only means the
+        // download has not caught up yet.
+        if source.expected_length.get().is_some() {
+            return;
+        }
+
+        let Some(NetStreamType::Flv {
+            video_stream: Some(video_stream),
+            ..
+        }) = &*source.stream_type.borrow()
+        else {
+            return;
+        };
+
+        if let Err(e) = context.video.flush_video_stream(*video_stream) {
+            tracing::error!("Flushing video stream failed: {}", e);
+        }
+    }
+
+    /// Walk the tag stream up to `playhead`, running the script callbacks that
+    /// have come due.
+    ///
+    /// Audio and video tags are skipped here: the feed cursor handed them over
+    /// already, possibly several ticks ago.
+    fn run_presentation_cursor(
+        self,
+        context: &mut UpdateContext<'gc>,
+        playhead: f64,
+    ) -> CursorStop {
+        let source = self.source();
+        if !matches!(
+            &*source.stream_type.borrow(),
+            Some(NetStreamType::Flv { .. })
+        ) {
+            return CursorStop::CaughtUp;
+        }
+
+        let slice = source.buffer.borrow().to_full_slice();
+        let buffer = slice.data();
+        let mut reader = FlvReader::from_parts(&buffer, source.offset.get());
+
+        loop {
+            let tag = match FlvTag::parse(&mut reader) {
+                Ok(tag) => tag,
+                Err(FlvError::EndOfData) => return CursorStop::OutOfData,
+                Err(e) => {
+                    tracing::error!("FLV tag parsing failed: {}", e);
+                    return CursorStop::Corrupt;
+                }
+            };
+
+            if tag.timestamp as f64 >= playhead {
+                return CursorStop::CaughtUp;
+            }
+
+            if let FlvTagData::Script(script_data) = tag.data {
+                self.flv_script_tag_dispatch(context, script_data);
+
+                // A callback may have called `play()`, which swaps in a fresh
+                // source; the cursor we are holding no longer describes it.
+                if !Gc::ptr_eq(source, self.source()) {
+                    return CursorStop::SourceReplaced;
+                }
+            }
+
+            source.offset.set(
+                reader
+                    .stream_position()
+                    .expect("FLV reader stream position") as usize,
+            );
         }
     }
 

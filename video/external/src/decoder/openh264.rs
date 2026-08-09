@@ -7,12 +7,12 @@ use std::path::{Path, PathBuf};
 use std::ptr;
 use std::sync::Arc;
 
-use crate::decoder::LowDelayDecoder;
+use crate::decoder::VideoDecoder;
 use crate::decoder::openh264_sys::{self, ISVCDecoder, OpenH264, videoFormatI420};
 
 use ruffle_render::bitmap::BitmapFormat;
 use ruffle_video::error::Error;
-use ruffle_video::frame::{DecodedFrame, EncodedFrame, FrameDependency};
+use ruffle_video::frame::{DecodedFrame, DecodedFrameOut, EncodedFrame, FrameDependency};
 
 use bzip2::read::BzDecoder;
 use sha2::{Digest, Sha256};
@@ -192,6 +192,11 @@ impl OpenH264Codec {
     }
 }
 
+/// An upper bound on how many pictures a single drain can produce, so that a
+/// decoder which never stops handing them back cannot hang the player. An H.264
+/// decoded picture buffer holds at most sixteen.
+const MAX_FLUSH_PICTURES: usize = 64;
+
 /// H264 video decoder.
 pub struct H264Decoder {
     /// How many bytes are used to store the length of the NALU (1, 2, 3, or 4).
@@ -199,6 +204,13 @@ pub struct H264Decoder {
 
     openh264: Arc<OpenH264>,
     decoder: *mut ISVCDecoder,
+
+    /// Pictures the decoder has handed back but that have not been collected.
+    ready: Vec<DecodedFrameOut>,
+
+    /// The parameter sets, in Annex B form, kept so that the decoder can be
+    /// rebuilt from scratch when the stream jumps somewhere else.
+    parameter_sets: Vec<c_uchar>,
 }
 
 struct OpenH264Data {
@@ -225,153 +237,60 @@ impl H264Decoder {
                 length_size: 0,
                 openh264,
                 decoder,
+                ready: Vec::new(),
+                parameter_sets: Vec::new(),
             }
         }
     }
-}
 
-impl Drop for H264Decoder {
-    fn drop(&mut self) {
+    /// Turn a chunk of AVCC-framed NAL units into the Annex B framing OpenH264
+    /// wants.
+    ///
+    /// The start code emulation prevention bytes are present in both formats,
+    /// so only the length prefixes have to be swapped for start codes.
+    fn to_annex_b(&self, data: &[u8]) -> Vec<c_uchar> {
+        let mut buffer: Vec<c_uchar> = Vec::with_capacity(data.len());
+
+        let mut i = 0;
+        while i < data.len() {
+            let mut length = 0;
+            for j in 0..self.length_size {
+                length = (length << 8) | data[i + j as usize] as usize;
+            }
+            i += self.length_size as usize;
+            buffer.extend_from_slice(&[0, 0, 1]);
+            buffer.extend_from_slice(&data[i..i + length]);
+            i += length;
+        }
+
+        buffer
+    }
+
+    /// Copy out whatever picture the decoder just reported, if it reported one.
+    ///
+    /// The tag handed to it in `uiInBsTimeStamp` comes back in
+    /// `uiOutYuvTimeStamp`, which is what says *which* frame this picture
+    /// belongs to - it is generally not the one that was just submitted.
+    unsafe fn collect_picture(
+        &mut self,
+        output: &[*mut c_uchar; 3],
+        dest_buf_info: &openh264_sys::SBufferInfo,
+    ) -> Result<(), Error> {
+        if dest_buf_info.iBufferStatus != 1 {
+            return Ok(());
+        }
+
+        let buffer_info = unsafe { dest_buf_info.UsrData.sSystemBuffer };
+        if buffer_info.iFormat != videoFormatI420 as c_int {
+            return Err(Error::DecoderError(
+                format!("Unexpected output format: {}", buffer_info.iFormat).into(),
+            ));
+        }
+
+        let mut yuv: Vec<u8> =
+            Vec::with_capacity(buffer_info.iWidth as usize * buffer_info.iHeight as usize * 3 / 2);
+
         unsafe {
-            let decoder_vtbl = (*self.decoder).as_ref().unwrap();
-
-            (decoder_vtbl.Uninitialize.unwrap())(self.decoder);
-            self.openh264.WelsDestroyDecoder(self.decoder);
-        }
-    }
-}
-
-impl LowDelayDecoder for H264Decoder {
-    /// `configuration_data` should hold "AVCC (MP4) format" decoder configuration, including PPS and SPS.
-    /// Make sure it has any start code emulation prevention "three bytes" removed.
-    fn configure_decoder(&mut self, configuration_data: &[u8]) -> Result<(), Error> {
-        unsafe {
-            assert_eq!(configuration_data[0], 1, "Invalid configuration version");
-            // configuration_data[0]: configuration version, always 1
-            // configuration_data[1]: profile
-            // configuration_data[2]: compatibility
-            // configuration_data[3]: level
-            // configuration_data[4]: 6 reserved bits | NALU length size - 1
-            // configuration_data[5]: 3 reserved bits | number of SPSs
-
-            self.length_size = (configuration_data[4] & 0b0000_0011) + 1;
-
-            let decoder_vtbl = (*self.decoder).as_ref().unwrap();
-
-            //input: encoded bitstream start position; should include start code prefix
-            let mut buffer: Vec<c_uchar> = Vec::new();
-
-            // Converting from AVCC to Annex B (stream-like) format,
-            // putting the PPS and SPS into a NALU.
-
-            let num_sps = configuration_data[5] as usize & 0b0001_1111;
-            assert_eq!(num_sps, 1, "More than one SPS is not supported");
-
-            buffer.extend_from_slice(&[0, 0, 0, 1]);
-
-            let sps_length = configuration_data[6] as usize * 256 + configuration_data[7] as usize;
-
-            for i in 0..sps_length {
-                buffer.push(configuration_data[8 + i]);
-            }
-
-            let num_pps = configuration_data[8 + sps_length] as usize;
-            assert_eq!(num_pps, 1, "More than one PPS is not supported");
-
-            buffer.extend_from_slice(&[0, 0, 0, 1]);
-
-            let pps_length = configuration_data[8 + sps_length + 1] as usize * 256
-                + configuration_data[8 + sps_length + 2] as usize;
-
-            for i in 0..pps_length {
-                buffer.push(configuration_data[8 + sps_length + 3 + i]);
-            }
-
-            //output: [0~2] for Y,U,V buffer
-            let mut output = [ptr::null_mut() as *mut c_uchar; 3];
-            let mut dest_buf_info: openh264_sys::SBufferInfo = std::mem::zeroed();
-
-            let _ret = decoder_vtbl.DecodeFrameNoDelay.unwrap()(
-                self.decoder,
-                buffer.as_mut_ptr(),
-                buffer.len() as c_int,
-                output.as_mut_ptr(),
-                &mut dest_buf_info as *mut openh264_sys::SBufferInfo,
-            );
-        }
-        Ok(())
-    }
-
-    fn preload_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<FrameDependency, Error> {
-        assert!(self.length_size > 0, "Decoder not configured");
-
-        let nal_unit_type = encoded_frame.data[self.length_size as usize] & 0b0001_1111;
-
-        // 3.62 instantaneous decoding refresh (IDR) picture:
-        // After the decoding of an IDR picture all following coded pictures in decoding order can
-        // be decoded without inter prediction from any picture decoded prior to the IDR picture.
-        if nal_unit_type == openh264_sys::NAL_SLICE_IDR as u8 {
-            Ok(FrameDependency::None)
-        } else {
-            Ok(FrameDependency::Past)
-        }
-    }
-
-    fn decode_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<DecodedFrame, Error> {
-        assert!(self.length_size > 0, "Decoder not configured");
-        unsafe {
-            let decoder_vtbl = (*self.decoder).as_ref().unwrap();
-
-            // input: encoded bitstream start position; should include start code prefix
-            // converting from AVCC (file-like) to Annex B (stream-like) format
-            // Thankfully the start code emulation prevention is there in both.
-            let mut buffer: Vec<c_uchar> = Vec::with_capacity(encoded_frame.data.len());
-
-            let mut i = 0;
-            while i < encoded_frame.data.len() {
-                let mut length = 0;
-                for j in 0..self.length_size {
-                    length = (length << 8) | encoded_frame.data[i + j as usize] as usize;
-                }
-                i += self.length_size as usize;
-                buffer.extend_from_slice(&[0, 0, 1]);
-                buffer.extend_from_slice(&encoded_frame.data[i..i + length]);
-                i += length;
-            }
-
-            // output: [0~2] for Y,U,V buffer
-            let mut output = [ptr::null_mut() as *mut c_uchar; 3];
-            let mut dest_buf_info: openh264_sys::SBufferInfo = std::mem::zeroed();
-
-            let ret = decoder_vtbl.DecodeFrameNoDelay.unwrap()(
-                self.decoder,
-                buffer.as_mut_ptr(),
-                buffer.len() as c_int,
-                output.as_mut_ptr(),
-                &mut dest_buf_info as *mut openh264_sys::SBufferInfo,
-            );
-
-            if ret != 0 {
-                return Err(Error::DecoderError(
-                    format!("Decoding failed with status code: {ret}").into(),
-                ));
-            }
-            if dest_buf_info.iBufferStatus != 1 {
-                return Err(Error::DecoderError(
-                    "No output frame produced by the decoder".into(),
-                ));
-            }
-            let buffer_info = dest_buf_info.UsrData.sSystemBuffer;
-            if buffer_info.iFormat != videoFormatI420 as c_int {
-                return Err(Error::DecoderError(
-                    format!("Unexpected output format: {}", buffer_info.iFormat).into(),
-                ));
-            }
-
-            let mut yuv: Vec<u8> = Vec::with_capacity(
-                buffer_info.iWidth as usize * buffer_info.iHeight as usize * 3 / 2,
-            );
-
             // Copying Y
             for i in 0..buffer_info.iHeight {
                 yuv.extend_from_slice(slice::from_raw_parts(
@@ -395,17 +314,227 @@ impl LowDelayDecoder for H264Decoder {
                     buffer_info.iWidth as usize / 2,
                 ));
             }
+        }
 
-            // TODO: Check whether frames are being squished/stretched, or cropped,
-            // when encoded image size doesn't match declared video tag size.
-            // NOTE: This will always use the BT.601 coefficients, which may or may
-            // not be correct. So far I haven't seen anything to the contrary in FP.
-            Ok(DecodedFrame::new(
+        // TODO: Check whether frames are being squished/stretched, or cropped,
+        // when encoded image size doesn't match declared video tag size.
+        // NOTE: This will always use the BT.601 coefficients, which may or may
+        // not be correct. So far I haven't seen anything to the contrary in FP.
+        self.ready.push(DecodedFrameOut {
+            frame_id: dest_buf_info.uiOutYuvTimeStamp as u32,
+            frame: DecodedFrame::new(
                 buffer_info.iWidth as u32,
                 buffer_info.iHeight as u32,
                 BitmapFormat::Yuv420p,
                 yuv,
-            ))
+            ),
+        });
+
+        Ok(())
+    }
+
+    /// Feed a chunk of Annex B bitstream to the decoder, tagged so that
+    /// whichever picture it eventually produces can be recognised.
+    ///
+    /// An empty buffer means "nothing more is coming right now", which is how
+    /// the decoder is made to finish off the access unit its parser is still
+    /// sitting on.
+    fn decode(&mut self, buffer: &mut [c_uchar], frame_id: u32) -> Result<(), Error> {
+        unsafe {
+            let decoder_vtbl = (*self.decoder).as_ref().unwrap();
+
+            // output: [0~2] for Y,U,V buffer
+            let mut output = [ptr::null_mut() as *mut c_uchar; 3];
+            let mut dest_buf_info: openh264_sys::SBufferInfo = std::mem::zeroed();
+            dest_buf_info.uiInBsTimeStamp = frame_id as ::std::os::raw::c_ulonglong;
+
+            let (data, len) = if buffer.is_empty() {
+                (ptr::null_mut(), 0)
+            } else {
+                (buffer.as_mut_ptr(), buffer.len() as c_int)
+            };
+
+            let ret = decoder_vtbl.DecodeFrame2.unwrap()(
+                self.decoder,
+                data,
+                len,
+                output.as_mut_ptr(),
+                &mut dest_buf_info as *mut openh264_sys::SBufferInfo,
+            );
+
+            if ret != 0 {
+                return Err(Error::DecoderError(
+                    format!("Decoding failed with status code: {ret}").into(),
+                ));
+            }
+
+            self.collect_picture(&output, &dest_buf_info)
         }
+    }
+}
+
+impl Drop for H264Decoder {
+    fn drop(&mut self) {
+        unsafe {
+            let decoder_vtbl = (*self.decoder).as_ref().unwrap();
+
+            (decoder_vtbl.Uninitialize.unwrap())(self.decoder);
+            self.openh264.WelsDestroyDecoder(self.decoder);
+        }
+    }
+}
+
+impl VideoDecoder for H264Decoder {
+    /// `configuration_data` should hold "AVCC (MP4) format" decoder configuration, including PPS and SPS.
+    /// Make sure it has any start code emulation prevention "three bytes" removed.
+    fn configure_decoder(&mut self, configuration_data: &[u8]) -> Result<(), Error> {
+        assert_eq!(configuration_data[0], 1, "Invalid configuration version");
+        // configuration_data[0]: configuration version, always 1
+        // configuration_data[1]: profile
+        // configuration_data[2]: compatibility
+        // configuration_data[3]: level
+        // configuration_data[4]: 6 reserved bits | NALU length size - 1
+        // configuration_data[5]: 3 reserved bits | number of SPSs
+
+        self.length_size = (configuration_data[4] & 0b0000_0011) + 1;
+
+        // Converting from AVCC to Annex B (stream-like) format,
+        // putting the PPS and SPS into a NALU.
+        let mut buffer: Vec<c_uchar> = Vec::new();
+
+        let num_sps = configuration_data[5] as usize & 0b0001_1111;
+        assert_eq!(num_sps, 1, "More than one SPS is not supported");
+
+        buffer.extend_from_slice(&[0, 0, 0, 1]);
+
+        let sps_length = configuration_data[6] as usize * 256 + configuration_data[7] as usize;
+
+        for i in 0..sps_length {
+            buffer.push(configuration_data[8 + i]);
+        }
+
+        let num_pps = configuration_data[8 + sps_length] as usize;
+        assert_eq!(num_pps, 1, "More than one PPS is not supported");
+
+        buffer.extend_from_slice(&[0, 0, 0, 1]);
+
+        let pps_length = configuration_data[8 + sps_length + 1] as usize * 256
+            + configuration_data[8 + sps_length + 2] as usize;
+
+        for i in 0..pps_length {
+            buffer.push(configuration_data[8 + sps_length + 3 + i]);
+        }
+
+        // Kept so that `reset` can bring a freshly built decoder back to this
+        // same state without the container having to re-send the header.
+        self.parameter_sets = buffer.clone();
+
+        // Parameter sets do not code a picture, so nothing is expected back.
+        self.decode(&mut buffer, 0)
+    }
+
+    fn preload_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<FrameDependency, Error> {
+        assert!(self.length_size > 0, "Decoder not configured");
+
+        let nal_unit_type = encoded_frame.data[self.length_size as usize] & 0b0001_1111;
+
+        // 3.62 instantaneous decoding refresh (IDR) picture:
+        // After the decoding of an IDR picture all following coded pictures in decoding order can
+        // be decoded without inter prediction from any picture decoded prior to the IDR picture.
+        if nal_unit_type == openh264_sys::NAL_SLICE_IDR as u8 {
+            Ok(FrameDependency::None)
+        } else {
+            Ok(FrameDependency::Past)
+        }
+    }
+
+    fn submit_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<(), Error> {
+        assert!(self.length_size > 0, "Decoder not configured");
+
+        let mut buffer = self.to_annex_b(encoded_frame.data);
+        self.decode(&mut buffer, encoded_frame.frame_id)
+    }
+
+    fn poll_frames(&mut self, out: &mut Vec<DecodedFrameOut>) -> Result<(), Error> {
+        out.append(&mut self.ready);
+        Ok(())
+    }
+
+    fn flush(&mut self) -> Result<(), Error> {
+        unsafe {
+            // The parser holds the final access unit back until it sees the
+            // start of the next one, which is never going to arrive; an empty
+            // decode is what tells it to finish that picture off.
+            self.decode(&mut [], 0)?;
+
+            let decoder_vtbl = (*self.decoder).as_ref().unwrap();
+
+            // OpenH264 will not release the pictures it is holding for
+            // reordering until it has been told the stream has ended - without
+            // this, `FlushFrame` keeps reporting frames remaining and handing
+            // back nothing.
+            let mut end_of_stream: c_int = 1;
+            decoder_vtbl.SetOption.unwrap()(
+                self.decoder,
+                openh264_sys::DECODER_OPTION_END_OF_STREAM,
+                &mut end_of_stream as *mut c_int as *mut std::ffi::c_void,
+            );
+
+            // Drain until nothing more comes out, rather than until
+            // `DECODER_OPTION_NUM_OF_FRAMES_REMAINING_IN_BUFFER` reaches zero:
+            // that count only covers the reordering buffer, and the final
+            // access unit is still sitting in the parser, which holds a picture
+            // back until it has seen the start of the next one.
+            //
+            // The bound is only there so that a decoder which never stops
+            // producing cannot hang the player; a DPB holds at most 16.
+            for _ in 0..MAX_FLUSH_PICTURES {
+                let mut output = [ptr::null_mut() as *mut c_uchar; 3];
+                let mut dest_buf_info: openh264_sys::SBufferInfo = std::mem::zeroed();
+
+                decoder_vtbl.FlushFrame.unwrap()(
+                    self.decoder,
+                    output.as_mut_ptr(),
+                    &mut dest_buf_info as *mut openh264_sys::SBufferInfo,
+                );
+
+                if dest_buf_info.iBufferStatus != 1 {
+                    break;
+                }
+
+                self.collect_picture(&output, &dest_buf_info)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn reset(&mut self) -> Result<(), Error> {
+        self.ready.clear();
+
+        // There is no way to tell OpenH264 to forget its reference pictures
+        // short of building it again, and leaving them in place would let
+        // frames from before the jump be predicted from - or worse, surface
+        // after it.
+        unsafe {
+            let decoder_vtbl = (*self.decoder).as_ref().unwrap();
+            decoder_vtbl.Uninitialize.unwrap()(self.decoder);
+
+            let mut dec_param: openh264_sys::SDecodingParam = std::mem::zeroed();
+            dec_param.sVideoProperty.eVideoBsType = openh264_sys::VIDEO_BITSTREAM_AVC;
+            decoder_vtbl.Initialize.unwrap()(self.decoder, &dec_param);
+        }
+
+        // The container only sends the parameter sets once, at the start.
+        if !self.parameter_sets.is_empty() {
+            let mut parameter_sets = std::mem::take(&mut self.parameter_sets);
+            let result = self.decode(&mut parameter_sets, 0);
+            self.parameter_sets = parameter_sets;
+            result?;
+        }
+
+        // Whatever the parameter sets shook loose belongs to the old position.
+        self.ready.clear();
+        Ok(())
     }
 }

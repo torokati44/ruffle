@@ -1,6 +1,8 @@
+#[cfg(feature = "webcodecs")]
+use crate::decoder::LowDelay;
+use crate::decoder::VideoDecoder;
 #[cfg(feature = "openh264")]
 use crate::decoder::openh264::OpenH264Codec;
-use crate::decoder::{LowDelay, VideoDecoder};
 
 use ruffle_render::backend::RenderBackend;
 use ruffle_video::VideoStreamHandle;
@@ -51,9 +53,7 @@ impl ExternalVideoBackend {
     fn make_decoder(&mut self) -> Result<Box<dyn VideoDecoder>, Error> {
         #[cfg(feature = "openh264")]
         if let Some(h264_codec) = self.openh264_codec.as_ref() {
-            let decoder = Box::new(LowDelay::new(crate::decoder::openh264::H264Decoder::new(
-                h264_codec,
-            )));
+            let decoder = Box::new(crate::decoder::openh264::H264Decoder::new(h264_codec));
             return Ok(decoder);
         }
 
@@ -205,6 +205,38 @@ impl VideoBackend for ExternalVideoBackend {
             ProxyOrStream::Owned(stream) => stream.queue.present(pts, renderer),
         }
     }
+
+    fn flush_video_stream(&mut self, stream: VideoStreamHandle) -> Result<(), Error> {
+        let stream = self
+            .streams
+            .get_mut(stream)
+            .ok_or(Error::VideoStreamIsNotRegistered)?;
+
+        match stream {
+            ProxyOrStream::Proxied(handle) => self.software.flush_video_stream(*handle),
+            ProxyOrStream::Owned(stream) => stream.flush(),
+        }
+    }
+
+    fn video_stream_is_drained(&self, stream: VideoStreamHandle) -> bool {
+        match self.streams.get(stream) {
+            Some(ProxyOrStream::Proxied(handle)) => self.software.video_stream_is_drained(*handle),
+            Some(ProxyOrStream::Owned(stream)) => stream.queue.is_drained(),
+            None => true,
+        }
+    }
+
+    fn reset_video_stream(&mut self, stream: VideoStreamHandle) -> Result<(), Error> {
+        let stream = self
+            .streams
+            .get_mut(stream)
+            .ok_or(Error::VideoStreamIsNotRegistered)?;
+
+        match stream {
+            ProxyOrStream::Proxied(handle) => self.software.reset_video_stream(*handle),
+            ProxyOrStream::Owned(stream) => stream.reset(),
+        }
+    }
 }
 
 /// A single preloaded video stream.
@@ -232,11 +264,25 @@ impl VideoStream {
         let frame_id = encoded_frame.frame_id;
         self.decoder.submit_frame(encoded_frame)?;
         self.queue.submitted(frame_id, pts);
+        self.pump()
+    }
 
+    /// Collect whatever the decoder has finished into the queue.
+    fn pump(&mut self) -> Result<(), Error> {
         self.polled.clear();
         self.decoder.poll_frames(&mut self.polled)?;
         self.queue.absorb(&mut self.polled);
-
         Ok(())
+    }
+
+    fn flush(&mut self) -> Result<(), Error> {
+        self.decoder.flush()?;
+        self.pump()
+    }
+
+    fn reset(&mut self) -> Result<(), Error> {
+        self.queue.reset();
+        self.polled.clear();
+        self.decoder.reset()
     }
 }

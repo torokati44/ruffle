@@ -88,4 +88,25 @@ pub trait VideoBackend {
         pts: PresentationTime,
         renderer: &mut dyn RenderBackend,
     ) -> Result<Presentation, Error>;
+
+    /// Tell a video stream's decoder that no more frames are coming, so that it
+    /// releases the pictures it is still holding back for reordering.
+    ///
+    /// Without this the last few frames of a stream with bidirectional
+    /// prediction never come out at all.
+    fn flush_video_stream(&mut self, stream: VideoStreamHandle) -> Result<(), Error>;
+
+    /// Whether a video stream has shown everything it has decoded.
+    ///
+    /// A stream that has run out of frames to feed can still have several
+    /// pictures waiting for their turn on screen, so this is what says whether
+    /// playback has really finished.
+    fn video_stream_is_drained(&self, stream: VideoStreamHandle) -> bool;
+
+    /// Throw away everything a video stream has decoded but not yet shown,
+    /// along with any decoder state, because playback has jumped elsewhere.
+    ///
+    /// The picture currently on screen is kept: Flash Player does not blank the
+    /// video while seeking.
+    fn reset_video_stream(&mut self, stream: VideoStreamHandle) -> Result<(), Error>;
 }
