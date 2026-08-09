@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::decoder::VideoDecoder;
+use crate::decoder::LowDelayDecoder;
 
 use ruffle_render::bitmap::BitmapFormat;
 use ruffle_video::error::Error;
@@ -205,7 +205,7 @@ fn iter_nalus(data: &[u8], length_size: usize) -> impl Iterator<Item = (u8, &[u8
     })
 }
 
-impl VideoDecoder for H264Decoder {
+impl LowDelayDecoder for H264Decoder {
     fn configure_decoder(&mut self, configuration_data: &[u8]) -> Result<(), Error> {
         // extradata[0]: configuration version, always 1
         // extradata[1]: profile

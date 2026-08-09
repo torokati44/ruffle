@@ -1,4 +1,4 @@
-use crate::decoder::VideoDecoder;
+use crate::decoder::LowDelayDecoder;
 use ruffle_render::bitmap::BitmapFormat;
 use ruffle_video::error::Error;
 
@@ -94,7 +94,7 @@ fn crop(data: &[u8], mut width: usize, to_size: (u16, u16)) -> Vec<u8> {
     data
 }
 
-impl VideoDecoder for Vp6Decoder {
+impl LowDelayDecoder for Vp6Decoder {
     fn preload_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<FrameDependency, Error> {
         // Luckily the very first bit of the encoded frames is exactly this flag,
         // so we don't have to bother asking any "proper" decoder or parser.

@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::ptr;
 use std::sync::Arc;
 
-use crate::decoder::VideoDecoder;
+use crate::decoder::LowDelayDecoder;
 use crate::decoder::openh264_sys::{self, ISVCDecoder, OpenH264, videoFormatI420};
 
 use ruffle_render::bitmap::BitmapFormat;
@@ -241,7 +241,7 @@ impl Drop for H264Decoder {
     }
 }
 
-impl VideoDecoder for H264Decoder {
+impl LowDelayDecoder for H264Decoder {
     /// `configuration_data` should hold "AVCC (MP4) format" decoder configuration, including PPS and SPS.
     /// Make sure it has any start code emulation prevention "three bytes" removed.
     fn configure_decoder(&mut self, configuration_data: &[u8]) -> Result<(), Error> {

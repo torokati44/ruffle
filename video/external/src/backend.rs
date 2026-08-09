@@ -1,13 +1,13 @@
-use crate::decoder::VideoDecoder;
 #[cfg(feature = "openh264")]
 use crate::decoder::openh264::OpenH264Codec;
+use crate::decoder::{LowDelay, VideoDecoder};
 
 use ruffle_render::backend::RenderBackend;
 use ruffle_render::bitmap::{BitmapHandle, BitmapInfo, PixelRegion};
 use ruffle_video::VideoStreamHandle;
 use ruffle_video::backend::VideoBackend;
 use ruffle_video::error::Error;
-use ruffle_video::frame::{EncodedFrame, FrameDependency};
+use ruffle_video::frame::{DecodedFrame, DecodedFrameOut, EncodedFrame, FrameDependency};
 use ruffle_video_software::backend::SoftwareVideoBackend;
 use slotmap::SlotMap;
 
@@ -51,7 +51,9 @@ impl ExternalVideoBackend {
     fn make_decoder(&mut self) -> Result<Box<dyn VideoDecoder>, Error> {
         #[cfg(feature = "openh264")]
         if let Some(h264_codec) = self.openh264_codec.as_ref() {
-            let decoder = Box::new(crate::decoder::openh264::H264Decoder::new(h264_codec));
+            let decoder = Box::new(LowDelay::new(crate::decoder::openh264::H264Decoder::new(
+                h264_codec,
+            )));
             return Ok(decoder);
         }
 
@@ -62,7 +64,8 @@ impl ExternalVideoBackend {
                 .clone()
                 .ok_or(Error::DecoderError("log subscriber not set".into()))?;
             let decoder = crate::decoder::webcodecs::H264Decoder::new(log_subscriber);
-            return decoder.map(|decoder| Box::new(decoder) as Box<dyn VideoDecoder>);
+            return decoder
+                .map(|decoder| Box::new(LowDelay::new(decoder)) as Box<dyn VideoDecoder>);
         }
 
         #[allow(unreachable_code)]
@@ -181,7 +184,7 @@ impl VideoBackend for ExternalVideoBackend {
                     .decode_video_stream_frame(*handle, encoded_frame, renderer)
             }
             ProxyOrStream::Owned(stream) => {
-                let frame = stream.decoder.decode_frame(encoded_frame)?;
+                let frame = stream.decode_frame(encoded_frame)?;
 
                 let width = frame.width();
                 let height = frame.height();
@@ -212,6 +215,8 @@ impl VideoBackend for ExternalVideoBackend {
 pub struct VideoStream {
     bitmap: Option<BitmapHandle>,
     decoder: Box<dyn VideoDecoder>,
+    /// Reused buffer for collecting decoder output.
+    polled: Vec<DecodedFrameOut>,
 }
 
 impl VideoStream {
@@ -219,6 +224,22 @@ impl VideoStream {
         Self {
             decoder,
             bitmap: None,
+            polled: Vec::new(),
         }
+    }
+
+    /// Submit one frame and take the picture straight back out again.
+    ///
+    /// H.264 cannot honestly work this way, which is the whole reason the
+    /// decoders are driven through `LowDelay` for now; this goes away once
+    /// callers drive submission and presentation separately.
+    fn decode_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<DecodedFrame, Error> {
+        self.decoder.submit_frame(encoded_frame)?;
+        self.polled.clear();
+        self.decoder.poll_frames(&mut self.polled)?;
+        self.polled
+            .pop()
+            .map(|out| out.frame)
+            .ok_or_else(|| Error::DecoderError("No output frame produced by the decoder".into()))
     }
 }

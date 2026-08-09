@@ -1,4 +1,4 @@
-use crate::decoder::VideoDecoder;
+use crate::decoder::LowDelayDecoder;
 use h263_rs::parser::H263Reader;
 use h263_rs::{DecoderOption, H263State, PictureOption, PictureTypeCode};
 use h263_rs_deblock::deblock::{QUANT_TO_STRENGTH, deblock};
@@ -40,7 +40,7 @@ impl H263Decoder {
     }
 }
 
-impl VideoDecoder for H263Decoder {
+impl LowDelayDecoder for H263Decoder {
     fn preload_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<FrameDependency, Error> {
         let mut reader = H263Reader::from_source(encoded_frame.data());
         let picture = self

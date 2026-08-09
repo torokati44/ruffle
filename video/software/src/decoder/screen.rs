@@ -1,7 +1,7 @@
 // This module is heavily based on flashsv.rs from NihAV,
 // written by Kostya Shishkov, with permission.
 
-use crate::decoder::VideoDecoder;
+use crate::decoder::LowDelayDecoder;
 use ruffle_render::bitmap::BitmapFormat;
 use ruffle_video::error::Error;
 
@@ -132,7 +132,7 @@ impl ScreenVideoDecoder {
     }
 }
 
-impl VideoDecoder for ScreenVideoDecoder {
+impl LowDelayDecoder for ScreenVideoDecoder {
     fn preload_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<FrameDependency, Error> {
         // There's this extra, undocumented byte between the VideoFrame tag headers and the actual
         // SCREENVIDEOPACKET contents, which is the FrameType + CodecID fields of the VIDEODATA tags
