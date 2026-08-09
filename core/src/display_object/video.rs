@@ -17,8 +17,8 @@ use ruffle_render::bitmap::{BitmapInfo, PixelSnapping};
 use ruffle_render::commands::CommandHandler;
 use ruffle_render::quality::StageQuality;
 use ruffle_video::VideoStreamHandle;
-use ruffle_video::error::Error;
-use ruffle_video::frame::EncodedFrame;
+use ruffle_video::frame::{EncodedFrame, PresentationTime};
+use ruffle_video::queue::Presentation;
 use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -292,53 +292,81 @@ impl<'gc> Video<'gc> {
         };
 
         for fr in sweep_from..=frame_id {
-            self.seek_internal(context, fr)
+            self.submit_frame(context, fr)
         }
+
+        self.present_frame(context, frame_id);
     }
 
-    /// Decode a single frame of video.
+    /// Hand a single frame of video to the decoder.
     ///
     /// This function makes no attempt to ensure that the proposed seek is
     /// valid, hence the fact that it's not `pub`. To do a seek that accounts
     /// for keyframes, see `Video.seek`.
-    fn seek_internal(self, context: &mut UpdateContext<'gc>, frame_id: u32) {
-        let stream = if let VideoStream::Instantiated(stream) = self.0.stream.get() {
-            stream
-        } else {
+    fn submit_frame(self, context: &mut UpdateContext<'gc>, frame_id: u32) {
+        let VideoStream::Instantiated(stream) = self.0.stream.get() else {
             tracing::error!("Attempted to seek uninstantiated video stream.");
             return;
         };
 
-        let res = match self.0.source.get() {
-            VideoSource::Swf(swf_source) => match swf_source.frames.borrow().get(&frame_id) {
-                Some((slice_start, slice_end)) => {
-                    let encframe = EncodedFrame {
-                        codec: swf_source.streamdef.codec,
-                        data: &self.0.movie.data()[*slice_start..*slice_end],
-                        frame_id,
-                    };
-                    context
-                        .video
-                        .decode_video_stream_frame(stream, encframe, context.renderer)
-                }
-                None => {
-                    if let Some((_old_id, old_frame)) = self.0.decoded_frame.borrow().clone() {
-                        Ok(old_frame)
-                    } else {
-                        Err(Error::SeekingBeforeDecoding(frame_id))
-                    }
-                }
-            },
-            VideoSource::NetStream { .. } => return,
-            VideoSource::Unconnected { .. } => return,
+        let VideoSource::Swf(swf_source) = self.0.source.get() else {
+            return;
         };
 
-        match res {
-            Ok(bitmap) => {
+        // Frames the stream has no data for are not an error: they simply
+        // repeat whatever was on screen already.
+        let Some((slice_start, slice_end)) = swf_source.frames.borrow().get(&frame_id).copied()
+        else {
+            return;
+        };
+
+        let encframe = EncodedFrame {
+            codec: swf_source.streamdef.codec,
+            data: &self.0.movie.data()[slice_start..slice_end],
+            frame_id,
+        };
+
+        // Embedded video is indexed by frame rather than timed, so the frame
+        // number is the presentation time.
+        if let Err(e) =
+            context
+                .video
+                .submit_video_stream_frame(stream, encframe, frame_id as PresentationTime)
+        {
+            tracing::error!("Got error when decoding video frame {}: {}", frame_id, e);
+        }
+    }
+
+    /// Put the frame belonging to `frame_id` on screen.
+    ///
+    /// Any frames swept past on the way here are dropped by the video backend
+    /// without ever reaching the renderer.
+    fn present_frame(self, context: &mut UpdateContext<'gc>, frame_id: u32) {
+        let VideoStream::Instantiated(stream) = self.0.stream.get() else {
+            return;
+        };
+
+        match context.video.present_video_stream_frame(
+            stream,
+            frame_id as PresentationTime,
+            context.renderer,
+        ) {
+            Ok(Presentation::Changed(bitmap)) => {
                 self.0.decoded_frame.replace(Some((frame_id, bitmap)));
                 self.invalidate_cached_bitmap();
                 *context.needs_render = true;
             }
+            Ok(Presentation::Unchanged) => {
+                // The picture stays as it was, but the playhead still moved,
+                // and `seek` needs to know where it got to.
+                if let Some((last_frame_id, _)) = &mut *self.0.decoded_frame.borrow_mut() {
+                    *last_frame_id = frame_id;
+                }
+            }
+            Ok(Presentation::Empty) => tracing::error!(
+                "Attempted to seek to video frame {} with nothing decoded yet",
+                frame_id
+            ),
             Err(e) => tracing::error!("Got error when seeking to video frame {}: {}", frame_id, e),
         }
     }

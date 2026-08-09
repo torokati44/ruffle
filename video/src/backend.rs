@@ -1,8 +1,8 @@
 use crate::VideoStreamHandle;
 use crate::error::Error;
-use crate::frame::{EncodedFrame, FrameDependency};
+use crate::frame::{EncodedFrame, FrameDependency, PresentationTime};
+use crate::queue::Presentation;
 use ruffle_render::backend::RenderBackend;
-use ruffle_render::bitmap::BitmapInfo;
 use swf::{VideoCodec, VideoDeblocking};
 
 /// A backend that provides access to some number of video decoders.
@@ -52,26 +52,40 @@ pub trait VideoBackend {
         encoded_frame: EncodedFrame<'_>,
     ) -> Result<FrameDependency, Error>;
 
-    /// Decode a frame of a given video stream.
+    /// Queue a frame of a given video stream for decoding, to be shown at
+    /// `pts`.
     ///
-    /// This function is provided the external index of the frame, the codec
-    /// used to decode the data, and what codec to decode it with. The codec
-    /// provided here must match the one used to register the video stream.
+    /// Frames must be submitted in decode order, which is the order they occur
+    /// in the bitstream, and must not violate the frame dependencies declared
+    /// by the output of `preload_video_stream_frame`. That order need not match
+    /// the order the frames are to be presented in: `pts` is what says when
+    /// each one is actually due.
     ///
-    /// Frames may be decoded in any order that does not violate the frame
-    /// dependencies declared by the output of `preload_video_stream_frame`.
-    ///
-    /// The resulting `BitmapInfo` will be renderable only on the given
-    /// `RenderBackend`. `VideoBackend` implementations are allowed to return
-    /// an error if a drawable bitmap cannot be produced for the given
-    /// renderer.
-    ///
-    /// Any previously returned bitmaps may be updated, invalidated, or
-    /// reclaimed by whatever means the decoder implementation chooses.
-    fn decode_video_stream_frame(
+    /// Nothing is decoded to screen here. A frame submitted now may not be
+    /// presentable until several more have followed it.
+    fn submit_video_stream_frame(
         &mut self,
         stream: VideoStreamHandle,
         encoded_frame: EncodedFrame<'_>,
+        pts: PresentationTime,
+    ) -> Result<(), Error>;
+
+    /// Move a video stream's presentation clock to `pts`, putting the newest
+    /// frame that is due by then on screen.
+    ///
+    /// Frames that were due earlier but never got shown are dropped rather than
+    /// displayed late.
+    ///
+    /// A returned `BitmapInfo` will be renderable only on the given
+    /// `RenderBackend`. `VideoBackend` implementations are allowed to return an
+    /// error if a drawable bitmap cannot be produced for the given renderer.
+    ///
+    /// Any previously returned bitmaps may be updated, invalidated, or
+    /// reclaimed by whatever means the decoder implementation chooses.
+    fn present_video_stream_frame(
+        &mut self,
+        stream: VideoStreamHandle,
+        pts: PresentationTime,
         renderer: &mut dyn RenderBackend,
-    ) -> Result<BitmapInfo, Error>;
+    ) -> Result<Presentation, Error>;
 }

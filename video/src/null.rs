@@ -1,9 +1,9 @@
 use crate::VideoStreamHandle;
 use crate::backend::VideoBackend;
 use crate::error::Error;
-use crate::frame::{EncodedFrame, FrameDependency};
+use crate::frame::{EncodedFrame, FrameDependency, PresentationTime};
+use crate::queue::Presentation;
 use ruffle_render::backend::RenderBackend;
-use ruffle_render::bitmap::BitmapInfo;
 use slotmap::SlotMap;
 use swf::{VideoCodec, VideoDeblocking};
 
@@ -17,8 +17,8 @@ pub struct NullVideoBackend {
 ///
 ///  * Registering a video stream succeeds but does nothing
 ///  * All video frames are silently marked as keyframes (`None` dependency)
-///  * Video stream decoding fails with an error that video decoding is
-///    unimplemented
+///  * Submitting a frame fails with an error that video decoding is
+///    unimplemented, and so nothing is ever presentable
 impl NullVideoBackend {
     pub fn new() -> Self {
         Self {
@@ -60,12 +60,21 @@ impl VideoBackend for NullVideoBackend {
         Ok(FrameDependency::None)
     }
 
-    fn decode_video_stream_frame(
+    fn submit_video_stream_frame(
         &mut self,
         _stream: VideoStreamHandle,
         _encoded_frame: EncodedFrame<'_>,
-        _renderer: &mut dyn RenderBackend,
-    ) -> Result<BitmapInfo, Error> {
+        _pts: PresentationTime,
+    ) -> Result<(), Error> {
         Err(Error::DecodingNotSupported)
+    }
+
+    fn present_video_stream_frame(
+        &mut self,
+        _stream: VideoStreamHandle,
+        _pts: PresentationTime,
+        _renderer: &mut dyn RenderBackend,
+    ) -> Result<Presentation, Error> {
+        Ok(Presentation::Empty)
     }
 }

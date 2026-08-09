@@ -31,7 +31,8 @@ use ruffle_common::duration::FloatDuration;
 use ruffle_macros::istr;
 use ruffle_render::bitmap::BitmapInfo;
 use ruffle_video::VideoStreamHandle;
-use ruffle_video::frame::EncodedFrame;
+use ruffle_video::frame::{EncodedFrame, PresentationTime};
+use ruffle_video::queue::Presentation;
 use std::cell::{Cell, RefCell};
 use std::cmp::max;
 use std::io::{Seek, SeekFrom};
@@ -911,6 +912,47 @@ impl<'gc> NetStream<'gc> {
         }
     }
 
+    /// Decode one video frame and put it straight on screen.
+    ///
+    /// Feeding the decoder and presenting its output still happen together
+    /// here, which only works because the presentation time used is the frame's
+    /// own position in the stream. Separating the two is what lets H.264 be
+    /// shown at the right time, and comes later.
+    fn decode_and_present(
+        self,
+        context: &mut UpdateContext<'gc>,
+        video_handle: VideoStreamHandle,
+        encoded_frame: EncodedFrame<'_>,
+    ) {
+        let frame_id = encoded_frame.frame_id;
+        let pts = frame_id as PresentationTime;
+
+        if let Err(e) = context
+            .video
+            .submit_video_stream_frame(video_handle, encoded_frame, pts)
+        {
+            tracing::error!("Decoding video frame {} failed: {}", frame_id, e);
+            return;
+        }
+
+        match context
+            .video
+            .present_video_stream_frame(video_handle, pts, context.renderer)
+        {
+            Ok(Presentation::Changed(bitmap_info)) => {
+                self.0.last_decoded_bitmap.replace(Some(bitmap_info));
+                if let Some(mc) = self.0.attached_to.get() {
+                    mc.invalidate_cached_bitmap();
+                    *context.needs_render = true;
+                }
+            }
+            Ok(Presentation::Unchanged | Presentation::Empty) => {}
+            Err(e) => {
+                tracing::error!("Presenting video frame {} failed: {}", frame_id, e);
+            }
+        }
+    }
+
     /// Process a parsed FLV video tag.
     ///
     /// `write` must be an active borrow of the current `NetStream`. `slice`
@@ -1014,22 +1056,7 @@ impl<'gc> NetStream<'gc> {
                     frame_id,
                 };
 
-                match context.video.decode_video_stream_frame(
-                    video_handle,
-                    encoded_frame,
-                    context.renderer,
-                ) {
-                    Ok(bitmap_info) => {
-                        self.0.last_decoded_bitmap.replace(Some(bitmap_info));
-                        if let Some(mc) = self.0.attached_to.get() {
-                            mc.invalidate_cached_bitmap();
-                            *context.needs_render = true;
-                        }
-                    }
-                    Err(e) => {
-                        tracing::error!("Decoding video frame {} failed: {}", frame_id, e);
-                    }
-                }
+                self.decode_and_present(context, video_handle, encoded_frame);
             }
             (_, _, FlvVideoPacket::CommandFrame(_command)) => {
                 tracing::warn!("Stub: FLV command frame processing")
@@ -1059,22 +1086,7 @@ impl<'gc> NetStream<'gc> {
                     frame_id,
                 };
 
-                match context.video.decode_video_stream_frame(
-                    video_handle,
-                    encoded_frame,
-                    context.renderer,
-                ) {
-                    Ok(bitmap_info) => {
-                        self.0.last_decoded_bitmap.replace(Some(bitmap_info));
-                        if let Some(mc) = self.0.attached_to.get() {
-                            mc.invalidate_cached_bitmap();
-                            *context.needs_render = true;
-                        }
-                    }
-                    Err(e) => {
-                        tracing::error!("Decoding video frame {} failed: {}", frame_id, e);
-                    }
-                }
+                self.decode_and_present(context, video_handle, encoded_frame);
             }
             (_, _, FlvVideoPacket::AvcEndOfSequence) => {
                 tracing::warn!("Stub: FLV AVC/H.264 End of Sequence processing")

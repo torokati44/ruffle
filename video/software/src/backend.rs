@@ -1,10 +1,10 @@
 use crate::decoder::{LowDelay, VideoDecoder};
 use ruffle_render::backend::RenderBackend;
-use ruffle_render::bitmap::{BitmapHandle, BitmapInfo, PixelRegion};
 use ruffle_video::VideoStreamHandle;
 use ruffle_video::backend::VideoBackend;
 use ruffle_video::error::Error;
-use ruffle_video::frame::{DecodedFrame, DecodedFrameOut, EncodedFrame, FrameDependency};
+use ruffle_video::frame::{DecodedFrameOut, EncodedFrame, FrameDependency, PresentationTime};
+use ruffle_video::queue::{Presentation, PresentationQueue};
 use slotmap::SlotMap;
 use swf::{VideoCodec, VideoDeblocking};
 
@@ -85,43 +85,37 @@ impl VideoBackend for SoftwareVideoBackend {
         Ok(())
     }
 
-    fn decode_video_stream_frame(
+    fn submit_video_stream_frame(
         &mut self,
         stream: VideoStreamHandle,
         encoded_frame: EncodedFrame<'_>,
-        renderer: &mut dyn RenderBackend,
-    ) -> Result<BitmapInfo, Error> {
-        let stream = self
-            .streams
+        pts: PresentationTime,
+    ) -> Result<(), Error> {
+        self.streams
             .get_mut(stream)
-            .ok_or(Error::VideoStreamIsNotRegistered)?;
+            .ok_or(Error::VideoStreamIsNotRegistered)?
+            .submit(encoded_frame, pts)
+    }
 
-        let frame = stream.decode_frame(encoded_frame)?;
-
-        let width = frame.width();
-        let height = frame.height();
-
-        let handle = if let Some(bitmap) = stream.bitmap.clone() {
-            renderer.update_texture(&bitmap, frame, PixelRegion::for_whole_size(width, height))?;
-            bitmap
-        } else {
-            renderer.register_bitmap(frame)?
-        };
-        stream.bitmap = Some(handle.clone());
-
-        Ok(BitmapInfo {
-            handle,
-            width,
-            height,
-        })
+    fn present_video_stream_frame(
+        &mut self,
+        stream: VideoStreamHandle,
+        pts: PresentationTime,
+        renderer: &mut dyn RenderBackend,
+    ) -> Result<Presentation, Error> {
+        self.streams
+            .get_mut(stream)
+            .ok_or(Error::VideoStreamIsNotRegistered)?
+            .queue
+            .present(pts, renderer)
     }
 }
 
 /// A single preloaded video stream.
 pub struct VideoStream {
-    bitmap: Option<BitmapHandle>,
     decoder: Box<dyn VideoDecoder>,
-    /// Reused buffer for collecting decoder output.
+    queue: PresentationQueue,
+    /// Reused buffer for moving pictures out of the decoder and into the queue.
     polled: Vec<DecodedFrameOut>,
 }
 
@@ -129,22 +123,24 @@ impl VideoStream {
     fn new(decoder: Box<dyn VideoDecoder>) -> Self {
         Self {
             decoder,
-            bitmap: None,
+            queue: PresentationQueue::new(),
             polled: Vec::new(),
         }
     }
 
-    /// Submit one frame and take the picture straight back out again.
-    ///
-    /// This holds only because every codec here decodes without delay; it goes
-    /// away once callers drive submission and presentation separately.
-    fn decode_frame(&mut self, encoded_frame: EncodedFrame<'_>) -> Result<DecodedFrame, Error> {
+    fn submit(
+        &mut self,
+        encoded_frame: EncodedFrame<'_>,
+        pts: PresentationTime,
+    ) -> Result<(), Error> {
+        let frame_id = encoded_frame.frame_id;
         self.decoder.submit_frame(encoded_frame)?;
+        self.queue.submitted(frame_id, pts);
+
         self.polled.clear();
         self.decoder.poll_frames(&mut self.polled)?;
-        self.polled
-            .pop()
-            .map(|out| out.frame)
-            .ok_or_else(|| Error::DecoderError("No output frame produced by the decoder".into()))
+        self.queue.absorb(&mut self.polled);
+
+        Ok(())
     }
 }

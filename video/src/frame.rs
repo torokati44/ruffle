@@ -1,6 +1,15 @@
 use ruffle_render::bitmap::Bitmap;
 use swf::VideoCodec;
 
+/// Where a frame belongs on its stream's presentation timeline.
+///
+/// The unit is chosen by whoever drives the stream, and is never interpreted by
+/// the video backend, which only ever compares two of them:
+///
+///  * `NetStream` uses milliseconds of stream time.
+///  * SWF-embedded video uses the `VideoFrame` tag index.
+pub type PresentationTime = i64;
+
 /// An encoded video frame of some video codec.
 pub struct EncodedFrame<'a> {
     /// The codec used to encode the frame.
