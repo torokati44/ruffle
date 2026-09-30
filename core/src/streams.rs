@@ -1595,13 +1595,15 @@ impl<'gc> NetStream<'gc> {
             if sample_time_ms > max_time {
                 break false;
             }
-            next_audio_sample += 1;
             let offs = smpl.offset as usize;
             let siz = smpl.size as usize;
+            // Wait for the sample to be downloaded instead of skipping it.
+            let Some(audio_slice) = slice.get(offs..offs + siz) else {
+                break false;
+            };
+            next_audio_sample += 1;
             // Append the raw AAC access unit directly from the MP4 buffer.
-            if let Some(audio_slice) = slice.get(offs..offs + siz)
-                && let Some((substream, _)) = &mut *source.audio_stream.borrow_mut()
-            {
+            if let Some((substream, _)) = &mut *source.audio_stream.borrow_mut() {
                 let _ = substream.append(audio_slice);
             }
         };
