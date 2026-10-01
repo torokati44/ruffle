@@ -38,6 +38,8 @@ pub struct Mp3Decoder {
     cur_sample: usize,
     sample_rate: u16,
     num_channels: u8,
+    /// The encoder delay in sample frames, by which Symphonia offsets its timestamps.
+    delay: u32,
     stream_ended: bool,
 }
 
@@ -71,6 +73,7 @@ impl Mp3Decoder {
             symphonia::default::get_codecs().make_audio_decoder(&codec_params, &decoder_options)?;
         let sample_rate = codec_params.sample_rate.ok_or(Error::InvalidSampleRate)?;
         let channels = codec_params.channels.ok_or(Error::InvalidChannels)?;
+        let delay = track.delay.unwrap_or(0);
         Ok(Mp3Decoder {
             reader,
             decoder,
@@ -83,6 +86,7 @@ impl Mp3Decoder {
             sample_rate: sample_rate
                 .try_into()
                 .map_err(|_| Error::InvalidSampleRate)?,
+            delay,
             stream_ended: false,
         })
     }
@@ -145,17 +149,11 @@ impl SeekableDecoder for Mp3Decoder {
         // Symphonia timestamps start at `-delay`, so that the encoder delay is skipped in gapless
         // playback. We don't do gapless playback, so `frame` counts from the very first decoded
         // sample, and has to be shifted into Symphonia's timeline.
-        let delay = self
-            .reader
-            .default_track(TrackType::Audio)
-            .and_then(|track| track.delay)
-            .unwrap_or(0);
-        // Seek to the desired position,
         let seek_result = self.reader.seek(
             formats::SeekMode::Accurate,
             formats::SeekTo::Timestamp {
                 track_id: 0,
-                ts: Timestamp::from(i64::from(frame) - i64::from(delay)),
+                ts: Timestamp::from(i64::from(frame) - i64::from(self.delay)),
             },
         );
         self.sample_buf.clear();
