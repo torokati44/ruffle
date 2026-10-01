@@ -46,40 +46,16 @@ impl Mp3Decoder {
     const SAMPLE_BUFFER_DURATION: usize = 1152;
 
     pub fn new<R: 'static + Read + Send + Sync>(reader: R) -> Result<Self, Error> {
-        let source = Box::new(io::ReadOnlySource::new(reader)) as Box<dyn io::MediaSource>;
-        let source = io::MediaSourceStream::new(source, Default::default());
-        let reader = SymphoniaMpaReader::try_new(source, Default::default())?;
-        let track = reader
-            .default_track(TrackType::Audio)
-            .ok_or(Error::NoDefaultTrack)?;
-        let Some(CodecParameters::Audio(codec_params)) = track.codec_params.clone() else {
-            return Err(Error::NoDefaultTrack);
-        };
-        // Gapless playback would trim the encoder delay and padding from the decoded audio.
-        // Flash doesn't do that, and it would shift the sample positions we seek to.
-        let decoder_options = AudioDecoderOptions::default().gapless(false);
-        let decoder =
-            symphonia::default::get_codecs().make_audio_decoder(&codec_params, &decoder_options)?;
-        let sample_rate = codec_params.sample_rate.ok_or(Error::InvalidSampleRate)?;
-        let channels = codec_params.channels.ok_or(Error::InvalidChannels)?;
-        Ok(Mp3Decoder {
-            reader,
-            decoder,
-            sample_buf: Vec::new(),
-            cur_sample: 0,
-            num_channels: channels
-                .count()
-                .try_into()
-                .map_err(|_| Error::InvalidChannels)?,
-            sample_rate: sample_rate.try_into().map_err(|_| Error::InvalidChannels)?,
-            stream_ended: false,
-        })
+        Self::from_source(Box::new(io::ReadOnlySource::new(reader)))
     }
 
     pub fn new_seekable<R: 'static + AsRef<[u8]> + Send + Sync>(
         reader: Cursor<R>,
     ) -> Result<Self, Error> {
-        let source = Box::new(reader) as Box<dyn io::MediaSource>;
+        Self::from_source(Box::new(reader))
+    }
+
+    fn from_source(source: Box<dyn io::MediaSource>) -> Result<Self, Error> {
         let source = io::MediaSourceStream::new(source, Default::default());
         let reader = SymphoniaMpaReader::try_new(source, Default::default())?;
         let track = reader
@@ -100,8 +76,13 @@ impl Mp3Decoder {
             decoder,
             sample_buf: Vec::with_capacity(Self::SAMPLE_BUFFER_DURATION * channels.count()),
             cur_sample: 0,
-            num_channels: channels.count() as u8,
-            sample_rate: sample_rate as u16,
+            num_channels: channels
+                .count()
+                .try_into()
+                .map_err(|_| Error::InvalidChannels)?,
+            sample_rate: sample_rate
+                .try_into()
+                .map_err(|_| Error::InvalidSampleRate)?,
             stream_ended: false,
         })
     }
