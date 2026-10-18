@@ -13,7 +13,7 @@ mod pcm;
 pub use adpcm::AdpcmDecoder;
 pub use g711::{G711ALawDecoder, G711MuLawDecoder};
 #[cfg(feature = "mp3")]
-pub use mp3::{Mp3Decoder, mp3_metadata};
+pub use mp3::{Mp3Decoder, mp3_metadata, mp3_num_sample_frames};
 #[cfg(feature = "nellymoser")]
 pub use nellymoser::NellymoserDecoder;
 pub use pcm::PcmDecoder;

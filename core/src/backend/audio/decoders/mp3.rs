@@ -1,5 +1,6 @@
 use crate::backend::audio::decoders::{Decoder, Mp3Metadata, SeekableDecoder};
 use std::io::{Cursor, Read};
+use std::sync::Arc;
 use symphonia::{
     core::{
         self, audio, codecs, errors,
@@ -198,4 +199,20 @@ pub fn mp3_metadata(data: &std::sync::Arc<[u8]>) -> Result<Mp3Metadata, Error> {
         num_sample_frames,
         sample_rate,
     })
+}
+
+/// Returns the number of sample frames in the given MP3 data by reading through
+/// all of its MPEG frames, without decoding them.
+///
+/// Every MPEG frame is counted in full, so encoder delay and padding are included.
+pub fn mp3_num_sample_frames(data: Arc<[u8]>) -> Result<u32, Error> {
+    // A non-seekable source keeps Symphonia from estimating the duration up front.
+    let source = Box::new(io::ReadOnlySource::new(Cursor::new(data))) as Box<dyn io::MediaSource>;
+    let source = io::MediaSourceStream::new(source, Default::default());
+    let mut reader = SymphoniaMpaReader::try_new(source, &Default::default())?;
+    let mut num_sample_frames: u64 = 0;
+    while let Ok(packet) = reader.next_packet() {
+        num_sample_frames += packet.dur;
+    }
+    Ok(num_sample_frames.try_into().unwrap_or(u32::MAX))
 }
