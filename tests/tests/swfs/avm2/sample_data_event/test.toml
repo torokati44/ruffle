@@ -4,7 +4,7 @@
 # which turns it into a generated sound. The listener synthesizes a 440 Hz
 # sine wave with a peak amplitude of 0.5 for the first ~0.5 seconds, then
 # stops providing samples, which ends the generated sound.
-num_frames = 30
+num_ticks = 30
 
 [player_options]
 with_audio = true
