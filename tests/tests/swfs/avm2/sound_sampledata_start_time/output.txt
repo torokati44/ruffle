@@ -1,0 +1,16 @@
+0 ms, one block: sampleData, position 0, in play() true
+0 ms, one block: after play(), channel.position 0.00
+0 ms, one block: soundComplete, channel.position 22.68
+500 ms, one block: sampleData, position 0, in play() true
+500 ms, one block: after play(), channel.position 500.00
+500 ms, one block: soundComplete, channel.position 522.68
+500 ms, two blocks: sampleData, position 0, in play() true
+500 ms, two blocks: after play(), channel.position 500.00
+500 ms, two blocks: sampleData, position 24098, in play() false
+500 ms, two blocks: soundComplete, channel.position 569.12
+500 ms, big blocks: sampleData, position 0, in play() true
+500 ms, big blocks: sampleData, position 8192, in play() true
+500 ms, big blocks: sampleData, position 16384, in play() true
+500 ms, big blocks: after play(), channel.position 500.00
+500 ms, big blocks: soundComplete, channel.position 894.20
+done
