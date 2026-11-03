@@ -173,7 +173,10 @@ pub fn play<'gc>(
         };
 
         if sound_object.sound_handle().is_none()
-            && sound_object.loading_state() == SoundLoadingState::New
+            && matches!(
+                sound_object.loading_state(),
+                SoundLoadingState::New | SoundLoadingState::Generated
+            )
         {
             // A sound with no data plays what its `sampleData` listeners
             // generate, and is invalid without any.
@@ -189,6 +192,8 @@ pub fn play<'gc>(
             if !has_listener {
                 return Err(make_error_2068(activation));
             }
+            // Nothing can be loaded into it from now on.
+            sound_object.set_loading_state(SoundLoadingState::Generated);
 
             let sound_channel =
                 SoundChannelObject::generated(activation, sound_object, in_sample.unwrap_or(0));
@@ -242,8 +247,8 @@ pub fn close<'gc>(
     Ok(Value::Undefined)
 }
 
-/// `Sound.load`
-pub fn load<'gc>(
+/// `Sound._load`
+pub fn _load<'gc>(
     activation: &mut Activation<'_, 'gc>,
     this: Value<'gc>,
     args: FunctionArgs<'_, 'gc>,
