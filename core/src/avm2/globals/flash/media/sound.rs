@@ -190,7 +190,8 @@ pub fn play<'gc>(
                 return Err(make_error_2068(activation));
             }
 
-            let sound_channel = SoundChannelObject::generated(activation, sound_object);
+            let sound_channel =
+                SoundChannelObject::generated(activation, sound_object, in_sample.unwrap_or(0));
             if sound_channel.start_generator(activation.context, sound_transform) {
                 return Ok(sound_channel.into());
             }
