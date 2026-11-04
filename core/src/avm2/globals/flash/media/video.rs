@@ -79,6 +79,34 @@ pub fn init<'gc>(
     Ok(Value::Undefined)
 }
 
+pub fn get_video_width<'gc>(
+    _activation: &mut Activation<'_, 'gc>,
+    this: Value<'gc>,
+    _args: FunctionArgs<'_, 'gc>,
+) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
+    if let Some(video) = this.as_display_object().and_then(|dobj| dobj.as_video()) {
+        return Ok(video.decoded_size().0.into());
+    }
+
+    Ok(0.into())
+}
+
+pub fn get_video_height<'gc>(
+    _activation: &mut Activation<'_, 'gc>,
+    this: Value<'gc>,
+    _args: FunctionArgs<'_, 'gc>,
+) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
+    if let Some(video) = this.as_display_object().and_then(|dobj| dobj.as_video()) {
+        return Ok(video.decoded_size().1.into());
+    }
+
+    Ok(0.into())
+}
+
 pub fn attach_net_stream<'gc>(
     activation: &mut Activation<'_, 'gc>,
     this: Value<'gc>,

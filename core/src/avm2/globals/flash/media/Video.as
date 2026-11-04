@@ -1,6 +1,5 @@
 package flash.media {
     import __ruffle__.stub_method;
-    import __ruffle__.stub_getter;
 
     import flash.display.DisplayObject
     import flash.net.NetStream
@@ -9,8 +8,6 @@ package flash.media {
     public class Video extends DisplayObject {
         private var _deblocking:int;
         private var _smoothing:Boolean;
-        private var _videoWidth:int;
-        private var _videoHeight:int;
 
         public function Video(width:int = 320, height:int = 240) {
             this.init(width, height);
@@ -34,15 +31,9 @@ package flash.media {
             this._smoothing = value;
         }
 
-        public function get videoWidth():int {
-            stub_getter("flash.media.Video", "videoWidth");
-            return 0;
-        }
+        public native function get videoWidth():int;
 
-        public function get videoHeight():int {
-            stub_getter("flash.media.Video", "videoHeight");
-            return 0;
-        }
+        public native function get videoHeight():int;
 
         public native function attachNetStream(netStream:NetStream):void;
 

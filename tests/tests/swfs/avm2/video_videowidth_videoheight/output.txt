@@ -1,0 +1,17 @@
+new Video(): videoWidth=0 videoHeight=0 width=320 height=240
+unattached: videoWidth=0 videoHeight=0 width=160 height=120
+after attachNetStream: videoWidth=0 videoHeight=0 width=160 height=120
+after play: videoWidth=0 videoHeight=0 width=160 height=120
+size changed: videoWidth=320 videoHeight=233 width=160 height=120
+before scaling: videoWidth=320 videoHeight=233 width=160 height=120
+after width=640 height=360: videoWidth=320 videoHeight=233 width=640 height=360
+after scaleX=0.5 scaleY=2: videoWidth=320 videoHeight=233 width=80 height=240
+after rotation=90: videoWidth=320 videoHeight=233 width=240 height=80
+after reset: videoWidth=320 videoHeight=233 width=160 height=120
+assigning videoWidth: ReferenceError: Error #1074: Illegal write to read-only property videoWidth on flash.media.Video.
+assigning videoHeight: ReferenceError: Error #1074: Illegal write to read-only property videoHeight on flash.media.Video.
+after assigning: videoWidth=320 videoHeight=233 width=160 height=120
+after clear: videoWidth=320 videoHeight=233 width=160 height=120
+after ns.close: videoWidth=320 videoHeight=233 width=160 height=120
+after attachNetStream(null): videoWidth=320 videoHeight=233 width=160 height=120
+done
