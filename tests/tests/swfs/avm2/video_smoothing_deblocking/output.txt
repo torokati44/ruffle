@@ -1,0 +1,45 @@
+new Video(): smoothing=false deblocking=0
+new Video(160, 120): smoothing=false deblocking=0
+the_video: smoothing=true deblocking=5
+after attachNetStream: smoothing=true deblocking=5
+smoothing = true (boolean): smoothing=true deblocking=5
+smoothing = false (boolean): smoothing=false deblocking=5
+smoothing = 1 (number): smoothing=true deblocking=5
+smoothing = 0 (number): smoothing=false deblocking=5
+smoothing = 2 (number): smoothing=true deblocking=5
+smoothing = -1 (number): smoothing=true deblocking=5
+smoothing = false (string): smoothing=true deblocking=5
+smoothing =  (string): smoothing=false deblocking=5
+smoothing = true (string): smoothing=true deblocking=5
+smoothing = null (object): smoothing=false deblocking=5
+smoothing = undefined (undefined): smoothing=false deblocking=5
+smoothing = NaN (number): smoothing=false deblocking=5
+deblocking = 1 (number): smoothing=false deblocking=1
+deblocking = 2 (number): smoothing=false deblocking=2
+deblocking = 3 (number): smoothing=false deblocking=3
+deblocking = 4 (number): smoothing=false deblocking=4
+deblocking = 5 (number): smoothing=false deblocking=5
+deblocking = 6 (number): smoothing=false deblocking=6
+deblocking = 7 (number): smoothing=false deblocking=7
+deblocking = 8 (number): smoothing=false deblocking=7
+deblocking = 100 (number): smoothing=false deblocking=7
+deblocking = -1 (number): smoothing=false deblocking=0
+deblocking = -2 (number): smoothing=false deblocking=0
+deblocking = 2.9 (number): smoothing=false deblocking=2
+deblocking = -2.9 (number): smoothing=false deblocking=0
+deblocking = 3 (string): smoothing=false deblocking=3
+deblocking = abc (string): smoothing=false deblocking=0
+deblocking = true (boolean): smoothing=false deblocking=1
+deblocking = null (object): smoothing=false deblocking=0
+deblocking = undefined (undefined): smoothing=false deblocking=0
+deblocking = NaN (number): smoothing=false deblocking=0
+deblocking = Infinity (number): smoothing=false deblocking=0
+deblocking = -Infinity (number): smoothing=false deblocking=0
+deblocking = 2147483647 (number): smoothing=false deblocking=7
+deblocking = 2147483647.9 (number): smoothing=false deblocking=7
+deblocking = 2147483648 (number): smoothing=false deblocking=0
+deblocking = -2147483648 (number): smoothing=false deblocking=0
+deblocking = -2147483649 (number): smoothing=false deblocking=7
+deblocking = 4294967298 (number): smoothing=false deblocking=2
+deblocking = 0 (number): smoothing=false deblocking=0
+done

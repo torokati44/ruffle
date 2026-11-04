@@ -79,6 +79,62 @@ pub fn init<'gc>(
     Ok(Value::Undefined)
 }
 
+pub fn get_deblocking<'gc>(
+    _activation: &mut Activation<'_, 'gc>,
+    this: Value<'gc>,
+    _args: FunctionArgs<'_, 'gc>,
+) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
+    if let Some(video) = this.as_display_object().and_then(|dobj| dobj.as_video()) {
+        return Ok(video.deblocking().into());
+    }
+
+    Ok(0.into())
+}
+
+pub fn set_deblocking<'gc>(
+    _activation: &mut Activation<'_, 'gc>,
+    this: Value<'gc>,
+    args: FunctionArgs<'_, 'gc>,
+) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
+    if let Some(video) = this.as_display_object().and_then(|dobj| dobj.as_video()) {
+        video.set_deblocking(args.get_i32(0).clamp(0, 7) as u8);
+    }
+
+    Ok(Value::Undefined)
+}
+
+pub fn get_smoothing<'gc>(
+    _activation: &mut Activation<'_, 'gc>,
+    this: Value<'gc>,
+    _args: FunctionArgs<'_, 'gc>,
+) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
+    if let Some(video) = this.as_display_object().and_then(|dobj| dobj.as_video()) {
+        return Ok(video.smoothing().into());
+    }
+
+    Ok(false.into())
+}
+
+pub fn set_smoothing<'gc>(
+    _activation: &mut Activation<'_, 'gc>,
+    this: Value<'gc>,
+    args: FunctionArgs<'_, 'gc>,
+) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
+    if let Some(video) = this.as_display_object().and_then(|dobj| dobj.as_video()) {
+        video.set_smoothing(args.get_bool(0));
+    }
+
+    Ok(Value::Undefined)
+}
+
 pub fn get_video_width<'gc>(
     _activation: &mut Activation<'_, 'gc>,
     this: Value<'gc>,

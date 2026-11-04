@@ -6,30 +6,19 @@ package flash.media {
 
     [Ruffle(InstanceAllocator)]
     public class Video extends DisplayObject {
-        private var _deblocking:int;
-        private var _smoothing:Boolean;
-
         public function Video(width:int = 320, height:int = 240) {
             this.init(width, height);
         }
 
         private native function init(width:int, height:int);
 
-        public function get deblocking():int {
-            return this._deblocking;
-        }
+        public native function get deblocking():int;
 
-        public function set deblocking(value:int):void {
-            this._deblocking = value;
-        }
+        public native function set deblocking(value:int):void;
 
-        public function get smoothing():Boolean {
-            return this._smoothing;
-        }
+        public native function get smoothing():Boolean;
 
-        public function set smoothing(value:Boolean):void {
-            this._smoothing = value;
-        }
+        public native function set smoothing(value:Boolean):void;
 
         public native function get videoWidth():int;
 
