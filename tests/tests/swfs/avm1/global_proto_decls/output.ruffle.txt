@@ -712,6 +712,8 @@ Testing _global.Video
   constructor, own, type=[function]
   prototype, own, DONT_ENUM, type=[object]
 Testing _global.Video.prototype
+  height, own, DONT_ENUM, READ_ONLY, type=[undefined]
+  width, own, DONT_ENUM, READ_ONLY, type=[undefined]
   attachVideo, own, DONT_ENUM, type=[function]
   __proto__, own, type=[object]
   constructor, own, type=[function]

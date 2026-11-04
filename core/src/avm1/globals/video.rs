@@ -23,6 +23,8 @@ macro_rules! video_method {
 
 const PROTO_DECLS: StaticDeclarations = declare_static_properties! {
     "attachVideo" => method(video_method!(attach_video); DONT_ENUM | DONT_DELETE | VERSION_6);
+    "width" => property(video_method!(width); DONT_ENUM | DONT_DELETE | VERSION_6);
+    "height" => property(video_method!(height); DONT_ENUM | DONT_DELETE | VERSION_6);
 };
 
 pub fn create_class<'gc>(
@@ -52,4 +54,20 @@ pub fn attach_video<'gc>(
     }
 
     Ok(Value::Undefined)
+}
+
+fn width<'gc>(
+    video: Video<'gc>,
+    _activation: &mut Activation<'_, 'gc>,
+    _args: &[Value<'gc>],
+) -> Result<Value<'gc>, Error<'gc>> {
+    Ok(video.decoded_size().0.into())
+}
+
+fn height<'gc>(
+    video: Video<'gc>,
+    _activation: &mut Activation<'_, 'gc>,
+    _args: &[Value<'gc>],
+) -> Result<Value<'gc>, Error<'gc>> {
+    Ok(video.decoded_size().1.into())
 }

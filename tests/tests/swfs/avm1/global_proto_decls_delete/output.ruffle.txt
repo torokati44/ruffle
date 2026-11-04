@@ -420,6 +420,8 @@ Testing _global.Video
   constructor, DONT_DELETE
   prototype, DONT_DELETE
 Testing _global.Video.prototype
+  height, DONT_DELETE
+  width, DONT_DELETE
   attachVideo, DONT_DELETE
   __proto__, DONT_DELETE
   constructor, DONT_DELETE

@@ -200,6 +200,22 @@ impl<'gc> Video<'gc> {
         self.0.size.set((width, height));
     }
 
+    /// The size of the most recently decoded frame, or `(0, 0)` if no frame
+    /// has been decoded yet.
+    pub fn decoded_size(self) -> (u32, u32) {
+        let bitmap = match self.0.source.get() {
+            VideoSource::Swf(_) => self
+                .0
+                .decoded_frame
+                .borrow()
+                .as_ref()
+                .map(|(_, b)| b.clone()),
+            VideoSource::NetStream { stream } => stream.last_decoded_bitmap(),
+            VideoSource::Unconnected => None,
+        };
+        bitmap.map_or((0, 0), |b| (b.width, b.height))
+    }
+
     /// Convert this Video into a NetStream sourced video.
     ///
     /// Existing video state related to the old video stream will be dropped.
