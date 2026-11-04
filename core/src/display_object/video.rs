@@ -79,6 +79,12 @@ pub struct VideoData<'gc> {
 
     /// The self bounds for this movie.
     size: Cell<(i32, i32)>,
+
+    /// Whether the video is smoothed when scaled.
+    smoothing: Cell<bool>,
+
+    /// The deblocking filter setting, as exposed to ActionScript.
+    deblocking: Cell<u8>,
 }
 
 /// An optionally-instantiated video stream.
@@ -135,6 +141,8 @@ impl<'gc> Video<'gc> {
         mc: &Mutation<'gc>,
     ) -> Self {
         let size = (streamdef.width.into(), streamdef.height.into());
+        let smoothing = streamdef.is_smoothed;
+        let deblocking = streamdef.deblocking as u8;
         let source = Lock::new(VideoSource::Swf(Gc::new(
             mc,
             SwfVideoSource {
@@ -155,6 +163,8 @@ impl<'gc> Video<'gc> {
                 movie,
                 size: Cell::new(size),
                 decoded_frame: RefCell::new(None),
+                smoothing: Cell::new(smoothing),
+                deblocking: Cell::new(deblocking),
             },
         ))
     }
@@ -178,6 +188,8 @@ impl<'gc> Video<'gc> {
                 movie,
                 size: Cell::new((width, height)),
                 decoded_frame: RefCell::new(None),
+                smoothing: Cell::new(false),
+                deblocking: Cell::new(0),
             },
         ))
     }
@@ -198,6 +210,23 @@ impl<'gc> Video<'gc> {
 
     pub fn set_size(self, width: i32, height: i32) {
         self.0.size.set((width, height));
+    }
+
+    pub fn smoothing(self) -> bool {
+        self.0.smoothing.get()
+    }
+
+    pub fn set_smoothing(self, smoothing: bool) {
+        self.0.smoothing.set(smoothing);
+    }
+
+    pub fn deblocking(self) -> u8 {
+        self.0.deblocking.get()
+    }
+
+    /// NOTE: This is not passed on to the video decoder yet.
+    pub fn set_deblocking(self, deblocking: u8) {
+        self.0.deblocking.set(deblocking);
     }
 
     /// The size of the most recently decoded frame, or `(0, 0)` if no frame
@@ -534,17 +563,15 @@ impl<'gc> TDisplayObject<'gc> for Video<'gc> {
         let mut transform = context.transform_stack.transform();
         let bounds = self.self_bounds(BoundsMode::Engine);
 
-        // TODO: smoothing flag should be a video property
-        let (smoothed_flag, num_frames, version, decoded_frame, codec) = match self.0.source.get() {
+        let smoothed_flag = self.smoothing();
+        let (num_frames, version, decoded_frame, codec) = match self.0.source.get() {
             VideoSource::Swf(swf_source) => (
-                swf_source.streamdef.is_smoothed,
                 Some(swf_source.frames.borrow().len()),
                 self.0.movie.version(),
                 self.0.decoded_frame.borrow().clone().map(|df| df.1),
                 Some(swf_source.streamdef.codec),
             ),
             VideoSource::NetStream { stream, .. } => (
-                false,
                 None,
                 self.0.movie.version(),
                 stream.last_decoded_bitmap(),
