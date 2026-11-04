@@ -1,9 +1,13 @@
 //! Video class
 
+use ruffle_macros::istr;
+
 use crate::avm1::Object;
 use crate::avm1::activation::Activation;
 use crate::avm1::error::Error;
+use crate::avm1::function::{FunctionObject, NativeFunction};
 use crate::avm1::object::NativeObject;
+use crate::avm1::property::Attribute;
 use crate::avm1::property_decl::{DeclContext, PropertyOrder, StaticDeclarations, SystemClass};
 use crate::avm1::value::Value;
 use crate::display_object::Video;
@@ -23,10 +27,6 @@ macro_rules! video_method {
 
 const PROTO_DECLS: StaticDeclarations = declare_static_properties! {
     "attachVideo" => method(video_method!(attach_video); DONT_ENUM | DONT_DELETE | VERSION_6);
-    "width" => property(video_method!(width); VERSION_6);
-    "height" => property(video_method!(height); VERSION_6);
-    "smoothing" => property(video_method!(smoothing), video_method!(set_smoothing); VERSION_6);
-    "deblocking" => property(video_method!(deblocking), video_method!(set_deblocking); VERSION_6);
 };
 
 pub fn create_class<'gc>(
@@ -36,6 +36,43 @@ pub fn create_class<'gc>(
     let class = context.empty_class(super_proto, PropertyOrder::PrototypeFirst);
     context.define_properties_on(class.proto, PROTO_DECLS(context));
     class
+}
+
+/// Defines `width`, `height`, `smoothing` and `deblocking` on `proto`.
+///
+/// Flash Player doesn't define these on `Video.prototype` up front, but only when
+/// the first Video display object is created, and only on the prototype that Video
+/// gets. They are not defined again for later Videos, even if they were deleted.
+pub fn define_lazy_proto_properties<'gc>(activation: &mut Activation<'_, 'gc>, proto: Object<'gc>) {
+    let fn_proto = activation.resolve_prototype([istr!("Function")]);
+    let properties: [(_, NativeFunction, Option<NativeFunction>); 4] = [
+        (istr!("width"), video_method!(width), None),
+        (istr!("height"), video_method!(height), None),
+        (
+            istr!("smoothing"),
+            video_method!(smoothing),
+            Some(video_method!(set_smoothing)),
+        ),
+        (
+            istr!("deblocking"),
+            video_method!(deblocking),
+            Some(video_method!(set_deblocking)),
+        ),
+    ];
+
+    for (name, getter, setter) in properties {
+        let getter = FunctionObject::native(getter).build(activation.strings(), fn_proto, None);
+        let setter = setter.map(|setter| {
+            FunctionObject::native(setter).build(activation.strings(), fn_proto, None)
+        });
+        proto.add_property(
+            activation.gc(),
+            name.into(),
+            getter,
+            setter,
+            Attribute::VERSION_6,
+        );
+    }
 }
 
 pub fn attach_video<'gc>(

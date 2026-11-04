@@ -1,0 +1,10 @@
+frame 1, original prototype: width=false height=false smoothing=false deblocking=false
+after new Video(): width=false height=false smoothing=false deblocking=false
+replaced prototype: width=true height=false smoothing=false deblocking=false width=5
+first Video placed, original prototype: width=false height=false smoothing=false deblocking=false
+first Video placed, replaced prototype: width=true height=true smoothing=true deblocking=true width=undefined
+v2.__proto__ == repl: true
+v2.width=0 v2.smoothing=false v2.deblocking=0 v2.marker=1
+enumerable: deblocking,height,marker,smoothing,width
+after delete: width=false height=true smoothing=false deblocking=true
+second Video placed: width=false height=true smoothing=false deblocking=true v3.smoothing=undefined

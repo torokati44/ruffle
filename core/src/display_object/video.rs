@@ -1,8 +1,8 @@
 //! Video player display object
 
 use crate::avm1::{
-    Activation as Avm1Activation, ActivationIdentifier, NativeObject as Avm1NativeObject,
-    Object as Avm1Object,
+    self, Activation as Avm1Activation, ActivationIdentifier, NativeObject as Avm1NativeObject,
+    Object as Avm1Object, Value as Avm1Value,
 };
 use crate::avm2::StageObject as Avm2StageObject;
 use crate::context::{RenderContext, UpdateContext};
@@ -480,6 +480,11 @@ impl<'gc> TDisplayObject<'gc> for Video<'gc> {
             let mut activation = Avm1Activation::from_nothing(context, id, self.into());
             let constr = activation.resolve_class([istr!("Video")]);
             let proto = constr.and_then(|c| c.prototype(&activation));
+            if activation.context.avm1.mark_video_created()
+                && let Some(Avm1Value::Object(proto)) = proto
+            {
+                avm1::globals::video::define_lazy_proto_properties(&mut activation, proto);
+            }
             let native = Avm1NativeObject::Video(self);
             let object = Avm1Object::new_with_native(activation.strings(), proto, native);
 

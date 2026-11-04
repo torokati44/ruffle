@@ -104,6 +104,12 @@ pub struct Avm1<'gc> {
     /// More examples of this are in the movieclip_invalid_get_bounds_X tests.
     use_new_invalid_bounds_value: bool,
 
+    /// Whether a Video display object has been created yet.
+    ///
+    /// Flash Player only defines some properties of `Video.prototype` when the
+    /// first Video is created, see `avm1::globals::video::define_lazy_proto_properties`.
+    has_created_video: bool,
+
     #[cfg(feature = "avm_debug")]
     pub debug_output: bool,
 }
@@ -128,6 +134,7 @@ impl<'gc> Avm1<'gc> {
             #[cfg(feature = "avm_debug")]
             debug_output: false,
             use_new_invalid_bounds_value: false,
+            has_created_video: false,
         }
     }
 
@@ -628,6 +635,12 @@ impl<'gc> Avm1<'gc> {
     /// Sets use_new_invalid_bounds_value to true.
     pub fn activate_use_new_invalid_bounds_value(&mut self) {
         self.use_new_invalid_bounds_value = true;
+    }
+
+    /// Marks that a Video display object has been created, returning whether
+    /// this is the first one.
+    pub fn mark_video_created(&mut self) -> bool {
+        !std::mem::replace(&mut self.has_created_video, true)
     }
 
     #[cfg(feature = "avm_debug")]
