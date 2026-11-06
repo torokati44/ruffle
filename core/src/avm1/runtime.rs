@@ -38,13 +38,16 @@ struct GlobalEnv<'gc> {
 }
 
 impl<'gc> GlobalEnv<'gc> {
-    fn create(context: &mut StringContext<'gc>) -> Self {
-        let (prototypes, globals) = create_globals(context);
-        Self {
+    /// Also returns the prototypes that the lazily defined properties of a
+    /// native class were already defined on, see `create_globals`.
+    fn create(context: &mut StringContext<'gc>) -> (Self, Vec<Object<'gc>>) {
+        let (prototypes, globals, lazy_initialized_prototypes) = create_globals(context);
+        let env = Self {
             global_scope: Gc::new(context.gc(), Scope::from_global_object(globals)),
             prototypes,
             constructor_registry: PropertyMap::new(),
-        }
+        };
+        (env, lazy_initialized_prototypes)
     }
 }
 
@@ -116,12 +119,15 @@ pub struct Avm1<'gc> {
 impl<'gc> Avm1<'gc> {
     pub fn new(context: &mut StringContext<'gc>, player_version: u8) -> Self {
         let gc_context = context.gc();
+        let (env_case_insensitive, mut lazy_initialized_prototypes) = GlobalEnv::create(context);
+        let (env_case_sensitive, more) = GlobalEnv::create(context);
+        lazy_initialized_prototypes.extend(more);
 
         Self {
             player_version,
             constant_pool: Gc::new(gc_context, vec![]),
-            env_case_insensitive: GlobalEnv::create(context),
-            env_case_sensitive: GlobalEnv::create(context),
+            env_case_insensitive,
+            env_case_sensitive,
             display_properties: stage_object::DisplayPropertyMap::new(context),
             stack: vec![],
             registers: [Value::Undefined; 4],
@@ -133,7 +139,10 @@ impl<'gc> Avm1<'gc> {
             #[cfg(feature = "avm_debug")]
             debug_output: false,
             use_new_invalid_bounds_value: false,
-            lazy_initialized_prototypes: Vec::new(),
+            lazy_initialized_prototypes: lazy_initialized_prototypes
+                .into_iter()
+                .map(Object::as_weak)
+                .collect(),
         }
     }
 

@@ -1,5 +1,6 @@
 //! XML Tree structure
 
+use crate::avm1::globals::xml_node;
 use crate::avm1::xml::iterators;
 use crate::avm1::{Activation, ArrayBuilder, Attribute, Error, NativeObject, Object, Value};
 use crate::string::{AvmString, StringContext, WStr, WString};
@@ -364,6 +365,9 @@ impl<'gc> XmlNode<'gc> {
             Some(object) => object,
             None => {
                 let proto = activation.resolve_prototype([istr!("XMLNode")]);
+                if let Some(Value::Object(proto)) = proto {
+                    xml_node::define_lazy_proto_properties(activation, proto);
+                }
                 let native = NativeObject::XmlNode(self);
                 let object = Object::new_with_native(activation.strings(), proto, native);
                 self.introduce_script_object(activation.gc(), object);
