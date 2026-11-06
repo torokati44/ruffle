@@ -4,7 +4,9 @@ use ruffle_macros::istr;
 
 use crate::avm1::activation::Activation;
 use crate::avm1::error::Error;
-use crate::avm1::property_decl::{DeclContext, PropertyOrder, StaticDeclarations, SystemClass};
+use crate::avm1::property_decl::{
+    self, DeclContext, PropertyOrder, StaticDeclarations, SystemClass,
+};
 use crate::avm1::xml::{TEXT_NODE, XmlNode};
 use crate::avm1::{NativeObject, Object, Value};
 use crate::string::{AvmString, WStr};
@@ -18,6 +20,10 @@ const PROTO_DECLS: StaticDeclarations = declare_static_properties! {
     "toString" => method(to_string);
     "getNamespaceForPrefix" => method(get_namespace_for_prefix);
     "getPrefixForNamespace" => method(get_prefix_for_namespace);
+};
+
+/// Defined lazily, see `define_lazy_proto_properties`.
+const LAZY_PROTO_DECLS: StaticDeclarations = declare_static_properties! {
     "attributes" => property(attributes);
     "childNodes" => property(child_nodes);
     "firstChild" => property(first_child);
@@ -37,13 +43,49 @@ pub fn create_class<'gc>(
     context: &mut DeclContext<'_, 'gc>,
     super_proto: Object<'gc>,
 ) -> SystemClass<'gc> {
-    let class = context.class(constructor, super_proto, PropertyOrder::PrototypeFirst);
+    let class = context.native_class(
+        constructor,
+        Some(function),
+        super_proto,
+        PropertyOrder::PrototypeFirst,
+    );
     context.define_properties_on(class.proto, PROTO_DECLS(context));
+    // In Flash Player, `XML.prototype` is an XMLNode, so the original
+    // `XMLNode.prototype` already gets these at startup. The caller marks it
+    // as such, see `avm1::globals::create_globals`.
+    context.define_properties_on(class.proto, LAZY_PROTO_DECLS(context));
     class
+}
+
+/// Defines the properties of XMLNode on `proto`, the prototype of a newly
+/// created XMLNode script object.
+///
+/// See [`property_decl::define_lazy_proto_properties`].
+pub fn define_lazy_proto_properties<'gc>(activation: &mut Activation<'_, 'gc>, proto: Object<'gc>) {
+    property_decl::define_lazy_proto_properties(activation, proto, LAZY_PROTO_DECLS);
 }
 
 /// XMLNode constructor
 fn constructor<'gc>(
+    activation: &mut Activation<'_, 'gc>,
+    this: Object<'gc>,
+    args: &[Value<'gc>],
+) -> Result<Value<'gc>, Error<'gc>> {
+    function(activation, this, args)?;
+
+    // Flash Player only does this with a node type and value.
+    if let [node_type, value, ..] = args
+        && !matches!(node_type, Value::Undefined)
+        && !matches!(value, Value::Undefined)
+    {
+        property_decl::define_lazy_proto_properties_of(activation, this, LAZY_PROTO_DECLS);
+    }
+
+    Ok(this.into())
+}
+
+/// Called without `new`.
+fn function<'gc>(
     activation: &mut Activation<'_, 'gc>,
     this: Object<'gc>,
     args: &[Value<'gc>],

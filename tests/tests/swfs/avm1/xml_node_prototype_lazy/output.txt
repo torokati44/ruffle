@@ -1,0 +1,25 @@
+startup, XMLNode.prototype.nodeName: true
+new XMLNode(1, "a"): namespaceURI,localName,prefix,previousSibling,parentNode,nodeValue,nodeType,nodeName,nextSibling,lastChild,firstChild,childNodes,attributes
+new XMLNode(null, "a"): 13
+new XMLNode(): 0
+new XMLNode(1): 0
+new XMLNode(1, undefined): 0
+new XMLNode(undefined, "a"): 0
+XMLNode(1, "a") without new: 0
+createElement: 13
+createTextNode: 13
+parseXML: 13
+super() in a subclass: 13 on its prototype, 0 on XMLNode.prototype
+new XMLNode(1, "a"), XMLNode.prototype = 5: __proto__ is number 5, nodeName on nothing
+new XMLNode(1, "a"), XMLNode.prototype = "s": __proto__ is string s, nodeName on nothing
+new XMLNode(1, "a"), XMLNode.prototype = true: __proto__ is boolean true, nodeName on nothing
+new XMLNode(1, "a"), XMLNode.prototype = null: __proto__ is null null, nodeName on nothing
+new XMLNode(1, "a"), XMLNode.prototype = undefined: __proto__ is undefined undefined, nodeName on nothing
+createElement, XMLNode.prototype = 5: __proto__ is number 5, nodeName on nothing
+createElement, XMLNode.prototype = "s": __proto__ is string s, nodeName on nothing
+createElement, XMLNode.prototype = true: __proto__ is boolean true, nodeName on nothing
+createElement, XMLNode.prototype = null: __proto__ is null null, nodeName on nothing
+createElement, XMLNode.prototype = undefined: __proto__ is undefined undefined, nodeName on nothing
+nodeName deleted, created again: true -> false
+original XMLNode.prototype, nodeName deleted, created again: false
+done
