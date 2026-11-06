@@ -75,7 +75,7 @@ pub(crate) mod text_snapshot;
 pub(crate) mod transform;
 pub(crate) mod video;
 pub(crate) mod xml;
-mod xml_node;
+pub(crate) mod xml_node;
 pub(crate) mod xml_socket;
 
 /// This file is built by 'core/build_playerglobal/'
@@ -510,9 +510,13 @@ pub fn load_playerglobal<'gc>(context: &mut UpdateContext<'gc>) {
 }
 
 /// Initialize default global scope and builtins for an AVM1 instance.
+///
+/// Also returns the prototypes that the lazily defined properties of a native
+/// class were already defined on, see
+/// [`crate::avm1::property_decl::define_lazy_proto_properties`].
 pub fn create_globals<'gc>(
     context: &mut StringContext<'gc>,
-) -> (SystemPrototypes<'gc>, Object<'gc>) {
+) -> (SystemPrototypes<'gc>, Object<'gc>, Vec<Object<'gc>>) {
     let (ref mut context, object, function) =
         DeclContext::new(context, object::create_class, function::create_class);
 
@@ -779,6 +783,7 @@ pub fn create_globals<'gc>(
             file_reference: file_reference.proto,
         },
         globals,
+        vec![xmlnode.proto],
     )
 }
 
