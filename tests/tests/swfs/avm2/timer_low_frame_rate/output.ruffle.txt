@@ -1,0 +1,6 @@
+frame 1: setInterval 1, Timer 1, setTimeout 1
+frame 2: setInterval 1, Timer 1, setTimeout 1
+frame 3: setInterval 1, Timer 1, setTimeout 1
+frame 4: setInterval 1, Timer 1, setTimeout 1
+frame 5: setInterval 1, Timer 1, setTimeout 1
+Done

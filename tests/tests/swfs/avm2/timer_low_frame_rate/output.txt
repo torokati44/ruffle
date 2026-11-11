@@ -1,0 +1,6 @@
+frame 1: setInterval 8 or more, Timer 8 or more, setTimeout 8 or more
+frame 2: setInterval 8 or more, Timer 8 or more, setTimeout 8 or more
+frame 3: setInterval 8 or more, Timer 8 or more, setTimeout 8 or more
+frame 4: setInterval 8 or more, Timer 8 or more, setTimeout 8 or more
+frame 5: setInterval 8 or more, Timer 8 or more, setTimeout 8 or more
+Done

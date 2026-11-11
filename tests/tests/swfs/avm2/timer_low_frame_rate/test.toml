@@ -1,0 +1,8 @@
+num_frames = 7
+known_failure = true
+
+[[compilers]]
+type = "Asc"
+class = "Test"
+scripts = ["Test.as"]
+swf_version = 41
