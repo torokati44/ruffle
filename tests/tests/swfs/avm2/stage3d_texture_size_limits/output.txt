@@ -1,0 +1,103 @@
+Profile baseline (reported: baseline)
+createTexture(0, 0): ArgumentError: Error #3681: Texture size is zero.
+createTexture(0, 64): ArgumentError: Error #3681: Texture size is zero.
+createTexture(64, 0): ArgumentError: Error #3681: Texture size is zero.
+createTexture(-1, 64): ArgumentError: Error #3681: Texture size is zero.
+createTexture(64, -1): ArgumentError: Error #3681: Texture size is zero.
+createTexture(3, 64): ArgumentError: Error #3682: Texture size not a power of two.
+createTexture(64, 3): ArgumentError: Error #3682: Texture size not a power of two.
+createTexture(100, 100): ArgumentError: Error #3682: Texture size not a power of two.
+createTexture(1, 1): ok
+createTexture(1, 2048): ok
+createTexture(2048, 1): ok
+createTexture(2048, 2048): ok
+createTexture(1, 4096): ArgumentError: Error #3683: Texture too big (max is 2048x2048).
+createTexture(4096, 1): ArgumentError: Error #3683: Texture too big (max is 2048x2048).
+createTexture(2048, 4096): ArgumentError: Error #3683: Texture too big (max is 2048x2048).
+createTexture(4096, 4096): ArgumentError: Error #3683: Texture too big (max is 2048x2048).
+createTexture(1, 8192): ArgumentError: Error #3683: Texture too big (max is 2048x2048).
+createTexture(8192, 1): ArgumentError: Error #3683: Texture too big (max is 2048x2048).
+createTexture(8192, 8192): ArgumentError: Error #3683: Texture too big (max is 2048x2048).
+createTexture(16384, 16384): ArgumentError: Error #3683: Texture too big (max is 2048x2048).
+createTexture(3000, 3000): ArgumentError: Error #3682: Texture size not a power of two.
+createTexture(4097, 4097): ArgumentError: Error #3682: Texture size not a power of two.
+createTexture(4097, 64): ArgumentError: Error #3682: Texture size not a power of two.
+createTexture(6000, 8192): ArgumentError: Error #3682: Texture size not a power of two.
+createCubeTexture(0): ArgumentError: Error #3681: Texture size is zero.
+createCubeTexture(-1): ArgumentError: Error #3681: Texture size is zero.
+createCubeTexture(3): ArgumentError: Error #3682: Texture size not a power of two.
+createCubeTexture(100): ArgumentError: Error #3682: Texture size not a power of two.
+createCubeTexture(1): ok
+createCubeTexture(512): ok
+createCubeTexture(1024): ok
+createCubeTexture(1000): ArgumentError: Error #3682: Texture size not a power of two.
+createCubeTexture(2048): ArgumentError: Error #3705: Cubemap texture too big (max is 1024x1024).
+createCubeTexture(4096): ArgumentError: Error #3705: Cubemap texture too big (max is 1024x1024).
+createCubeTexture(16384): ArgumentError: Error #3705: Cubemap texture too big (max is 1024x1024).
+createCubeTexture(3000): ArgumentError: Error #3682: Texture size not a power of two.
+createRectangleTexture(0, 0): ArgumentError: Error #3681: Texture size is zero.
+createRectangleTexture(0, 64): ArgumentError: Error #3681: Texture size is zero.
+createRectangleTexture(64, 0): ArgumentError: Error #3681: Texture size is zero.
+createRectangleTexture(-1, 64): ArgumentError: Error #3681: Texture size is zero.
+createRectangleTexture(3, 5): ok
+createRectangleTexture(100, 100): ok
+createRectangleTexture(2048, 2048): ok
+createRectangleTexture(2049, 1): ArgumentError: Error #3766: RectangleTexture too big (max is the larger of 2048x2048 or the size of the backbuffer).
+createRectangleTexture(1, 2049): ArgumentError: Error #3766: RectangleTexture too big (max is the larger of 2048x2048 or the size of the backbuffer).
+createRectangleTexture(4096, 4096): ArgumentError: Error #3766: RectangleTexture too big (max is the larger of 2048x2048 or the size of the backbuffer).
+createRectangleTexture(4097, 1): ArgumentError: Error #3766: RectangleTexture too big (max is the larger of 2048x2048 or the size of the backbuffer).
+createRectangleTexture(1, 4097): ArgumentError: Error #3766: RectangleTexture too big (max is the larger of 2048x2048 or the size of the backbuffer).
+createRectangleTexture(8192, 8192): ArgumentError: Error #3766: RectangleTexture too big (max is the larger of 2048x2048 or the size of the backbuffer).
+createRectangleTexture(16384, 16384): ArgumentError: Error #3766: RectangleTexture too big (max is the larger of 2048x2048 or the size of the backbuffer).
+Profile baselineConstrained (reported: baselineConstrained)
+createTexture(0, 0): ArgumentError: Error #3681: Texture size is zero.
+createTexture(0, 64): ArgumentError: Error #3681: Texture size is zero.
+createTexture(64, 0): ArgumentError: Error #3681: Texture size is zero.
+createTexture(-1, 64): ArgumentError: Error #3681: Texture size is zero.
+createTexture(64, -1): ArgumentError: Error #3681: Texture size is zero.
+createTexture(3, 64): ArgumentError: Error #3682: Texture size not a power of two.
+createTexture(64, 3): ArgumentError: Error #3682: Texture size not a power of two.
+createTexture(100, 100): ArgumentError: Error #3682: Texture size not a power of two.
+createTexture(1, 1): ok
+createTexture(1, 2048): ok
+createTexture(2048, 1): ok
+createTexture(2048, 2048): ok
+createTexture(1, 4096): ArgumentError: Error #3683: Texture too big (max is 2048x2048).
+createTexture(4096, 1): ArgumentError: Error #3683: Texture too big (max is 2048x2048).
+createTexture(2048, 4096): ArgumentError: Error #3683: Texture too big (max is 2048x2048).
+createTexture(4096, 4096): ArgumentError: Error #3683: Texture too big (max is 2048x2048).
+createTexture(1, 8192): ArgumentError: Error #3683: Texture too big (max is 2048x2048).
+createTexture(8192, 1): ArgumentError: Error #3683: Texture too big (max is 2048x2048).
+createTexture(8192, 8192): ArgumentError: Error #3683: Texture too big (max is 2048x2048).
+createTexture(16384, 16384): ArgumentError: Error #3683: Texture too big (max is 2048x2048).
+createTexture(3000, 3000): ArgumentError: Error #3682: Texture size not a power of two.
+createTexture(4097, 4097): ArgumentError: Error #3682: Texture size not a power of two.
+createTexture(4097, 64): ArgumentError: Error #3682: Texture size not a power of two.
+createTexture(6000, 8192): ArgumentError: Error #3682: Texture size not a power of two.
+createCubeTexture(0): ArgumentError: Error #3681: Texture size is zero.
+createCubeTexture(-1): ArgumentError: Error #3681: Texture size is zero.
+createCubeTexture(3): ArgumentError: Error #3682: Texture size not a power of two.
+createCubeTexture(100): ArgumentError: Error #3682: Texture size not a power of two.
+createCubeTexture(1): ok
+createCubeTexture(512): ok
+createCubeTexture(1024): ok
+createCubeTexture(1000): ArgumentError: Error #3682: Texture size not a power of two.
+createCubeTexture(2048): ArgumentError: Error #3705: Cubemap texture too big (max is 1024x1024).
+createCubeTexture(4096): ArgumentError: Error #3705: Cubemap texture too big (max is 1024x1024).
+createCubeTexture(16384): ArgumentError: Error #3705: Cubemap texture too big (max is 1024x1024).
+createCubeTexture(3000): ArgumentError: Error #3682: Texture size not a power of two.
+createRectangleTexture(0, 0): ArgumentError: Error #3681: Texture size is zero.
+createRectangleTexture(0, 64): ArgumentError: Error #3681: Texture size is zero.
+createRectangleTexture(64, 0): ArgumentError: Error #3681: Texture size is zero.
+createRectangleTexture(-1, 64): ArgumentError: Error #3681: Texture size is zero.
+createRectangleTexture(3, 5): Error: Error #3782: This call requires a Context3D that is created with the baseline profile or above.
+createRectangleTexture(100, 100): Error: Error #3782: This call requires a Context3D that is created with the baseline profile or above.
+createRectangleTexture(2048, 2048): Error: Error #3782: This call requires a Context3D that is created with the baseline profile or above.
+createRectangleTexture(2049, 1): Error: Error #3782: This call requires a Context3D that is created with the baseline profile or above.
+createRectangleTexture(1, 2049): Error: Error #3782: This call requires a Context3D that is created with the baseline profile or above.
+createRectangleTexture(4096, 4096): Error: Error #3782: This call requires a Context3D that is created with the baseline profile or above.
+createRectangleTexture(4097, 1): Error: Error #3782: This call requires a Context3D that is created with the baseline profile or above.
+createRectangleTexture(1, 4097): Error: Error #3782: This call requires a Context3D that is created with the baseline profile or above.
+createRectangleTexture(8192, 8192): Error: Error #3782: This call requires a Context3D that is created with the baseline profile or above.
+createRectangleTexture(16384, 16384): Error: Error #3782: This call requires a Context3D that is created with the baseline profile or above.
+Done
