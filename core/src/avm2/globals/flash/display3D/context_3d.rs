@@ -3,8 +3,10 @@ use crate::avm2::Error;
 use crate::avm2::TObject as _;
 use crate::avm2::Value;
 use crate::avm2::error::{
-    make_error_2008, make_error_3669, make_error_3670, make_error_3671, make_error_3692,
+    make_error_2008, make_error_3669, make_error_3670, make_error_3671, make_error_3681,
+    make_error_3682, make_error_3683, make_error_3692, make_error_3705, make_error_3766,
     make_error_3771, make_error_3772, make_error_3773, make_error_3780, make_error_3781,
+    make_error_3782,
 };
 use crate::avm2::function::FunctionArgs;
 use crate::avm2::globals::slots::flash_geom_rectangle as rectangle_slots;
@@ -486,6 +488,22 @@ pub fn clear<'gc>(
     Ok(Value::Undefined)
 }
 
+/// The maximum width and height of a `Texture` in the given profile. A
+/// `RectangleTexture` may instead be as large as the back buffer, if that is
+/// larger.
+///
+/// The baseline limits were verified in Flash Player. The 4096 limit for the
+/// other profiles comes from Adobe's `Context3D.createTexture` documentation.
+fn texture_size_limit(profile: Context3DProfile) -> u32 {
+    match profile {
+        Context3DProfile::Baseline | Context3DProfile::BaselineConstrained => 2048,
+        Context3DProfile::BaselineExtended
+        | Context3DProfile::Standard
+        | Context3DProfile::StandardConstrained
+        | Context3DProfile::StandardExtended => 4096,
+    }
+}
+
 pub fn create_texture<'gc>(
     activation: &mut Activation<'_, 'gc>,
     this: Value<'gc>,
@@ -495,8 +513,20 @@ pub fn create_texture<'gc>(
 
     if let Some(context) = this.as_context_3d() {
         // This is a native method, so all of the arguments have been checked and coerced for us
-        let width = args.get_i32(0) as u32;
-        let height = args.get_i32(1) as u32;
+        let width = args.get_i32(0);
+        let height = args.get_i32(1);
+        if width <= 0 || height <= 0 {
+            return Err(make_error_3681(activation));
+        }
+        let (width, height) = (width as u32, height as u32);
+        if !width.is_power_of_two() || !height.is_power_of_two() {
+            return Err(make_error_3682(activation));
+        }
+        let max_size = texture_size_limit(context.with_context_3d(|context| context.profile()));
+        if width > max_size || height > max_size {
+            return Err(make_error_3683(activation, max_size));
+        }
+
         let format = args
             .get_string_non_null(activation, 2, "textureFormat")?
             .parse()
@@ -528,8 +558,23 @@ pub fn create_rectangle_texture<'gc>(
 
     if let Some(context) = this.as_context_3d() {
         // This is a native method, so all of the arguments have been checked and coerced for us
-        let width = args.get_i32(0) as u32;
-        let height = args.get_i32(1) as u32;
+        let width = args.get_i32(0);
+        let height = args.get_i32(1);
+        if width <= 0 || height <= 0 {
+            return Err(make_error_3681(activation));
+        }
+        let (width, height) = (width as u32, height as u32);
+        let (profile, back_buffer_size) =
+            context.with_context_3d(|context| (context.profile(), context.back_buffer_size()));
+        if matches!(profile, Context3DProfile::BaselineConstrained) {
+            return Err(make_error_3782(activation));
+        }
+        let max_size = texture_size_limit(profile);
+        let (back_buffer_width, back_buffer_height) = back_buffer_size.unwrap_or((0, 0));
+        if width > max_size.max(back_buffer_width) || height > max_size.max(back_buffer_height) {
+            return Err(make_error_3766(activation, max_size));
+        }
+
         let format = args
             .get_string_non_null(activation, 2, "textureFormat")?
             .parse()
@@ -560,7 +605,18 @@ pub fn create_cube_texture<'gc>(
 
     if let Some(context) = this.as_context_3d() {
         // This is a native method, so all of the arguments have been checked and coerced for us
-        let size = args.get_i32(0) as u32;
+        let size = args.get_i32(0);
+        if size <= 0 {
+            return Err(make_error_3681(activation));
+        }
+        let size = size as u32;
+        if !size.is_power_of_two() {
+            return Err(make_error_3682(activation));
+        }
+        if size > 1024 {
+            return Err(make_error_3705(activation));
+        }
+
         let format = args
             .get_string_non_null(activation, 1, "textureFormat")?
             .parse()

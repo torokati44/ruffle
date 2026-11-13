@@ -1214,6 +1214,30 @@ make_error_fn!(make_error_3669, 3669, error);
 make_error_fn!(make_error_3670, 3670, argument_error);
 make_error_fn!(make_error_3671, 3671, argument_error);
 make_error_fn!(make_error_3692, 3692, error);
+make_error_fn!(make_error_3681, 3681, argument_error);
+make_error_fn!(make_error_3682, 3682, argument_error);
+
+#[inline(never)]
+#[cold]
+pub fn make_error_3683<'gc>(activation: &mut Activation<'_, 'gc>, max_size: u32) -> Error<'gc> {
+    make_error!(argument_error(
+        activation,
+        error_message!(3683, max_size),
+        3683,
+    ))
+}
+
+make_error_fn!(make_error_3705, 3705, argument_error);
+
+#[inline(never)]
+#[cold]
+pub fn make_error_3766<'gc>(activation: &mut Activation<'_, 'gc>, max_size: u32) -> Error<'gc> {
+    make_error!(argument_error(
+        activation,
+        error_message!(3766, max_size),
+        3766,
+    ))
+}
 
 // This isn't used if the `jpegxr` feature is disabled, see
 // `globals::flash::display3D::textures::atf_jpegxr`
@@ -1249,6 +1273,7 @@ pub fn make_error_3781<'gc>(activation: &mut Activation<'_, 'gc>) -> Error<'gc> 
     make_error!(error(activation, error_message!(3781, "32", "16384"), 3681,))
 }
 
+make_error_fn!(make_error_3782, 3782, error);
 make_error_fn!(make_error_3783, 3783, argument_error);
 
 pub fn make_agal_upload_error<'gc>(
