@@ -218,6 +218,13 @@ fn jpegxr_to_tiff<R: Read + Seek>(
     assert_eq!(jpeg_width, atf_width, "Mismatched JPEG-XR width");
     assert_eq!(jpeg_height, atf_height, "Mismatched JPEG-XR height");
 
+    // jxrlib sizes its decode buffer with a 32-bit `stride * height`, where the
+    // stride is at most 16 bytes per pixel; reject images that would wrap it.
+    assert!(
+        u64::from(jpeg_width) * u64::from(jpeg_height) <= u64::from(u32::MAX) / 16,
+        "JPEG-XR image too large"
+    );
+
     let info = jpegxr::PixelInfo::from_format(pixel_format);
     let stride = jpeg_width as usize * info.bits_per_pixel() / 8;
     let size = stride * jpeg_height as usize;
