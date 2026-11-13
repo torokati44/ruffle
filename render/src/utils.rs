@@ -467,43 +467,12 @@ fn decode_gif(data: &[u8]) -> Result<Bitmap<'static>, Error> {
 
 #[cfg(feature = "jpegxr")]
 fn decode_jpegxr(data: &[u8]) -> Result<Bitmap<'static>, Error> {
-    // TODO: Could this be unified with 'core/src/avm2/globals/flash/display3D/textures/atf_jpegxr'?
-
-    let mut decoder =
-        jpegxr::ImageDecode::with_reader(Cursor::new(data)).map_err(Error::InvalidJpegXr)?;
-
-    let pixel_format = decoder.get_pixel_format().map_err(Error::InvalidJpegXr)?;
-
-    let (jpeg_width, jpeg_height) = decoder.get_size().map_err(Error::InvalidJpegXr)?;
-    let jpeg_width = jpeg_width as u32;
-    let jpeg_height = jpeg_height as u32;
-
-    let info = jpegxr::PixelInfo::from_format(pixel_format);
-    let stride = jpeg_width as usize * info.bits_per_pixel() / 8;
-    let size = stride * jpeg_height as usize;
-
-    // We convert the result to a TIFF - this makes the jpegxr library handle
-    // all of the weird JPEG-XR alpha formats for us. We can then use the normal
-    // `image` crate to decode the TIFF to an rgba array.
-    let mut bmp_buffer = vec![0; size];
-    decoder
-        .convert_to_tiff(&mut Cursor::new(&mut bmp_buffer))
-        .map_err(Error::InvalidJpegXr)?;
-
-    let image_reader =
-        image::ImageReader::with_format(Cursor::new(bmp_buffer), image::ImageFormat::Tiff);
-
-    let data = image_reader
-        .decode()
-        .map_err(Error::MalformedTiffFromJpegXr)?
-        .to_rgba8()
-        .into_vec();
-
+    let image = crate::jpegxr::decode_rgba8(data)?;
     Ok(Bitmap::new(
-        jpeg_width,
-        jpeg_height,
+        image.width,
+        image.height,
         BitmapFormat::Rgba,
-        data,
+        image.data,
     ))
 }
 
@@ -514,12 +483,8 @@ fn decode_jpegxr(_: &[u8]) -> Result<Bitmap<'static>, Error> {
 
 #[cfg(feature = "jpegxr")]
 fn decode_jpegxr_dimensions(data: &[u8]) -> Result<(u16, u16), Error> {
-    let (jpeg_width, jpeg_height) = jpegxr::ImageDecode::with_reader(Cursor::new(data))
-        .map_err(Error::InvalidJpegXr)?
-        .get_size()
-        .map_err(Error::InvalidJpegXr)?;
-
-    Ok((jpeg_width as u16, jpeg_height as u16))
+    let (width, height) = crate::jpegxr::dimensions(data)?;
+    Ok((width as u16, height as u16))
 }
 
 #[cfg(not(feature = "jpegxr"))]

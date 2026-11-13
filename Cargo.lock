@@ -334,25 +334,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
-name = "bindgen"
-version = "0.73.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "787ef8ef523575546b106a58213d6e6b06198a05c2f757258c68a74273670cfa"
-dependencies = [
- "bitflags 2.13.2",
- "cexpr",
- "clang-sys",
- "log",
- "prettyplease",
- "proc-macro2",
- "quote",
- "regex",
- "rustc-hash 2.1.3",
- "shlex",
- "syn 3.0.9",
-]
-
-[[package]]
 name = "bit-set"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -575,15 +556,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d43a04d8753f35258c91f8ec639f792891f748a1edbd759cf1dcea3382ad83c"
 
 [[package]]
-name = "cexpr"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6fac387a98bb7c37292057cffc56d62ecb629900026402633ae9160df93a8766"
-dependencies = [
- "nom 7.1.3",
-]
-
-[[package]]
 name = "cfg-expr"
 version = "0.20.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -637,17 +609,6 @@ dependencies = [
  "num-traits",
  "wasm-bindgen",
  "windows-link",
-]
-
-[[package]]
-name = "clang-sys"
-version = "1.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "157a8ba7b480713b56f4c09fd13fc3e0a22a5dfab8097ba61cbc5feef950788a"
-dependencies = [
- "glob",
- "libc",
- "libloading",
 ]
 
 [[package]]
@@ -1670,6 +1631,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b97b65636e5b9ef369943878ac74335ba1c55c1cb6adbf1e2c293c624248d693"
 
 [[package]]
+name = "fearless_simd"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3772b63c40606beea8fe1f7b06a60de27ceb9bfc2d9dad3427368ca41dc7e62"
+
+[[package]]
 name = "filetime"
 version = "0.2.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1691,7 +1658,7 @@ version = "0.7.0"
 source = "git+https://github.com/ruffle-rs/rust-flash-lso?rev=11a0836a52c4aacbca96d8299bffd12f9715eec2#11a0836a52c4aacbca96d8299bffd12f9715eec2"
 dependencies = [
  "enumset",
- "nom 8.0.0",
+ "nom",
  "thiserror 2.0.21",
 ]
 
@@ -2732,6 +2699,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
+name = "j2k-core"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc87cbba1b8db392e32554cf48ca9bdb24f6d4eca6a4ee7c96515b1b022adb08"
+dependencies = [
+ "libc",
+ "thiserror 2.0.21",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "jiff"
 version = "0.2.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2846,17 +2824,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00810f1d8b74be64b13dbf3db89ac67740615d6c891f0e7b6179326533011a07"
 
 [[package]]
-name = "jpegxr"
-version = "0.3.1"
-source = "git+https://github.com/ruffle-rs/jpegxr?rev=86cc1749d493288f53d7290ac3eb7082c475b5d9#86cc1749d493288f53d7290ac3eb7082c475b5d9"
-dependencies = [
- "bindgen",
- "cc",
- "libc",
- "thiserror 2.0.21",
-]
-
-[[package]]
 name = "js-sys"
 version = "0.3.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2865,6 +2832,45 @@ dependencies = [
  "cfg-if",
  "futures-util",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "jxr"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ec2979f4eb7e77fe3f21c8af1793b20c225c7b4ee7abe679a35cec1fb0addf2"
+dependencies = [
+ "jxr-core",
+ "jxr-native",
+ "rayon",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "jxr-core"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "721c672ee0f266296abb2918f92e5e06d5cc6210111a0cb92f5177111b940d2b"
+dependencies = [
+ "j2k-core",
+]
+
+[[package]]
+name = "jxr-math"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a147e57a926b456a9aa63de1826032ed94825c4af02c54d2a31414bf9ae3f641"
+
+[[package]]
+name = "jxr-native"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f266fe586a8566f7061158bfc738b40087c1b8bbd80358f4ed6d0a9197b7f6a"
+dependencies = [
+ "fearless_simd 1.0.0",
+ "jxr-core",
+ "jxr-math",
+ "rayon",
 ]
 
 [[package]]
@@ -3201,12 +3207,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
 
 [[package]]
-name = "minimal-lexical"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
-
-[[package]]
 name = "miniz_oxide"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3417,16 +3417,6 @@ name = "nohash-hasher"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2bf50223579dc7cdcfb3bfcacf7069ff68243f8c363f62ffa99cf000a6b9c451"
-
-[[package]]
-name = "nom"
-version = "7.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a"
-dependencies = [
- "memchr",
- "minimal-lexical",
-]
 
 [[package]]
 name = "nom"
@@ -4770,10 +4760,8 @@ dependencies = [
  "gc-arena",
  "hashbrown 0.17.1",
  "id3",
- "image",
  "indexmap",
  "itertools 0.14.0",
- "jpegxr",
  "linkme",
  "lzma-rs",
  "naga-agal",
@@ -4940,10 +4928,9 @@ dependencies = [
  "gif",
  "guillotiere",
  "h263-rs-yuv",
- "image",
  "indexmap",
  "jpeg-decoder",
- "jpegxr",
+ "jxr",
  "lyon",
  "lyon_geom",
  "naga-agal",
@@ -6637,7 +6624,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b2e9aed918117e8152c9eddfd8362d73c465c23f26c44786aa331707b8a64fa2"
 dependencies = [
  "bytemuck",
- "fearless_simd",
+ "fearless_simd 0.4.1",
  "guillotiere",
  "log",
  "peniko",
