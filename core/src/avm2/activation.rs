@@ -203,7 +203,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     ///  - Ensure that there aren't too many arguments
     ///  - Ensure that all arguments are of the correct type
     ///  - Ensure that all required parameters have been provided
-    ///  - Subtitute default parameters for parameters that are missing
+    ///  - Substitute default parameters for parameters that are missing
     fn coerce_and_setup_arguments(
         &mut self,
         method: Method<'gc>,
