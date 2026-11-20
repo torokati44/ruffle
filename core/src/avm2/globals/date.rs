@@ -3,20 +3,225 @@
 use crate::avm2::Error;
 use crate::avm2::activation::Activation;
 use crate::avm2::function::FunctionArgs;
-use crate::avm2::object::DateObject;
+use crate::avm2::object::{DateObject, clip_time};
 use crate::avm2::parameters::ParametersExt;
 use crate::avm2::value::Value;
 use crate::string::{AvmString, WStr, utils as string_utils};
-use chrono::{DateTime, Datelike, Duration, FixedOffset, LocalResult, TimeZone, Timelike, Utc};
 use num_traits::ToPrimitive;
 use ruffle_macros::istr;
 
 pub use crate::avm2::object::date_allocator;
 
-struct DateAdjustment<'builder, 'activation_a: 'builder, 'gc: 'activation_a, T: TimeZone + 'builder>
-{
+const MS_PER_SECOND: i64 = 1000;
+const MS_PER_MINUTE: i64 = 60 * MS_PER_SECOND;
+const MS_PER_HOUR: i64 = 60 * MS_PER_MINUTE;
+const MS_PER_DAY: i64 = 24 * MS_PER_HOUR;
+
+const DAY_NAMES: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH_NAMES: [&str; 12] = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+/// ECMA-262 Day - Get days since epoch.
+fn day(time: i64) -> i64 {
+    time.div_euclid(MS_PER_DAY)
+}
+
+/// ECMA-262 DayFromYear and the days before `month` (0-11) in that year -
+/// Return days passed since epoch to the 1st of `month` in `year`.
+///
+/// This is Howard Hinnant's `days_from_civil` algorithm,
+/// for the proleptic Gregorian calendar.
+fn day_from_month(year: i128, month: i128) -> i128 {
+    // Count years from March, so that the leap day is at the end of the year.
+    let year = if month < 2 { year - 1 } else { year };
+    let era = year.div_euclid(400);
+    let year_of_era = year.rem_euclid(400);
+    let day_of_year = (153 * ((month + 10) % 12) + 2) / 5;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
+}
+
+/// ECMA-262 YearFromTime, MonthFromTime and DateFromTime -
+/// Get the year, month (0-11) and date (1-31) of `day` days since epoch.
+///
+/// This is Howard Hinnant's `civil_from_days` algorithm,
+/// for the proleptic Gregorian calendar.
+fn year_month_date_from_day(day: i64) -> (i64, i64, i64) {
+    let day = day + 719_468;
+    let era = day.div_euclid(146_097);
+    let day_of_era = day.rem_euclid(146_097);
+    let year_of_era =
+        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    // Months are counted from March, so that the leap day is at the end of the year.
+    let shifted_month = (5 * day_of_year + 2) / 153;
+    let date = day_of_year - (153 * shifted_month + 2) / 5 + 1;
+    let month = (shifted_month + 2) % 12;
+    let year = year_of_era + era * 400;
+    (if month < 2 { year + 1 } else { year }, month, date)
+}
+
+/// ECMA-262 WeekDay - Get days within week (0-6), where 0 is Sunday.
+fn week_day(time: i64) -> i64 {
+    (day(time) + 4).rem_euclid(7)
+}
+
+/// ECMA-262 HourFromTime - Get hours (0-23).
+fn hour_from_time(time: i64) -> i64 {
+    time.div_euclid(MS_PER_HOUR).rem_euclid(24)
+}
+
+/// ECMA-262 MinFromTime - Get minutes (0-59).
+fn min_from_time(time: i64) -> i64 {
+    time.div_euclid(MS_PER_MINUTE).rem_euclid(60)
+}
+
+/// ECMA-262 SecFromTime - Get seconds (0-59).
+fn sec_from_time(time: i64) -> i64 {
+    time.div_euclid(MS_PER_SECOND).rem_euclid(60)
+}
+
+/// ECMA-262 msFromTime - Get milliseconds (0-999).
+fn ms_from_time(time: i64) -> i64 {
+    time.rem_euclid(MS_PER_SECOND)
+}
+
+/// ECMA-262 MakeTime
+///
+/// This can't overflow, as all the arguments fit in an `i64`.
+fn make_time(hour: i64, minute: i64, second: i64, millisecond: i64) -> i128 {
+    i128::from(hour) * i128::from(MS_PER_HOUR)
+        + i128::from(minute) * i128::from(MS_PER_MINUTE)
+        + i128::from(second) * i128::from(MS_PER_SECOND)
+        + i128::from(millisecond)
+}
+
+/// ECMA-262 MakeDay - `month` is 0-based, and may be out of range.
+///
+/// This can't overflow, as all the arguments fit in an `i64`.
+fn make_day(year: i64, month: i64, date: i64) -> i128 {
+    let year = i128::from(year) + i128::from(month.div_euclid(12));
+    let month = i128::from(month.rem_euclid(12));
+    day_from_month(year, month) + i128::from(date) - 1
+}
+
+/// ECMA-262 MakeDate - Create from days since epoch and milliseconds within day.
+fn make_date(day: i128, time: i128) -> i128 {
+    day * i128::from(MS_PER_DAY) + time
+}
+
+/// Returns midnight on January 1st of year 0, in a timezone that is
+/// `timezone` milliseconds ahead of UTC.
+fn year_zero(timezone: i64) -> i64 {
+    day_from_month(0, 0) as i64 * MS_PER_DAY - timezone
+}
+
+/// A date and time broken down into its components, in some timezone.
+#[derive(Clone, Copy)]
+struct DateFields {
+    year: i64,
+    /// 0-11
+    month: i64,
+    /// 1-31
+    day: i64,
+    hour: i64,
+    minute: i64,
+    second: i64,
+    millisecond: i64,
+    /// 0-6, where 0 is Sunday.
+    weekday: i64,
+    /// Milliseconds ahead of UTC.
+    timezone: i64,
+}
+
+impl DateFields {
+    /// Breaks down `time` (milliseconds since the epoch) into its components
+    /// in a timezone that is `timezone` milliseconds ahead of UTC.
+    fn new(time: i64, timezone: i64) -> Self {
+        // ECMA-262 LocalTime - Convert from UTC to the timezone.
+        let time = time.saturating_add(timezone);
+        let (year, month, date) = year_month_date_from_day(day(time));
+        Self {
+            year,
+            month,
+            day: date,
+            hour: hour_from_time(time),
+            minute: min_from_time(time),
+            second: sec_from_time(time),
+            millisecond: ms_from_time(time),
+            weekday: week_day(time),
+            timezone,
+        }
+    }
+
+    fn day_name(&self) -> &'static str {
+        DAY_NAMES[self.weekday as usize]
+    }
+
+    fn month_name(&self) -> &'static str {
+        MONTH_NAMES[self.month as usize]
+    }
+
+    /// The year, without padding. Years outside of 0-9999 get an explicit sign.
+    fn year_string(&self) -> String {
+        if (0..10_000).contains(&self.year) {
+            self.year.to_string()
+        } else {
+            format!("{:+}", self.year)
+        }
+    }
+
+    /// The time of day as `HH:MM:SS`.
+    fn time_string(&self) -> String {
+        format!("{:02}:{:02}:{:02}", self.hour, self.minute, self.second)
+    }
+
+    /// The timezone as `+HHMM`, rounded to the nearest minute.
+    fn timezone_string(&self) -> String {
+        let sign = if self.timezone < 0 { '-' } else { '+' };
+        let minutes = (self.timezone.abs() / MS_PER_SECOND + 30) / 60;
+        format!("{sign}{:02}{:02}", minutes / 60, minutes % 60)
+    }
+
+    fn am_pm(&self) -> &'static str {
+        if self.hour < 12 { "AM" } else { "PM" }
+    }
+}
+
+/// ECMA-262 LocalTZA - Get the local timezone, in milliseconds ahead of UTC.
+fn local_timezone(activation: &Activation<'_, '_>) -> i64 {
+    i64::from(activation.context.locale.get_timezone().local_minus_utc()) * MS_PER_SECOND
+}
+
+/// Breaks down the date stored in `this` in the local timezone.
+fn local_fields(activation: &Activation<'_, '_>, this: DateObject<'_>) -> Option<DateFields> {
+    let timezone = local_timezone(activation);
+    this.time().map(|time| DateFields::new(time, timezone))
+}
+
+/// Breaks down the date stored in `this` in UTC.
+fn utc_fields(this: DateObject<'_>) -> Option<DateFields> {
+    this.time().map(|time| DateFields::new(time, 0))
+}
+
+/// Formats `date` with `format`, or returns "Invalid Date" if there's no date.
+fn format_date<'gc>(
+    activation: &mut Activation<'_, 'gc>,
+    date: Option<DateFields>,
+    format: impl FnOnce(&DateFields) -> String,
+) -> Value<'gc> {
+    if let Some(date) = date {
+        AvmString::new_utf8(activation.gc(), format(&date)).into()
+    } else {
+        istr!("Invalid Date").into()
+    }
+}
+
+struct DateAdjustment<'builder, 'activation_a: 'builder, 'gc: 'activation_a> {
     activation: &'builder mut Activation<'activation_a, 'gc>,
-    timezone: &'builder T,
+    /// Milliseconds ahead of UTC.
+    timezone: i64,
     year: Option<Option<f64>>,
     month: Option<Option<f64>>,
     day: Option<Option<f64>>,
@@ -26,11 +231,8 @@ struct DateAdjustment<'builder, 'activation_a: 'builder, 'gc: 'activation_a, T: 
     millisecond: Option<Option<f64>>,
 }
 
-impl<'builder, 'activation_a, 'gc, T: TimeZone> DateAdjustment<'builder, 'activation_a, 'gc, T> {
-    fn new(
-        activation: &'builder mut Activation<'activation_a, 'gc>,
-        timezone: &'builder T,
-    ) -> Self {
+impl<'builder, 'activation_a, 'gc> DateAdjustment<'builder, 'activation_a, 'gc> {
+    fn new(activation: &'builder mut Activation<'activation_a, 'gc>, timezone: i64) -> Self {
         Self {
             activation,
             timezone,
@@ -119,63 +321,34 @@ impl<'builder, 'activation_a, 'gc, T: TimeZone> DateAdjustment<'builder, 'activa
         }
     }
 
-    fn check_mapped_value(
-        &self,
-        specified: Option<Option<f64>>,
-        map: impl FnOnce(i64) -> i64,
-        current: impl ToPrimitive,
-    ) -> Option<i64> {
-        match specified {
-            Some(Some(value)) if value.is_finite() => Some(map(value as i64)),
-            Some(_) => None,
-            None => current.to_i64(),
-        }
-    }
+    /// Applies the adjustments to `current`, returning the resulting time
+    /// in milliseconds since the epoch.
+    fn calculate(&mut self, current: DateFields) -> Option<i64> {
+        let year = self.check_value(self.year, current.year)?;
+        let month = self.check_value(self.month, current.month)?;
+        let date = self.check_value(self.day, current.day)?;
+        let hour = self.check_value(self.hour, current.hour)?;
+        let minute = self.check_value(self.minute, current.minute)?;
+        let second = self.check_value(self.second, current.second)?;
+        let millisecond = self.check_value(self.millisecond, current.millisecond)?;
 
-    fn calculate(&mut self, current: DateTime<T>) -> Option<DateTime<Utc>> {
-        let month_rem = self
-            .month
-            .flatten()
-            .map(|v| v as i64)
-            .unwrap_or_default()
-            .div_euclid(12);
-        let month = self.check_mapped_value(self.month, |v| v.rem_euclid(12), current.month0())?;
-        let year = self
-            .check_value(self.year, current.year())?
-            .wrapping_add(month_rem) as i32;
-        let day = self.check_value(self.day, current.day())?;
-        let hour = self.check_value(self.hour, current.hour())?;
-        let minute = self.check_value(self.minute, current.minute())?;
-        let second = self.check_value(self.second, current.second())?;
-        let millisecond = self.check_value(self.millisecond, current.timestamp_subsec_millis())?;
-
-        let duration = Duration::try_days(day - 1)?
-            + Duration::try_hours(hour)?
-            + Duration::try_minutes(minute)?
-            + Duration::try_seconds(second)?
-            + Duration::try_milliseconds(millisecond)?;
-
-        if let LocalResult::Single(Some(result)) = current
-            .timezone()
-            .with_ymd_and_hms(year, (month + 1) as u32, 1, 0, 0, 0)
-            .map(|date| date.checked_add_signed(duration))
-        {
-            Some(result.with_timezone(&Utc))
-        } else {
-            None
-        }
+        let time = make_date(
+            make_day(year, month, date),
+            make_time(hour, minute, second, millisecond),
+        );
+        // ECMA-262 UTC - Convert from the timezone to UTC.
+        let time = time - i128::from(current.timezone);
+        clip_time(i64::try_from(time).ok()?)
     }
 
     fn apply(&mut self, object: DateObject<'gc>) -> f64 {
-        let date = if let Some(current) = object.date_time().map(|v| v.with_timezone(self.timezone))
-        {
-            self.calculate(current)
-        } else {
-            None
-        };
-        object.set_date_time(date);
-        if let Some(date) = date {
-            date.timestamp_millis() as f64
+        let timezone = self.timezone;
+        let time = object
+            .time()
+            .and_then(|current| self.calculate(DateFields::new(current, timezone)));
+        object.set_time(time);
+        if let Some(time) = time {
+            time as f64
         } else {
             f64::NAN
         }
@@ -210,18 +383,12 @@ pub fn init<'gc>(
     let timestamp = args.get_optional(0).unwrap_or(Value::Undefined);
     if !matches!(timestamp, Value::Undefined) {
         if args.len() > 1 {
-            let timezone = activation.context.locale.get_timezone();
+            let timezone = local_timezone(activation);
 
             // We need a starting value to adjust from.
-            this.set_date_time(Some(
-                timezone
-                    .with_ymd_and_hms(0, 1, 1, 0, 0, 0)
-                    .single()
-                    .expect("Found ambiguous epoch time when constructing Date")
-                    .into(),
-            ));
+            this.set_time(Some(year_zero(timezone)));
 
-            DateAdjustment::new(activation, &timezone)
+            DateAdjustment::new(activation, timezone)
                 .year(args.get_optional(0))?
                 .month(args.get_optional(1))?
                 .day(args.get_optional(2))?
@@ -237,14 +404,13 @@ pub fn init<'gc>(
             } else {
                 timestamp.coerce_to_number(activation)?
             };
-            if timestamp.is_finite()
-                && let LocalResult::Single(time) = Utc.timestamp_millis_opt(timestamp as i64)
-            {
-                this.set_date_time(Some(time))
+            if timestamp.is_finite() {
+                this.set_time(clip_time(timestamp as i64))
             }
         }
     } else {
-        this.set_date_time(Some(activation.context.locale.get_current_date_time()))
+        let now = activation.context.locale.get_current_date_time();
+        this.set_time(Some(now.timestamp_millis()))
     }
 
     Ok(Value::Undefined)
@@ -268,8 +434,8 @@ pub fn get_time<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this.date_time() {
-        Ok((date.timestamp_millis() as f64).into())
+    if let Some(time) = this.time() {
+        Ok((time as f64).into())
     } else {
         Ok(f64::NAN.into())
     }
@@ -288,12 +454,12 @@ pub fn _set_time<'gc>(
     let new_time = args.get_f64(0);
 
     if new_time.is_finite()
-        && let LocalResult::Single(time) = Utc.timestamp_millis_opt(new_time as i64)
+        && let Some(time) = clip_time(new_time as i64)
     {
-        this.set_date_time(Some(time));
-        Ok((time.timestamp_millis() as f64).into())
+        this.set_time(Some(time));
+        Ok((time as f64).into())
     } else {
-        this.set_date_time(None);
+        this.set_time(None);
         Ok(f64::NAN.into())
     }
 }
@@ -308,11 +474,8 @@ pub fn get_milliseconds<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this
-        .date_time()
-        .map(|date| date.with_timezone(&activation.context.locale.get_timezone()))
-    {
-        Ok((date.timestamp_subsec_millis() as f64).into())
+    if let Some(date) = local_fields(activation, this) {
+        Ok((date.millisecond as f64).into())
     } else {
         Ok(f64::NAN.into())
     }
@@ -328,8 +491,8 @@ pub fn _set_milliseconds<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    let timezone = activation.context.locale.get_timezone();
-    let timestamp = DateAdjustment::new(activation, &timezone)
+    let timezone = local_timezone(activation);
+    let timestamp = DateAdjustment::new(activation, timezone)
         .millisecond(args.get_optional(0))?
         .apply(this);
     Ok(timestamp.into())
@@ -345,11 +508,8 @@ pub fn get_seconds<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this
-        .date_time()
-        .map(|date| date.with_timezone(&activation.context.locale.get_timezone()))
-    {
-        Ok((date.second() as f64).into())
+    if let Some(date) = local_fields(activation, this) {
+        Ok((date.second as f64).into())
     } else {
         Ok(f64::NAN.into())
     }
@@ -365,8 +525,8 @@ pub fn _set_seconds<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    let timezone = activation.context.locale.get_timezone();
-    let timestamp = DateAdjustment::new(activation, &timezone)
+    let timezone = local_timezone(activation);
+    let timestamp = DateAdjustment::new(activation, timezone)
         .second(args.get_optional(0))?
         .millisecond(args.get_optional(1))?
         .apply(this);
@@ -383,11 +543,8 @@ pub fn get_minutes<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this
-        .date_time()
-        .map(|date| date.with_timezone(&activation.context.locale.get_timezone()))
-    {
-        Ok((date.minute() as f64).into())
+    if let Some(date) = local_fields(activation, this) {
+        Ok((date.minute as f64).into())
     } else {
         Ok(f64::NAN.into())
     }
@@ -403,8 +560,8 @@ pub fn _set_minutes<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    let timezone = activation.context.locale.get_timezone();
-    let timestamp = DateAdjustment::new(activation, &timezone)
+    let timezone = local_timezone(activation);
+    let timestamp = DateAdjustment::new(activation, timezone)
         .minute(args.get_optional(0))?
         .second(args.get_optional(1))?
         .millisecond(args.get_optional(2))?
@@ -422,11 +579,8 @@ pub fn get_hours<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this
-        .date_time()
-        .map(|date| date.with_timezone(&activation.context.locale.get_timezone()))
-    {
-        Ok((date.hour() as f64).into())
+    if let Some(date) = local_fields(activation, this) {
+        Ok((date.hour as f64).into())
     } else {
         Ok(f64::NAN.into())
     }
@@ -442,8 +596,8 @@ pub fn _set_hours<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    let timezone = activation.context.locale.get_timezone();
-    let timestamp = DateAdjustment::new(activation, &timezone)
+    let timezone = local_timezone(activation);
+    let timestamp = DateAdjustment::new(activation, timezone)
         .hour(args.get_optional(0))?
         .minute(args.get_optional(1))?
         .second(args.get_optional(2))?
@@ -462,11 +616,8 @@ pub fn get_date<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this
-        .date_time()
-        .map(|date| date.with_timezone(&activation.context.locale.get_timezone()))
-    {
-        Ok((date.day() as f64).into())
+    if let Some(date) = local_fields(activation, this) {
+        Ok((date.day as f64).into())
     } else {
         Ok(f64::NAN.into())
     }
@@ -482,8 +633,8 @@ pub fn _set_date<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    let timezone = activation.context.locale.get_timezone();
-    let timestamp = DateAdjustment::new(activation, &timezone)
+    let timezone = local_timezone(activation);
+    let timestamp = DateAdjustment::new(activation, timezone)
         .day(args.get_optional(0))?
         .apply(this);
     Ok(timestamp.into())
@@ -499,11 +650,8 @@ pub fn get_month<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this
-        .date_time()
-        .map(|date| date.with_timezone(&activation.context.locale.get_timezone()))
-    {
-        Ok((date.month0() as f64).into())
+    if let Some(date) = local_fields(activation, this) {
+        Ok((date.month as f64).into())
     } else {
         Ok(f64::NAN.into())
     }
@@ -519,8 +667,8 @@ pub fn _set_month<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    let timezone = activation.context.locale.get_timezone();
-    let timestamp = DateAdjustment::new(activation, &timezone)
+    let timezone = local_timezone(activation);
+    let timestamp = DateAdjustment::new(activation, timezone)
         .month(args.get_optional(0))?
         .day(args.get_optional(1))?
         .apply(this);
@@ -537,11 +685,8 @@ pub fn get_full_year<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this
-        .date_time()
-        .map(|date| date.with_timezone(&activation.context.locale.get_timezone()))
-    {
-        Ok((date.year() as f64).into())
+    if let Some(date) = local_fields(activation, this) {
+        Ok((date.year as f64).into())
     } else {
         Ok(f64::NAN.into())
     }
@@ -557,17 +702,11 @@ pub fn _set_full_year<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    let timezone = activation.context.locale.get_timezone();
-    if this.date_time().is_none() {
-        this.set_date_time(Some(
-            timezone
-                .with_ymd_and_hms(0, 1, 1, 0, 0, 0)
-                .single()
-                .expect("Found ambiguous epoch time when constructing Date")
-                .into(),
-        ));
+    let timezone = local_timezone(activation);
+    if this.time().is_none() {
+        this.set_time(Some(year_zero(timezone)));
     }
-    let timestamp = DateAdjustment::new(activation, &timezone)
+    let timestamp = DateAdjustment::new(activation, timezone)
         .year(args.get_optional(0))?
         .month(args.get_optional(1))?
         .day(args.get_optional(2))?
@@ -585,11 +724,8 @@ pub fn get_day<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this
-        .date_time()
-        .map(|date| date.with_timezone(&activation.context.locale.get_timezone()))
-    {
-        Ok((date.weekday().num_days_from_sunday() as f64).into())
+    if let Some(date) = local_fields(activation, this) {
+        Ok((date.weekday as f64).into())
     } else {
         Ok(f64::NAN.into())
     }
@@ -605,8 +741,8 @@ pub fn get_utc_milliseconds<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this.date_time() {
-        Ok((date.timestamp_subsec_millis() as f64).into())
+    if let Some(date) = utc_fields(this) {
+        Ok((date.millisecond as f64).into())
     } else {
         Ok(f64::NAN.into())
     }
@@ -622,7 +758,7 @@ pub fn _set_utc_milliseconds<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    let timestamp = DateAdjustment::new(activation, &Utc)
+    let timestamp = DateAdjustment::new(activation, 0)
         .millisecond(args.get_optional(0))?
         .apply(this);
     Ok(timestamp.into())
@@ -638,8 +774,8 @@ pub fn get_utc_seconds<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this.date_time() {
-        Ok((date.second() as f64).into())
+    if let Some(date) = utc_fields(this) {
+        Ok((date.second as f64).into())
     } else {
         Ok(f64::NAN.into())
     }
@@ -655,7 +791,7 @@ pub fn _set_utc_seconds<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    let timestamp = DateAdjustment::new(activation, &Utc)
+    let timestamp = DateAdjustment::new(activation, 0)
         .second(args.get_optional(0))?
         .millisecond(args.get_optional(1))?
         .apply(this);
@@ -672,8 +808,8 @@ pub fn get_utc_minutes<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this.date_time() {
-        Ok((date.minute() as f64).into())
+    if let Some(date) = utc_fields(this) {
+        Ok((date.minute as f64).into())
     } else {
         Ok(f64::NAN.into())
     }
@@ -689,7 +825,7 @@ pub fn _set_utc_minutes<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    let timestamp = DateAdjustment::new(activation, &Utc)
+    let timestamp = DateAdjustment::new(activation, 0)
         .minute(args.get_optional(0))?
         .second(args.get_optional(1))?
         .millisecond(args.get_optional(2))?
@@ -707,8 +843,8 @@ pub fn get_utc_hours<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this.date_time() {
-        Ok((date.hour() as f64).into())
+    if let Some(date) = utc_fields(this) {
+        Ok((date.hour as f64).into())
     } else {
         Ok(f64::NAN.into())
     }
@@ -724,7 +860,7 @@ pub fn _set_utc_hours<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    let timestamp = DateAdjustment::new(activation, &Utc)
+    let timestamp = DateAdjustment::new(activation, 0)
         .hour(args.get_optional(0))?
         .minute(args.get_optional(1))?
         .second(args.get_optional(2))?
@@ -743,8 +879,8 @@ pub fn get_utc_date<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this.date_time() {
-        Ok((date.day() as f64).into())
+    if let Some(date) = utc_fields(this) {
+        Ok((date.day as f64).into())
     } else {
         Ok(f64::NAN.into())
     }
@@ -760,7 +896,7 @@ pub fn _set_utc_date<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    let timestamp = DateAdjustment::new(activation, &Utc)
+    let timestamp = DateAdjustment::new(activation, 0)
         .day(args.get_optional(0))?
         .apply(this);
     Ok(timestamp.into())
@@ -776,8 +912,8 @@ pub fn get_utc_month<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this.date_time() {
-        Ok((date.month0() as f64).into())
+    if let Some(date) = utc_fields(this) {
+        Ok((date.month as f64).into())
     } else {
         Ok(f64::NAN.into())
     }
@@ -793,7 +929,7 @@ pub fn _set_utc_month<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    let timestamp = DateAdjustment::new(activation, &Utc)
+    let timestamp = DateAdjustment::new(activation, 0)
         .month(args.get_optional(0))?
         .day(args.get_optional(1))?
         .apply(this);
@@ -810,8 +946,8 @@ pub fn get_utc_full_year<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this.date_time() {
-        Ok((date.year() as f64).into())
+    if let Some(date) = utc_fields(this) {
+        Ok((date.year as f64).into())
     } else {
         Ok(f64::NAN.into())
     }
@@ -827,14 +963,10 @@ pub fn _set_utc_full_year<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if this.date_time().is_none() {
-        this.set_date_time(Some(
-            Utc.with_ymd_and_hms(0, 1, 1, 0, 0, 0)
-                .single()
-                .expect("Found ambiguous epoch time when constructing Date"),
-        ));
+    if this.time().is_none() {
+        this.set_time(Some(year_zero(0)));
     }
-    let timestamp = DateAdjustment::new(activation, &Utc)
+    let timestamp = DateAdjustment::new(activation, 0)
         .year(args.get_optional(0))?
         .month(args.get_optional(1))?
         .day(args.get_optional(2))?
@@ -852,8 +984,8 @@ pub fn get_utc_day<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this.date_time() {
-        Ok((date.weekday().num_days_from_sunday() as f64).into())
+    if let Some(date) = utc_fields(this) {
+        Ok((date.weekday as f64).into())
     } else {
         Ok(f64::NAN.into())
     }
@@ -869,12 +1001,9 @@ pub fn get_timezone_offset<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this
-        .date_time()
-        .map(|date| date.with_timezone(&activation.context.locale.get_timezone()))
-    {
-        let offset = date.offset().utc_minus_local() as f64;
-        Ok((offset / 60.0).into())
+    if this.time().is_some() {
+        let offset = -local_timezone(activation) as f64;
+        Ok((offset / MS_PER_MINUTE as f64).into())
     } else {
         Ok(f64::NAN.into())
     }
@@ -894,7 +1023,7 @@ pub fn utc<'gc>(
     let second = args.get_value(5);
     let millisecond = args.get_value(6);
 
-    let date = DateAdjustment::new(activation, &Utc)
+    let date = DateAdjustment::new(activation, 0)
         .year(Some(year))?
         .month(Some(month))?
         .day(Some(day))?
@@ -903,13 +1032,9 @@ pub fn utc<'gc>(
         .second(Some(second))?
         .millisecond(Some(millisecond))?
         .map_year(|year| if year < 100.0 { year + 1900.0 } else { year })
-        .calculate(
-            Utc.with_ymd_and_hms(0, 1, 1, 0, 0, 0)
-                .single()
-                .expect("Found ambiguous UTC time conversions"),
-        );
+        .calculate(DateFields::new(year_zero(0), 0));
     let millis = if let Some(date) = date {
-        date.timestamp_millis() as f64
+        date as f64
     } else {
         f64::NAN
     };
@@ -927,18 +1052,18 @@ pub fn to_string<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this
-        .date_time()
-        .map(|date| date.with_timezone(&activation.context.locale.get_timezone()))
-    {
-        Ok(AvmString::new_utf8(
-            activation.gc(),
-            date.format("%a %b %-d %T GMT%z %-Y").to_string(),
+    let date = local_fields(activation, this);
+    Ok(format_date(activation, date, |date| {
+        format!(
+            "{} {} {} {} GMT{} {}",
+            date.day_name(),
+            date.month_name(),
+            date.day,
+            date.time_string(),
+            date.timezone_string(),
+            date.year_string()
         )
-        .into())
-    } else {
-        Ok(istr!("Invalid Date").into())
-    }
+    }))
 }
 
 /// Implements the `toUTCString` method.
@@ -951,15 +1076,16 @@ pub fn to_utc_string<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this.date_time() {
-        Ok(AvmString::new_utf8(
-            activation.gc(),
-            date.format("%a %b %-d %T %-Y UTC").to_string(),
+    Ok(format_date(activation, utc_fields(this), |date| {
+        format!(
+            "{} {} {} {} {} UTC",
+            date.day_name(),
+            date.month_name(),
+            date.day,
+            date.time_string(),
+            date.year_string()
         )
-        .into())
-    } else {
-        Ok(istr!("Invalid Date").into())
-    }
+    }))
 }
 
 /// Implements the `toLocaleString` method.
@@ -972,18 +1098,18 @@ pub fn to_locale_string<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this
-        .date_time()
-        .map(|date| date.with_timezone(&activation.context.locale.get_timezone()))
-    {
-        Ok(AvmString::new_utf8(
-            activation.gc(),
-            date.format("%a %b %-d %-Y %T %p").to_string(),
+    let date = local_fields(activation, this);
+    Ok(format_date(activation, date, |date| {
+        format!(
+            "{} {} {} {} {} {}",
+            date.day_name(),
+            date.month_name(),
+            date.day,
+            date.year_string(),
+            date.time_string(),
+            date.am_pm()
         )
-        .into())
-    } else {
-        Ok(istr!("Invalid Date").into())
-    }
+    }))
 }
 
 /// Implements the `toTimeString` method.
@@ -996,14 +1122,10 @@ pub fn to_time_string<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this
-        .date_time()
-        .map(|date| date.with_timezone(&activation.context.locale.get_timezone()))
-    {
-        Ok(AvmString::new_utf8(activation.gc(), date.format("%T GMT%z").to_string()).into())
-    } else {
-        Ok(istr!("Invalid Date").into())
-    }
+    let date = local_fields(activation, this);
+    Ok(format_date(activation, date, |date| {
+        format!("{} GMT{}", date.time_string(), date.timezone_string())
+    }))
 }
 
 /// Implements the `toLocaleTimeString` method.
@@ -1016,14 +1138,10 @@ pub fn to_locale_time_string<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this
-        .date_time()
-        .map(|date| date.with_timezone(&activation.context.locale.get_timezone()))
-    {
-        Ok(AvmString::new_utf8(activation.gc(), date.format("%T %p").to_string()).into())
-    } else {
-        Ok(istr!("Invalid Date").into())
-    }
+    let date = local_fields(activation, this);
+    Ok(format_date(activation, date, |date| {
+        format!("{} {}", date.time_string(), date.am_pm())
+    }))
 }
 
 /// Implements the `toDateString` & `toLocaleDateString` method.
@@ -1036,14 +1154,16 @@ pub fn to_date_string<'gc>(
 
     let this = this.as_date_object().unwrap();
 
-    if let Some(date) = this
-        .date_time()
-        .map(|date| date.with_timezone(&activation.context.locale.get_timezone()))
-    {
-        Ok(AvmString::new_utf8(activation.gc(), date.format("%a %b %-d %-Y").to_string()).into())
-    } else {
-        Ok(istr!("Invalid Date").into())
-    }
+    let date = local_fields(activation, this);
+    Ok(format_date(activation, date, |date| {
+        format!(
+            "{} {} {} {}",
+            date.day_name(),
+            date.month_name(),
+            date.day,
+            date.year_string()
+        )
+    }))
 }
 
 /// Parse a date, in any of the three formats: YYYY/MM/DD, MM/DD/YYYY, Mon/DD/YYYY.
@@ -1150,8 +1270,8 @@ pub fn parse_full_date<'gc>(
 ) -> Option<f64> {
     const DAYS: [&[u8]; 7] = [b"Sun", b"Mon", b"Tue", b"Wed", b"Thu", b"Fri", b"Sat"];
 
-    let timezone = activation.context.locale.get_timezone();
-    let mut final_time = DateAdjustment::new(activation, &timezone);
+    let timezone = local_timezone(activation);
+    let mut final_time = DateAdjustment::new(activation, timezone);
     let mut new_timezone = None;
     // The Date parser is flash is super flexible, so we need to go through each item individually and parse it to match Flash.
     // NOTE: DateTime::parse_from_str is not flexible enough for this, so we need to parse manually.
@@ -1199,7 +1319,7 @@ pub fn parse_full_date<'gc>(
             }
 
             if item == b"GMT" || item == b"UTC" {
-                new_timezone = Some(FixedOffset::east_opt(0).expect("UTC offset should be valid"));
+                new_timezone = Some(0);
             } else if item.len() == 8 {
                 let (other, tzn) = item.split_at(4);
                 if tzn.len() != 4 {
@@ -1209,12 +1329,16 @@ pub fn parse_full_date<'gc>(
                 let hours = hours.parse::<u32>().ok()?;
                 let minutes = minutes.parse::<u32>().ok()?;
                 let sign = other.at(3);
-                // NOTE: In real flash, invalid (out of bounds) timezones were allowed, but there isn't a way to construct these using FixedOffset.
+                // NOTE: In real flash, invalid (out of bounds) timezones were allowed, but for now we only accept offsets below 24 hours.
                 // Since it is insanely rare to ever parse a date with an invalid timezone, for now we just return an error.
+                let offset = i64::from(hours) * MS_PER_HOUR + i64::from(minutes) * MS_PER_MINUTE;
+                if offset >= MS_PER_DAY {
+                    return None;
+                }
                 new_timezone = Some(if sign == b'-' as u16 {
-                    FixedOffset::west_opt(((hours * 60 * 60) + minutes * 60) as i32)?
+                    -offset
                 } else if sign == b'+' as u16 {
-                    FixedOffset::east_opt(((hours * 60 * 60) + minutes * 60) as i32)?
+                    offset
                 } else {
                     return None;
                 });
@@ -1249,16 +1373,9 @@ pub fn parse_full_date<'gc>(
     if final_time.year.is_none() || final_time.month.is_none() || final_time.day.is_none() {
         return None;
     }
-    if let Some(timestamp) = final_time.calculate(
-        new_timezone
-            .unwrap_or(timezone)
-            .with_ymd_and_hms(0, 1, 1, 0, 0, 0)
-            .single()
-            .expect(
-                "Found ambiguous starting time when converting parsed dates into local timezone",
-            ),
-    ) {
-        Some(timestamp.timestamp_millis() as f64)
+    let timezone = new_timezone.unwrap_or(timezone);
+    if let Some(time) = final_time.calculate(DateFields::new(year_zero(timezone), timezone)) {
+        Some(time as f64)
     } else {
         None
     }

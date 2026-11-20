@@ -155,9 +155,7 @@ pub fn serialize_value<'gc>(
                     }
                 }
             } else if let Some(date) = o.as_date_object() {
-                let time = date
-                    .date_time()
-                    .map(|date_time| date_time.timestamp_millis() as f64);
+                let time = date.time().map(|time| time as f64);
 
                 // "Invalid Date" is serialized as a NaN
                 let time = time.unwrap_or(f64::NAN);

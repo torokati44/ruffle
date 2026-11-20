@@ -1,9 +1,8 @@
 use crate::avm2::Value as Avm2Value;
-use crate::avm2::object::{ArrayObject, DateObject, ScriptObject, TObject as _};
+use crate::avm2::object::{ArrayObject, DateObject, ScriptObject, TObject as _, clip_time};
 use crate::context::UpdateContext;
 use crate::string::AvmString;
 
-use chrono::DateTime;
 use flv_rs::{Value as FlvValue, Variable as FlvVariable};
 
 fn avm2_object_from_flv_variables<'gc>(
@@ -43,9 +42,10 @@ fn avm2_date_from_flv_date<'gc>(
     unix_time: f64,
     _local_offset: i16,
 ) -> Avm2Value<'gc> {
-    let date_time = DateTime::from_timestamp(unix_time as i64, 0).expect("invalid timestamp");
+    // Out-of-range timestamps become an invalid date.
+    let time = (unix_time as i64).checked_mul(1000).and_then(clip_time);
 
-    DateObject::from_date_time(context, date_time).into()
+    DateObject::from_time(context, time).into()
 }
 
 pub trait FlvValueAvm2Ext<'gc> {
