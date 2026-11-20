@@ -262,7 +262,6 @@ Ruffle depends on third-party libraries with compatible licenses.
 | [cfg-if](https://github.com/alexcrichton/cfg-if) | [Apache-2.0](#Apache-20)/[MIT](#MIT) | Copyright (c) 2014 Alex Crichton  |
 | [cfg-if](https://github.com/alexcrichton/cfg-if) | [Apache-2.0](#Apache-20)/[MIT](#MIT) | Copyright (c) 2014 Alex Crichton  |
 | [cfg_aliases](https://github.com/katharostech/cfg_aliases) | [MIT](#MIT) | Copyright (c) 2020 Katharos Technology  |
-| [chrono](https://github.com/chronotope/chrono) | [Apache-2.0](#Apache-20)/[MIT](#MIT) | Copyright (c) 2014, Kang Seonghoon.  |
 | [chunked_transfer](https://github.com/frewsxcv/rust-chunked-transfer) | [Apache-2.0](#Apache-20) | Copyright (c) Corey Farwell <coreyf@rwell.org> |
 | [clang-sys](https://github.com/KyleMayes/clang-sys) | [Apache-2.0](#Apache-20) | Copyright (c) Kyle Mayes <kyle@mayeses.com> |
 | [clap](https://github.com/clap-rs/clap) | [Apache-2.0](#Apache-20)/[MIT](#MIT) | Copyright (c) 2015-2016 Kevin B. Knapp  |
@@ -390,6 +389,10 @@ Ruffle depends on third-party libraries with compatible licenses.
 | [iovec](https://github.com/carllerche/iovec) | [Apache-2.0](#Apache-20)/[MIT](#MIT) | Copyright (c) 2017 Carl Lerche  |
 | [isahc](https://github.com/sagebind/isahc) | [MIT](#MIT) | Copyright (c) 2019 Stephen M. Coakley  |
 | [itoa](https://github.com/dtolnay/itoa) | [Apache-2.0](#Apache-20)/[MIT](#MIT) | Copyright (c) David Tolnay <dtolnay@gmail.com> |
+| [jiff](https://github.com/BurntSushi/jiff) | [MIT](#MIT)/[Unlicense](#Unlicense) | Copyright (c) 2015 Andrew Gallant  |
+| [jiff-core](https://github.com/BurntSushi/jiff) | [MIT](#MIT)/[Unlicense](#Unlicense) | Copyright (c) 2015 Andrew Gallant  |
+| [jiff-tzdb](https://github.com/BurntSushi/jiff) | [MIT](#MIT)/[Unlicense](#Unlicense) | Copyright (c) 2015 Andrew Gallant  |
+| [jiff-tzdb-platform](https://github.com/BurntSushi/jiff) | [MIT](#MIT)/[Unlicense](#Unlicense) | Copyright (c) 2015 Andrew Gallant  |
 | [jni](https://github.com/jni-rs/jni-rs) | [Apache-2.0](#Apache-20)/[MIT](#MIT) | Copyright (c) 2016 Prevoty, Inc. and jni-rs contributors  |
 | [jni-sys](https://github.com/sfackler/rust-jni-sys) | [Apache-2.0](#Apache-20)/[MIT](#MIT) | Copyright (c) 2015 The rust-jni-sys Developers  |
 | [jobserver](https://github.com/alexcrichton/jobserver-rs) | [Apache-2.0](#Apache-20)/[MIT](#MIT) | Copyright (c) 2014 Alex Crichton  |

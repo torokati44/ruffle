@@ -2,8 +2,8 @@ use crate::events::{
     GamepadButton, ImeEvent, KeyCode, KeyDescriptor, KeyLocation, LogicalKey, MouseButton,
     MouseWheelDelta, NamedKey, PhysicalKey, PlayerEvent, TextControlCode,
 };
-use chrono::{DateTime, TimeDelta, Utc};
 use enumset::EnumSet;
+use jiff::{SignedDuration, Timestamp};
 use std::collections::{HashMap, HashSet};
 
 pub enum KeyCodeMappingType {
@@ -60,7 +60,7 @@ pub enum InputEvent {
 struct ClickEventData {
     x: f64,
     y: f64,
-    time: DateTime<Utc>,
+    time: Timestamp,
     index: usize,
 }
 
@@ -281,14 +281,14 @@ impl InputManager {
     }
 
     fn update_last_click(&mut self, x: f64, y: f64, index: Option<usize>) -> usize {
-        let time = Utc::now();
+        let time = Timestamp::now();
         let index = index.unwrap_or_else(|| {
             let Some(last_click) = self.last_click.as_ref() else {
                 return 0;
             };
 
             // TODO Make this configurable as "double click delay" and "double click distance"
-            if (time - last_click.time).abs() < TimeDelta::milliseconds(500)
+            if time.duration_since(last_click.time).abs() < SignedDuration::from_millis(500)
                 && last_click.distance_squared_to(x, y) < 4.0
             {
                 last_click.index + 1

@@ -3,9 +3,9 @@ use crate::{
     backend::navigator::OwnedFuture,
     font::{FontFileData, FontQuery, FontRenderer},
 };
-use chrono::{DateTime, Utc};
 pub use fluent_templates::LanguageIdentifier;
 use fluent_templates::loader::langid;
+use jiff::Timestamp;
 use ruffle_macros::Avm2Enum;
 use std::{any::Any, borrow::Cow};
 use url::Url;
@@ -66,8 +66,8 @@ impl FileFilter {
 
 /// Data for a single selected file.
 pub trait FileDialogSelection: Any {
-    fn creation_time(&self) -> Option<DateTime<Utc>>;
-    fn modification_time(&self) -> Option<DateTime<Utc>>;
+    fn creation_time(&self) -> Option<Timestamp>;
+    fn modification_time(&self) -> Option<Timestamp>;
     fn file_name(&self) -> String;
     fn size(&self) -> Option<u64>;
     fn file_type(&self) -> Option<String>;

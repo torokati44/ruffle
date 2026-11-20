@@ -38,14 +38,14 @@ impl<'gc> FileReferenceObject<'gc> {
 
         let date_proto = activation.resolve_prototype([istr!("Date")]);
         if let Some(creation_time) = result.creation_time() {
-            let date = Date::from_utc(creation_time);
+            let date = Date::from_timestamp(creation_time);
             let native = NativeObject::Date(Gc::new(mc, date.into()));
             let obj = Object::new_with_native(activation.strings(), date_proto, native);
             unlock!(write, FileReferenceData, creation_date).set(Some(obj));
         }
 
         if let Some(modification_time) = result.modification_time() {
-            let date = Date::from_utc(modification_time);
+            let date = Date::from_timestamp(modification_time);
             let native = NativeObject::Date(Gc::new(mc, date.into()));
             let obj = Object::new_with_native(activation.strings(), date_proto, native);
             unlock!(write, FileReferenceData, modification_date).set(Some(obj));

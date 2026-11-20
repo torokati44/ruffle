@@ -93,6 +93,4 @@ ignore = [
     "RUSTSEC-2026-0192",
     # `humantime` crate is no longer maintained https://rustsec.org/advisories/RUSTSEC-2026-0542
     "RUSTSEC-2026-0542",
-    # `chrono` crate is no longer maintained https://rustsec.org/advisories/RUSTSEC-2026-0543
-    "RUSTSEC-2026-0543",
 ]

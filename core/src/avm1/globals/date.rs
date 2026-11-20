@@ -53,13 +53,13 @@ impl Date {
         )
     }
 
-    pub fn from_utc(date_time: chrono::DateTime<chrono::Utc>) -> Self {
-        Self(date_time.timestamp_millis() as f64)
+    pub fn from_timestamp(timestamp: jiff::Timestamp) -> Self {
+        Self(timestamp.as_millisecond() as f64)
     }
 
     /// Create from current date and time.
     fn now(locale: &dyn LocaleBackend) -> Self {
-        Self(locale.get_current_date_time().timestamp_millis() as f64)
+        Self::from_timestamp(locale.get_current_date_time())
     }
 
     /// Get milliseconds since epoch.
@@ -162,7 +162,7 @@ impl Date {
     /// ECMA-262 LocalTZA - Get local timezone adjustment in milliseconds.
     fn local_tza(self, _is_utc: bool, locale: &dyn LocaleBackend) -> i32 {
         // TODO: Honor `is_utc` flag.
-        locale.get_timezone().local_minus_utc() * Self::MS_PER_SECOND
+        locale.get_timezone().seconds() * Self::MS_PER_SECOND
     }
 
     /// ECMA-262 LocalTime - Convert from UTC to local timezone.

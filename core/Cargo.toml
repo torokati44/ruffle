@@ -35,7 +35,7 @@ quick-xml = { workspace = true }
 url = { workspace = true }
 percent-encoding = { workspace = true }
 thiserror = { workspace = true }
-chrono = { workspace = true, features = ["clock"] }
+jiff = { workspace = true }
 web-time = "1.1.0"
 encoding_rs = { workspace = true }
 rand = { workspace = true, features = ["std", "sys_rng"] }
@@ -73,6 +73,10 @@ itertools = "0.14.0"
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies.futures]
 workspace = true
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies.jiff]
+workspace = true
+features = ["tz-system", "tzdb-bundle-platform", "tzdb-zoneinfo", "tzdb-concatenated"]
 
 [target.'cfg(target_family = "wasm")'.dependencies.wasm-bindgen-futures]
 version = "0.4.70"

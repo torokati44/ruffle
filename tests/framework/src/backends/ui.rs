@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use crate::test::Font;
-use chrono::{DateTime, TimeZone, Utc};
+use jiff::Timestamp;
+use jiff::civil::date;
+use jiff::tz::Offset;
 use ruffle_core::backend::ui::{
     DialogResultFuture, FileDialogResult, FileDialogSelection, FileFilter, FontDefinition,
     FullscreenError, LanguageIdentifier, MouseCursor, MultiDialogResultFuture,
@@ -43,14 +45,16 @@ impl TestFileSelection {
 }
 
 impl FileDialogSelection for TestFileSelection {
-    fn creation_time(&self) -> Option<DateTime<Utc>> {
-        let date = Utc.with_ymd_and_hms(2000, 10, 20, 1, 2, 3).unwrap();
-        Some(date)
+    fn creation_time(&self) -> Option<Timestamp> {
+        Offset::UTC
+            .to_timestamp(date(2000, 10, 20).at(1, 2, 3, 0))
+            .ok()
     }
 
-    fn modification_time(&self) -> Option<DateTime<Utc>> {
-        let date = Utc.with_ymd_and_hms(2000, 10, 25, 4, 5, 6).unwrap();
-        Some(date)
+    fn modification_time(&self) -> Option<Timestamp> {
+        Offset::UTC
+            .to_timestamp(date(2000, 10, 25).at(4, 5, 6, 0))
+            .ok()
     }
 
     fn file_name(&self) -> String {

@@ -4,9 +4,9 @@ use crate::gui::dialogs::message_dialog::MessageDialogConfiguration;
 use crate::gui::{DialogDescriptor, FilePicker, LocalizableText};
 use crate::preferences::GlobalPreferences;
 use anyhow::{Error, Result, anyhow};
-use chrono::{DateTime, Utc};
 use egui_winit::clipboard::Clipboard;
 use fontdb::{FaceInfo, Family};
+use jiff::Timestamp;
 use rfd::{
     AsyncFileDialog, FileHandle, MessageButtons, MessageDialog, MessageDialogResult, MessageLevel,
 };
@@ -102,18 +102,18 @@ impl DesktopFileSelection {
 }
 
 impl FileDialogSelection for DesktopFileSelection {
-    fn creation_time(&self) -> Option<DateTime<Utc>> {
+    fn creation_time(&self) -> Option<Timestamp> {
         self.md
             .as_ref()
             .and_then(|md| md.created().ok())
-            .map(DateTime::<Utc>::from)
+            .and_then(|time| Timestamp::try_from(time).ok())
     }
 
-    fn modification_time(&self) -> Option<DateTime<Utc>> {
+    fn modification_time(&self) -> Option<Timestamp> {
         self.md
             .as_ref()
             .and_then(|md| md.modified().ok())
-            .map(DateTime::<Utc>::from)
+            .and_then(|time| Timestamp::try_from(time).ok())
     }
 
     fn file_name(&self) -> String {

@@ -30,12 +30,11 @@ use crate::prelude::*;
 use crate::string::{AvmString, SwfStrExt as _, WStr, WString, utils as string_utils};
 use crate::tag_utils::SwfMovie;
 use crate::vminterface::{AvmObject, Instantiator};
-use chrono::DateTime;
-use chrono::Utc;
 use core::fmt;
 use gc_arena::barrier::unlock;
 use gc_arena::lock::{Lock, RefLock};
 use gc_arena::{Collect, Gc, Mutation};
+use jiff::Timestamp;
 use ruffle_common::utils::HasPrefixField;
 use ruffle_macros::istr;
 use ruffle_render::commands::Command as RenderCommand;
@@ -3289,7 +3288,7 @@ pub struct TextSelection {
     to: usize,
 
     /// The time the caret should begin blinking
-    blink_epoch: DateTime<Utc>,
+    blink_epoch: Timestamp,
 }
 
 impl PartialEq for TextSelection {
@@ -3307,7 +3306,7 @@ impl TextSelection {
         Self {
             from: position,
             to: position,
-            blink_epoch: Utc::now(),
+            blink_epoch: Timestamp::now(),
         }
     }
 
@@ -3315,7 +3314,7 @@ impl TextSelection {
         Self {
             from,
             to,
-            blink_epoch: Utc::now(),
+            blink_epoch: Timestamp::now(),
         }
     }
 
@@ -3385,12 +3384,14 @@ impl TextSelection {
     }
 
     pub fn reset_blinking(&mut self) {
-        self.blink_epoch = Utc::now();
+        self.blink_epoch = Timestamp::now();
     }
 
     /// Returns true if the caret should not be visible now due to blinking.
     pub fn blinks_now(&self) -> bool {
-        let millis = (Utc::now() - self.blink_epoch).num_milliseconds() as u32;
+        let millis = Timestamp::now()
+            .duration_since(self.blink_epoch)
+            .as_millis() as u32;
         2 * (millis % Self::BLINK_CYCLE_DURATION_MS) >= Self::BLINK_CYCLE_DURATION_MS
     }
 }
