@@ -96,7 +96,7 @@ pub use crate::avm2::object::content_element_object::{
     ContentElementObject, ContentElementObjectWeak, ElementData, content_element_allocator,
 };
 pub use crate::avm2::object::context3d_object::{Context3DObject, Context3DObjectWeak};
-pub use crate::avm2::object::date_object::{DateObject, DateObjectWeak, date_allocator};
+pub use crate::avm2::object::date_object::{DateObject, DateObjectWeak, clip_time, date_allocator};
 pub use crate::avm2::object::dictionary_object::{
     DictionaryObject, DictionaryObjectWeak, dictionary_allocator,
 };
