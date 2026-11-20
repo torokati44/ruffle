@@ -4,7 +4,6 @@ use crate::avm2::object::script_object::ScriptObjectData;
 use crate::avm2::object::{ClassObject, Object, TObject};
 use crate::avm2::value::Hint;
 use crate::context::UpdateContext;
-use chrono::{DateTime, Utc};
 use core::fmt;
 use gc_arena::{Collect, Gc, GcWeak};
 use ruffle_common::utils::HasPrefixField;
@@ -19,7 +18,7 @@ pub fn date_allocator<'gc>(
         activation.gc(),
         DateObjectData {
             base: ScriptObjectData::new(class),
-            date_time: Cell::new(None),
+            time: Cell::new(None),
         },
     ))
     .into())
@@ -40,11 +39,18 @@ impl fmt::Debug for DateObject<'_> {
     }
 }
 
+/// The largest distance from the epoch that a valid date can have, in milliseconds.
+const MAX_TIME: u64 = 8_640_000_000_000_000;
+
+/// ECMA-262 TimeClip - Returns `time` (in milliseconds since the Unix epoch)
+/// if it's within the range of valid dates.
+pub fn clip_time(time: i64) -> Option<i64> {
+    (time.unsigned_abs() <= MAX_TIME).then_some(time)
+}
+
 impl<'gc> DateObject<'gc> {
-    pub fn from_date_time(
-        context: &mut UpdateContext<'gc>,
-        date_time: DateTime<Utc>,
-    ) -> Object<'gc> {
+    /// Creates a `Date` holding `time` (see [`Self::time`]).
+    pub fn from_time(context: &mut UpdateContext<'gc>, time: Option<i64>) -> Object<'gc> {
         let class = context.avm2.classes().date;
         let base = ScriptObjectData::new(class);
 
@@ -52,7 +58,7 @@ impl<'gc> DateObject<'gc> {
             context.gc(),
             DateObjectData {
                 base,
-                date_time: Cell::new(Some(date_time)),
+                time: Cell::new(time),
             },
         ))
         .into()
@@ -73,7 +79,7 @@ impl<'gc> DateObject<'gc> {
             context.gc(),
             DateObjectData {
                 base,
-                date_time: Cell::new(None),
+                time: Cell::new(None),
             },
         ))
         .into();
@@ -81,12 +87,13 @@ impl<'gc> DateObject<'gc> {
         instance
     }
 
-    pub fn date_time(self) -> Option<DateTime<Utc>> {
-        self.0.date_time.get()
+    /// The time in milliseconds since the Unix epoch, or `None` for an invalid date.
+    pub fn time(self) -> Option<i64> {
+        self.0.time.get()
     }
 
-    pub fn set_date_time(self, date_time: Option<DateTime<Utc>>) {
-        self.0.date_time.set(date_time);
+    pub fn set_time(self, time: Option<i64>) {
+        self.0.time.set(time);
     }
 }
 
@@ -97,7 +104,8 @@ pub struct DateObjectData<'gc> {
     /// Base script object
     base: ScriptObjectData<'gc>,
 
-    date_time: Cell<Option<DateTime<Utc>>>,
+    /// Milliseconds since the Unix epoch, or `None` for an invalid date.
+    time: Cell<Option<i64>>,
 }
 
 impl<'gc> TObject<'gc> for DateObject<'gc> {

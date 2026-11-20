@@ -23,7 +23,7 @@ pub fn get_creation_date<'gc>(
         FileReference::None => return Err(make_error_2037(activation)),
         FileReference::FileDialogSelection(ref selection) => {
             if let Some(time) = selection.creation_time() {
-                DateObject::from_date_time(activation.context, time).into()
+                DateObject::from_time(activation.context, Some(time.timestamp_millis())).into()
             } else {
                 Value::Null
             }
@@ -68,7 +68,7 @@ pub fn get_modification_date<'gc>(
         FileReference::None => return Err(make_error_2037(activation)),
         FileReference::FileDialogSelection(ref selection) => {
             if let Some(time) = selection.modification_time() {
-                DateObject::from_date_time(activation.context, time).into()
+                DateObject::from_time(activation.context, Some(time.timestamp_millis())).into()
             } else {
                 Value::Null
             }
