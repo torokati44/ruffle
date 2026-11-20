@@ -19,12 +19,12 @@ use web_sys::{
     Url as JsUrl,
 };
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use js_sys::{Array, Uint8Array};
 
 pub struct WebFileSelection {
     file_name: String,
-    modification_time: Option<DateTime<Utc>>,
+    modification_time: Option<Timestamp>,
     contents: Vec<u8>,
 }
 
@@ -35,7 +35,7 @@ impl WebFileSelection {
         let (file_name, modification_time) = cfg_select! {
             target_arch = "wasm32" => (
                 handle.file_name(),
-                DateTime::from_timestamp_millis(handle.inner().last_modified() as i64),
+                Timestamp::from_millisecond(handle.inner().last_modified() as i64).ok(),
             ),
             _ => (String::new(), None),
         };
@@ -92,12 +92,12 @@ fn download_as_file(filename: Option<&str>, data: &[u8]) -> Result<(), JsValue> 
 }
 
 impl FileDialogSelection for WebFileSelection {
-    fn creation_time(&self) -> Option<DateTime<Utc>> {
+    fn creation_time(&self) -> Option<Timestamp> {
         // Creation time is not available in JS
         None
     }
 
-    fn modification_time(&self) -> Option<DateTime<Utc>> {
+    fn modification_time(&self) -> Option<Timestamp> {
         self.modification_time
     }
 
@@ -119,7 +119,7 @@ impl FileDialogSelection for WebFileSelection {
 
     fn write_and_refresh(&mut self, data: &[u8]) {
         self.contents = data.to_vec();
-        self.modification_time = Some(Utc::now());
+        self.modification_time = Some(Timestamp::now());
 
         if let Err(err) = download_as_file(Some(&self.file_name), &self.contents[..]) {
             tracing::error!("Download failed: {:?}", err);

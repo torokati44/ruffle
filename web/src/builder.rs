@@ -2,7 +2,7 @@ use crate::external_interface::JavascriptInterface;
 use crate::navigator::{OpenUrlMode, WebNavigatorBackend};
 use crate::{
     DeviceFontRenderer, JavascriptPlayer, RUFFLE_GLOBAL_PANIC, RuffleHandle, ScrollingBehavior,
-    SocketProxy, audio, log_adapter, storage, ui,
+    SocketProxy, audio, locale, log_adapter, storage, ui,
 };
 use js_sys::{Promise, RegExp};
 use ruffle_core::backend::audio::{AudioBackend, NullAudioBackend};
@@ -693,6 +693,7 @@ impl RuffleInstanceBuilder {
             matches!(self.device_font_renderer, DeviceFontRenderer::Canvas);
         let core = builder
             .with_log(log_adapter::WebLogBackend::new(trace_observer.clone()))
+            .with_locale(locale::WebLocaleBackend::new())
             .with_ui(ui::WebUiBackend::new(
                 js_player.clone(),
                 &canvas,

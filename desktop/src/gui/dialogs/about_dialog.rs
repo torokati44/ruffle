@@ -1,6 +1,9 @@
 use crate::gui::text;
-use chrono::DateTime;
 use egui::{Align2, Grid, Image};
+use jiff::Timestamp;
+use jiff::fmt::strtime;
+use jiff::fmt::temporal::Pieces;
+use jiff::tz::TimeZone;
 use unic_langid::LanguageIdentifier;
 
 const VERGEN_UNKNOWN: &str = "VERGEN_IDEMPOTENT_OUTPUT";
@@ -34,11 +37,7 @@ pub fn show_about_dialog(locale: &LanguageIdentifier, egui_ctx: &egui::Context) 
                         let build_time = env!("VERGEN_BUILD_TIMESTAMP");
                         if build_time != VERGEN_UNKNOWN {
                             ui.label(text(locale, "about-ruffle-build-time"));
-                            ui.label(
-                                DateTime::parse_from_rfc3339(build_time)
-                                    .map(|t| t.format("%c").to_string())
-                                    .unwrap_or_else(|_| build_time.to_string()),
-                            );
+                            ui.label(format_rfc3339(build_time));
                             ui.end_row();
                         }
 
@@ -55,11 +54,7 @@ pub fn show_about_dialog(locale: &LanguageIdentifier, egui_ctx: &egui::Context) 
                         let commit_time = env!("VERGEN_GIT_COMMIT_TIMESTAMP");
                         if sha != VERGEN_UNKNOWN {
                             ui.label(text(locale, "about-ruffle-commit-time"));
-                            ui.label(
-                                DateTime::parse_from_rfc3339(commit_time)
-                                    .map(|t| t.format("%c").to_string())
-                                    .unwrap_or_else(|_| commit_time.to_string()),
-                            );
+                            ui.label(format_rfc3339(commit_time));
                             ui.end_row();
                         }
 
@@ -93,4 +88,34 @@ pub fn show_about_dialog(locale: &LanguageIdentifier, egui_ctx: &egui::Context) 
         });
 
     keep_open
+}
+
+/// Formats an RFC 3339 timestamp in its own UTC offset,
+/// or returns it unchanged if it can't be parsed.
+fn format_rfc3339(time: &str) -> String {
+    let format = || {
+        let timestamp: Timestamp = time.parse().ok()?;
+        let offset = Pieces::parse(time).ok()?.offset()?.to_numeric_offset();
+        let zoned = timestamp.to_zoned(TimeZone::fixed(offset));
+        strtime::format("%a %b %e %H:%M:%S %Y", &zoned).ok()
+    };
+    format().unwrap_or_else(|| time.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_rfc3339;
+
+    #[test]
+    fn formats_rfc3339_in_its_own_offset() {
+        assert_eq!(
+            format_rfc3339("2024-07-15T16:24:59.123Z"),
+            "Mon Jul 15 16:24:59 2024"
+        );
+        assert_eq!(
+            format_rfc3339("2024-07-05T16:24:59+02:00"),
+            "Fri Jul  5 16:24:59 2024"
+        );
+        assert_eq!(format_rfc3339("not a date"), "not a date");
+    }
 }

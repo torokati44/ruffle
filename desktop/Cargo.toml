@@ -42,7 +42,7 @@ unic-langid = "0.9.6"
 sys-locale = "0.3.2"
 wgpu = { workspace = true }
 futures = { workspace = true }
-chrono = { workspace = true }
+jiff = { workspace = true }
 fluent-templates = { workspace = true }
 toml_edit = { workspace = true, features = ["parse"] }
 gilrs = "0.11"

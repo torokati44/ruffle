@@ -191,7 +191,7 @@ impl DateFields {
 
 /// ECMA-262 LocalTZA - Get the local timezone, in milliseconds ahead of UTC.
 fn local_timezone(activation: &Activation<'_, '_>) -> i64 {
-    i64::from(activation.context.locale.get_timezone().local_minus_utc()) * MS_PER_SECOND
+    i64::from(activation.context.locale.get_timezone().seconds()) * MS_PER_SECOND
 }
 
 /// Breaks down the date stored in `this` in the local timezone.
@@ -410,7 +410,7 @@ pub fn init<'gc>(
         }
     } else {
         let now = activation.context.locale.get_current_date_time();
-        this.set_time(Some(now.timestamp_millis()))
+        this.set_time(Some(now.as_millisecond()))
     }
 
     Ok(Value::Undefined)

@@ -21,7 +21,7 @@ asc = { path = "../../tools/asc" }
 image = { workspace = true, features = ["png"] }
 regex = { workspace = true }
 url = { workspace = true }
-chrono = { workspace = true }
+jiff = { workspace = true }
 approx = { workspace = true }
 pretty_assertions = "1.4.1"
 serde = { workspace = true }
