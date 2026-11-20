@@ -35,7 +35,8 @@ impl WebFileSelection {
         let (file_name, modification_time) = cfg_select! {
             target_arch = "wasm32" => (
                 handle.file_name(),
-                DateTime::from_timestamp(handle.inner().last_modified() as i64, 0),
+                // `lastModified` is in milliseconds since the epoch.
+                DateTime::from_timestamp_millis(handle.inner().last_modified() as i64),
             ),
             _ => (String::new(), None),
         };
