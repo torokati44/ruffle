@@ -242,9 +242,14 @@ impl BlurFilter {
                 let m = radius.ceil() - 1.0;
                 // Not the transparency kind. It's almost the fractional part of radius.
                 // If radius is a whole number, however, it's 1 instead of 0.
-                // The rounding is done to imitate the fixed-point calculations in Flash Player,
-                // improving emulation accuracy somewhat.
-                let alpha = ((radius - m) * 255.0).floor() / 255.0;
+                // Flash Player keeps only about 6 significant bits of the blur size: the fractional
+                // part of the radius is floored to a step that doubles with every power of two of
+                // the size. The integer part is never affected, so e.g. 100.7 behaves as 99.
+                // Note that this can make alpha 0, which makes last_offset 0 (through infinity).
+                let step = 2.0f32.powi(full_size.log2().floor() as i32 - 6);
+                let alpha = ((radius - m) / step).floor() * step;
+                // The sum of all weights. Dividing by this keeps uniform colors unchanged.
+                let weight_sum = 2.0 * m + 1.0 + 2.0 * alpha;
 
                 // These control how and where the last pair of pixels are to be sampled,
                 // so that the next-to-last will end up with an effective weight of 1.0,
@@ -259,7 +264,7 @@ impl BlurFilter {
                     } else {
                         [0.0, 1.0 / previous_height]
                     },
-                    full_size,
+                    full_size: weight_sum,
                     m,
                     m2: m * 2.0,
                     first_weight: alpha,

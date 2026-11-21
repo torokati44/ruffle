@@ -61,12 +61,15 @@ fn main_fragment(in: filter__VertexOutput) -> @location(0) vec4<f32> {
     total += center * 2.0;
 
     // The last pixel pair, the second of which may have fractional weight, sampled together.
-    let last_location = in.uv + direction * (filter_args.m2 + filter_args.last_offset);
-    total += textureSample(texture, texture_sampler, last_location) * filter_args.last_weight;
+    // Sampled separately at texel centers, because the limited precision of bilinear
+    // filtering at fractional positions would make the results slightly inaccurate.
+    total += textureSample(texture, texture_sampler, in.uv + direction * filter_args.m2);
+    total += textureSample(texture, texture_sampler, in.uv + direction * (filter_args.m2 + 1.0)) * filter_args.first_weight;
 
     // The sum of every weight is full_size.
     let result = total / filter_args.full_size;
 
     // This rounding imitates the fixed-point computations of FP, improving emulation accuracy.
-    return floor(result * 255.0) / 255.0;
+    // The small bias compensates for the result landing just below an exact whole value.
+    return floor(result * 255.0 + 1e-3) / 255.0;
 }
