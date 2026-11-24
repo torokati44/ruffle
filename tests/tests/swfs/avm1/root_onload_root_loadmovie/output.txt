@@ -1,0 +1,4 @@
+initial root onLoad
+calling _root.loadMovie
+child frame 1
+child onEnterFrame

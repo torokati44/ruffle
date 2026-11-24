@@ -1,0 +1,13 @@
+initial root onLoad
+calling loadClip child1.swf into level 1
+listener onLoadStart _level1
+listener onLoadComplete _level1
+child1 frame 1
+listener onLoadInit _level1
+child1 onEnterFrame
+calling loadClip child2.swf into level 0
+listener onLoadStart _level0
+listener onLoadComplete _level0
+child2 frame 1
+listener onLoadInit _level0
+child2 onEnterFrame

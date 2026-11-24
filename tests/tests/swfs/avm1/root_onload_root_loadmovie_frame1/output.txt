@@ -1,0 +1,6 @@
+initial root frame 1 start
+initial root frame 1 end
+initial root onLoad
+initial root onEnterFrame
+child frame 1
+child onEnterFrame
