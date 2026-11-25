@@ -78,6 +78,12 @@ workspace = true
 [target.'cfg(target_family = "wasm")'.dependencies.wasm-bindgen-futures]
 version = "0.4.70"
 
+# WASM has no runtime CPU feature detection, so only use SIMD FFT
+# in builds that already require SIMD support (the "extensions" flavor).
+[target.'cfg(target_feature = "simd128")'.dependencies.realfft]
+version = "3.5.0"
+features = ["wasm_simd"]
+
 [features]
 default = []
 lzma = ["lzma-rs", "swf/lzma"]
